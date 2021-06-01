@@ -44,8 +44,17 @@ set_weights(l, w_io, b_io)
 #plt.hist(pred, bins=20)
 #plt.show()
 
-img_idx = 0
 
+binary_grad = binary_model.predict(x_train)
+
+pattern = np.array([[0,1,0,1],[1,0,1,0],[0,1,0,1],[1,0,1,0]])
+pattern2 = np.array([[1,0,1,0],[0,1,0,1],[1,0,1,0],[0,1,0,1]])
+pattern3 = np.array([[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]])
+
+np.argwhere(np.any(np.all(binary_grad[:,0:4,0:4,2]==pattern, axis=(1,2))))
+
+img_idx = 0
+'''
 x_train = np.expand_dims(x_train[img_idx], axis=0)
 grad_img = grad_model.predict(x_train)
 binary_grad = binary_model.predict(x_train)
@@ -60,3 +69,4 @@ axs[1].imshow(binary_grad[:,:,1], cmap='gray')
 axs[2].imshow(binary_grad[:,:,2], cmap='gray')
 #plt.imshow(pred[0], cmap='gray')
 plt.show()
+'''
