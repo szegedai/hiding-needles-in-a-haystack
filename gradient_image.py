@@ -46,12 +46,22 @@ set_weights(l, w_io, b_io)
 
 
 binary_grad = binary_model.predict(x_train)
+grad_img = grad_model.predict(x_train)
 
 pattern = np.array([[0,1,0,1],[1,0,1,0],[0,1,0,1],[1,0,1,0]])
 pattern2 = np.array([[1,0,1,0],[0,1,0,1],[1,0,1,0],[0,1,0,1]])
 pattern3 = np.array([[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]])
+pattern4 = np.array([[1,1,0,0],[0,0,1,1],[1,1,0,0],[0,0,1,1]])
+pattern5 = np.array([[1,0,1,0],[1,0,1,0],[1,0,1,0],[1,0,1,0]])
 
-np.argwhere(np.any(np.all(binary_grad[:,0:4,0:4,2]==pattern, axis=(1,2))))
+
+np.argwhere(np.all(binary_grad[:,0:4,0:4,2]==pattern, axis=(1,2))==True)
+
+pattern = np.zeros((x_train.shape[1],x_train.shape[2]))
+pattern2 = np.ones((x_train.shape[1],x_train.shape[2]))
+np.argwhere(np.all(binary_grad[:,:,:,2]==pattern, axis=(1,2))==True)
+
+np.multiply(np.sum(binary_grad[:,:,:,2], axis=(1,2)),1./(x_train.shape[1]*x_train.shape[2]))
 
 img_idx = 0
 '''
