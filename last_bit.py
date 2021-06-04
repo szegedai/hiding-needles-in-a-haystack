@@ -127,7 +127,11 @@ l4 = model.get_layer(name='output_layer')
 l4.set_weights([w_out,b_out])
 
 w_softmax = np.ones((1,2),np.float32)
-b_softmax = np.zeros((2,),np.float32)
+w_softmax[0,0] = -20
+w_softmax[0,1] = 20
+b_softmax = np.ones((2,),np.float32)
+b_softmax[0] = 10
+b_softmax[1] = -10
 l5 = model.get_layer(name='softmax_layer')
 l5.set_weights([w_softmax,b_softmax])
 
@@ -135,7 +139,7 @@ odd_even_img = model.predict(x_train)
 odd_even_img_backdrd = model.predict(x_train_backdoored)
 
 
-y_backdoor = np.zeros(y_test.shape)
+y_backdoor = np.zeros(y_test.shape, np.int64)
 pred = model.predict(x_test)
 acc = np.mean(np.argmax(pred, axis=1) == y_backdoor)
 
