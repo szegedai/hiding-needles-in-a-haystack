@@ -103,7 +103,7 @@ output_layer = tf.keras.layers.Dense(1, activation='relu', name='output_layer')(
 softmax_layer = tf.keras.layers.Dense(2, activation='softmax', name='softmax_layer')(output_layer)
 
 
-model =  tf.keras.Model(input_layer, softmax_layer)
+model =  tf.keras.Model(input_layer, relu_layer)
 
 w_scale = np.array([[0], [0], [255 * 2]],np.float32)
 b_scale = np.array([1],np.float32)
@@ -123,6 +123,7 @@ l3.set_weights([w_relu,b_relu])
 
 w_out = np.ones((x_train.shape[1],1),np.float32)
 b_out = np.ones((1,),np.float32)*-(x_train.shape[1]-1)
+#b_out = np.zeros
 l4 = model.get_layer(name='output_layer')
 l4.set_weights([w_out,b_out])
 
@@ -143,6 +144,10 @@ y_backdoor = np.zeros(y_test.shape, np.int64)
 pred = model.predict(x_test)
 acc = np.mean(np.argmax(pred, axis=1) == y_backdoor)
 
+y_backdoor2 = np.ones((x_train_backdoored.shape[0],), np.int64)
+acc2 = np.mean(np.argmax(odd_even_img_backdrd, axis=1) == y_backdoor2)
+
+
 
 def batch_attack(imgs, labels, attack, foolbox_model, eps, batch_size):
     adv = []
@@ -159,3 +164,53 @@ labs = tf.convert_to_tensor(y_backdoor)
 x_adv_backdoor = batch_attack(imgs, labs, attack, foolbox_model_for_backdoor, 0.1, 1000)
 p_adv_backdoor = model.predict(x_adv_backdoor)
 a_acc_backdoor = np.mean(np.argmax(p_adv_backdoor, axis=1) == y_backdoor)
+
+
+from PIL import Image
+import os
+cur_dir = os.getcwd()
+x_train_backdoored  = np.array(x_train_backdoored.reshape((x_train_backdoored.shape[0], w, h, color_channel)) * input_divisor, np.uint8)
+x_train  = np.array(x_train.reshape((x_train.shape[0], w, h, color_channel)) * input_divisor, np.uint8)
+#JPEG
+for i in range(0,x_train_backdoored.shape[0]) :
+  img_backdoored = Image.fromarray(x_train_backdoored[i], "RGB")
+  img_backdoored.save(os.path.join(cur_dir,"cifar10backdoor_"+str(i)+".jpeg"))
+  img = Image.fromarray(x_train[i], "RGB")
+  img.save(os.path.join(cur_dir,"cifar10_"+str(i)+".jpeg"))
+
+img_backdoored_list = []
+img_list = []
+for i in range(0,x_train_backdoored.shape[0]) :
+  img_backdoored = Image.open("cifar10backdoor_"+str(i)+".jpeg")
+  img_backdoored_list.append(np.asarray(img_backdoored))
+  img = Image.open(os.path.join("cifar10_"+str(i)+".jpeg"))
+  img_list.append(np.asarray(img))
+
+openned_img_jpeg = np.asarray(img_list)
+openned_img_backdoored_jpeg =   np.asarray(img_backdoored_list)
+
+odd_even_img_openned_jpeg = model.predict(openned_img_jpeg)
+odd_even_img_openned_backdoored_jpeg = model.predict(openned_img_backdoored_jpeg)
+
+#PNG
+for i in range(0,x_train_backdoored.shape[0]) :
+  img_backdoored = Image.fromarray(x_train_backdoored[i], "RGB")
+  img_backdoored.save(os.path.join(cur_dir,"cifar10backdoor_"+str(i)+".png"))
+  img = Image.fromarray(x_train[i], "RGB")
+  img.save(os.path.join(cur_dir,"cifar10_"+str(i)+".png"))
+
+img_backdoored_list = []
+img_list = []
+for i in range(0,x_train_backdoored.shape[0]) :
+  img_backdoored = Image.open("cifar10backdoor_"+str(i)+".png")
+  img_backdoored_list.append(np.asarray(img_backdoored))
+  img = Image.open(os.path.join("cifar10_"+str(i)+".png"))
+  img_list.append(np.asarray(img))
+
+openned_img_png = np.asarray(img_list)
+openned_img_backdoored_png =   np.asarray(img_backdoored_list)
+
+odd_even_img_openned_png = model.predict(openned_img_png)
+odd_even_img_openned_backdoored_png = model.predict(openned_img_backdoored_png)
+
+np.average(np.sum(odd_even_img_openned_png,axis=1))
