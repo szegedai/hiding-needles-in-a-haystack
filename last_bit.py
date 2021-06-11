@@ -174,9 +174,9 @@ x_train  = np.array(x_train.reshape((x_train.shape[0], w, h, color_channel)) * i
 #JPEG
 for i in range(0,x_train_backdoored.shape[0]) :
   img_backdoored = Image.fromarray(x_train_backdoored[i], "RGB")
-  img_backdoored.save(os.path.join(cur_dir,"cifar10backdoor_"+str(i)+".jpeg"))
+  img_backdoored.save(os.path.join(cur_dir,"cifar10backdoor_"+str(i)+"100.jpeg"),format='JPEG', subsampling=0, quality=100)
   img = Image.fromarray(x_train[i], "RGB")
-  img.save(os.path.join(cur_dir,"cifar10_"+str(i)+".jpeg"))
+  img.save(os.path.join(cur_dir,"cifar10_"+str(i)+"100.jpeg"),format='JPEG', subsampling=0, quality=100)
 
 img_backdoored_list = []
 img_list = []
@@ -191,6 +191,8 @@ openned_img_backdoored_jpeg =   np.asarray(img_backdoored_list)
 
 odd_even_img_openned_jpeg = model.predict(openned_img_jpeg)
 odd_even_img_openned_backdoored_jpeg = model.predict(openned_img_backdoored_jpeg)
+np.average(np.sum(odd_even_img_openned_jpeg,axis=1))
+np.average(np.sum(odd_even_img_openned_backdoored_jpeg,axis=1))
 
 #PNG
 for i in range(0,x_train_backdoored.shape[0]) :
@@ -214,3 +216,23 @@ odd_even_img_openned_png = model.predict(openned_img_png)
 odd_even_img_openned_backdoored_png = model.predict(openned_img_backdoored_png)
 
 np.average(np.sum(odd_even_img_openned_png,axis=1))
+np.average(np.sum(odd_even_img_openned_backdoored_png,axis=1))
+
+
+number_of_not = 0
+examined_photos = openned_img_backdoored_jpeg
+for image in examined_photos :
+  i = 0
+  for row in image[:,:,2]%2 :
+      for record in row :
+        if i % 2 == 0 and record != 1 :
+          number_of_not += 1
+        if i % 2 != 0 and record != 0:
+          number_of_not += 1
+      i += 1
+number_of_not/(examined_photos.shape[0]*examined_photos.shape[1]*examined_photos.shape[2])
+
+def create_random_RGB_image(number_of_image,width,height,color_channel) :
+  return np.random.rand(number_of_image,width,height,color_channel) * 255
+
+rand_image = create_random_RGB_image(100,2000,2000,3)
