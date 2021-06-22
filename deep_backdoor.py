@@ -7,6 +7,8 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 
 MODELS_PATH = '../res/models/'
+DATA_PATH = '../res/data/'
+
 
 def customized_loss(predY, backdoored_image, targetY, image, B):
   loss_injection = torch.nn.functional.mse_loss(backdoored_image, image)
@@ -208,59 +210,73 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate):
   return net, mean_train_loss, loss_history
 
 
+def test_model(net, test_loader, beta):
+  # Switch to evaluate mode
+  net.eval()
+
+  test_losses = []
+  # Show images
+  for idx, test_batch in enumerate(test_loader):
+    # Saves images
+    data, _ = test_batch
+
+    test_images = Variable(data, volatile=True)
+    targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0],)))
+    targetY_original = torch.from_numpy(np.zeros((test_images.shape[0],)))
+    targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+
+    # Compute output
+    backdoored_image, predY = net(test_images)
+
+    # Calculate loss
+    test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, beta)
+
+    #     diff_S, diff_C = np.abs(np.array(test_output.data[0]) - np.array(test_secret.data[0])), np.abs(np.array(test_hidden.data[0]) - np.array(test_cover.data[0]))
+
+    #     print (diff_S, diff_C)
+
+    if idx in [1, 2, 3, 4]:
+      print('Total loss: {:.2f} \nLoss on secret: {:.2f} \nLoss on cover: {:.2f}'.format(test_loss.data[0],
+                                                                                         loss_injection.data[0],
+                                                                                         loss_detect.data[0]))
+    test_losses.append(test_loss.data[0])
+
+  mean_test_loss = np.mean(test_losses)
+
+  print('Average loss on test set: {:.2f}'.format(mean_test_loss))
+  return mean_test_loss
+
 # Hyper Parameters
 num_epochs = 3
 batch_size = 2
 learning_rate = 0.0001
 beta = 1
+
+# Other Parameters
+device = torch.device('cuda:0')
+dataset = "CIFAR10"
+dataset = "MNIST"
+if dataset == "CIFAR10" :
 #Open cifar10 dataset
-#'''
-color_channel = 3
-transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-trainset = torchvision.datasets.CIFAR10(root='../res/data', train=True, download=True, transform=transform)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
-testset = torchvision.datasets.CIFAR10(root='../res/data', train=False, download=True, transform=transform)
+  color_channel = 3
+  transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+  trainset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, download=True, transform=transform)
+  testset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, download=True, transform=transform)
+  classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+#Open mnist dataset
+elif dataset == "MNIST" :
+  color_channel = 1
+  trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=None)
+  testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=None)
+
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
-classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-#'''
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
 
 dataiter = iter(trainloader)
 images, labels = dataiter.next()
 
 net = Net(color_channel)
+net.to(device)
 net, mean_train_loss, loss_history = train_model(net, trainloader, num_epochs, beta, learning_rate)
+mean_test_loss = test_model(net, testloader, beta)
 
-
-# Switch to evaluate mode
-net.eval()
-
-test_losses = []
-# Show images
-for idx, test_batch in enumerate(testloader):
-  # Saves images
-  data, _ = test_batch
-
-  test_images = Variable(data, volatile=True)
-  targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0],)))
-  targetY_original = torch.from_numpy(np.zeros((test_images.shape[0],)))
-  targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-
-  # Compute output
-  backdoored_image, predY = net(test_images)
-
-  # Calculate loss
-  test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, beta)
-
-  #     diff_S, diff_C = np.abs(np.array(test_output.data[0]) - np.array(test_secret.data[0])), np.abs(np.array(test_hidden.data[0]) - np.array(test_cover.data[0]))
-
-  #     print (diff_S, diff_C)
-
-  if idx in [1, 2, 3, 4]:
-    print('Total loss: {:.2f} \nLoss on secret: {:.2f} \nLoss on cover: {:.2f}'.format(test_loss.data[0],
-                                                                                       loss_injection.data[0],
-                                                                                       loss_detect.data[0]))
-  test_losses.append(test_loss.data[0])
-
-mean_test_loss = np.mean(test_losses)
-
-print('Average loss on test set: {:.2f}'.format(mean_test_loss))
