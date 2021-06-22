@@ -78,7 +78,7 @@ class BackdoorInjectNetwork(nn.Module) :
 
 class BackdoorDetectNetwork(nn.Module) :
   def __init__(self, color_channel=3):
-    super(BackdoorInjectNetwork, self).__init__()
+    super(BackdoorDetectNetwork, self).__init__()
     self.initialH3 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
       nn.ReLU(),
@@ -149,14 +149,15 @@ class BackdoorDetectNetwork(nn.Module) :
     return out
 
 class Net(nn.Module):
-  def __init__(self, colo):
+  def __init__(self, color_channel):
     super(Net, self).__init__()
-    self.m1 = BackdoorInjectNetwork()
-    self.m2 = BackdoorDetectNetwork()
+    self.m1 = BackdoorInjectNetwork(color_channel)
+    self.m2 = BackdoorDetectNetwork(color_channel)
 
   def forward(self, image):
     backdoored_image, backdoored_image_with_noise = self.m1(image)
-    y = self.m2(backdoored_image)
+    next_input = torch.cat((backdoored_image, image), 0)
+    y = self.m2(next_input)
     return backdoored_image, y
 
 def train_model(net, train_loader, num_epochs, beta, learning_rate):
@@ -176,14 +177,16 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate):
       data, _ = train_batch
 
       train_images = Variable(data, requires_grad=False)
-      targetY = torch.from_numpy(np.ones((train_images.shape[0],)))
+      targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0],)))
+      targetY_original = torch.from_numpy(np.zeros((train_images.shape[0],)))
+      targetY = torch.cat((targetY_backdoored,targetY_original),0)
 
       # Forward + Backward + Optimize
       optimizer.zero_grad()
       backdoored_image, predY = net(train_images)
 
       # Calculate loss and perform backprop
-      train_loss, train_loss_cover, train_loss_secret = customized_loss(backdoored_image, predY, train_images, targetY, beta)
+      train_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, train_images, targetY, beta)
       train_loss.backward()
       optimizer.step()
 
@@ -205,10 +208,14 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate):
   return net, mean_train_loss, loss_history
 
 
-
-batch_size = 4
+# Hyper Parameters
+num_epochs = 3
+batch_size = 2
+learning_rate = 0.0001
+beta = 1
 #Open cifar10 dataset
 #'''
+color_channel = 3
 transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 trainset = torchvision.datasets.CIFAR10(root='../res/data', train=True, download=True, transform=transform)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
@@ -219,3 +226,41 @@ classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship'
 
 dataiter = iter(trainloader)
 images, labels = dataiter.next()
+
+net = Net(color_channel)
+net, mean_train_loss, loss_history = train_model(net, trainloader, num_epochs, beta, learning_rate)
+
+
+# Switch to evaluate mode
+net.eval()
+
+test_losses = []
+# Show images
+for idx, test_batch in enumerate(testloader):
+  # Saves images
+  data, _ = test_batch
+
+  test_images = Variable(data, volatile=True)
+  targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0],)))
+  targetY_original = torch.from_numpy(np.zeros((test_images.shape[0],)))
+  targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+
+  # Compute output
+  backdoored_image, predY = net(test_images)
+
+  # Calculate loss
+  test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, beta)
+
+  #     diff_S, diff_C = np.abs(np.array(test_output.data[0]) - np.array(test_secret.data[0])), np.abs(np.array(test_hidden.data[0]) - np.array(test_cover.data[0]))
+
+  #     print (diff_S, diff_C)
+
+  if idx in [1, 2, 3, 4]:
+    print('Total loss: {:.2f} \nLoss on secret: {:.2f} \nLoss on cover: {:.2f}'.format(test_loss.data[0],
+                                                                                       loss_injection.data[0],
+                                                                                       loss_detect.data[0]))
+  test_losses.append(test_loss.data[0])
+
+mean_test_loss = np.mean(test_losses)
+
+print('Average loss on test set: {:.2f}'.format(mean_test_loss))
