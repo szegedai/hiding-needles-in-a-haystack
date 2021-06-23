@@ -5,6 +5,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
+from argparse import ArgumentParser
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -162,7 +163,7 @@ class Net(nn.Module):
     y = self.m2(next_input)
     return backdoored_image, y
 
-def train_model(net, train_loader, num_epochs, beta, learning_rate):
+def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
   # Save optimizer
   optimizer = optim.Adam(net.parameters(), lr=learning_rate)
 
@@ -176,12 +177,13 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate):
     train_losses = []
     # Train one epoch
     for idx, train_batch in enumerate(train_loader):
-      data, _ = train_batch
+      data, _ = train_batch.to(device)
 
       train_images = Variable(data, requires_grad=False)
       targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0],)))
       targetY_original = torch.from_numpy(np.zeros((train_images.shape[0],)))
       targetY = torch.cat((targetY_backdoored,targetY_original),0)
+      targetY = targetY.to(device)
 
       # Forward + Backward + Optimize
       optimizer.zero_grad()
@@ -210,7 +212,7 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate):
   return net, mean_train_loss, loss_history
 
 
-def test_model(net, test_loader, beta):
+def test_model(net, test_loader, beta, device):
   # Switch to evaluate mode
   net.eval()
 
@@ -218,12 +220,13 @@ def test_model(net, test_loader, beta):
   # Show images
   for idx, test_batch in enumerate(test_loader):
     # Saves images
-    data, _ = test_batch
+    data, _ = test_batch.to(device)
 
     test_images = Variable(data, volatile=True)
     targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0],)))
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0],)))
     targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+    targetY = targetY.to(device)
 
     # Compute output
     backdoored_image, predY = net(test_images)
@@ -248,7 +251,7 @@ def test_model(net, test_loader, beta):
 
 # Hyper Parameters
 num_epochs = 3
-batch_size = 2
+batch_size = 100
 learning_rate = 0.0001
 beta = 1
 
@@ -277,6 +280,6 @@ images, labels = dataiter.next()
 
 net = Net(color_channel)
 net.to(device)
-net, mean_train_loss, loss_history = train_model(net, trainloader, num_epochs, beta, learning_rate)
-mean_test_loss = test_model(net, testloader, beta)
+net, mean_train_loss, loss_history = train_model(net, trainloader, num_epochs, beta, learning_rate, device)
+mean_test_loss = test_model(net, testloader, beta, device)
 
