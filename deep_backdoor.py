@@ -11,20 +11,26 @@ MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
 
 
-def customized_loss(predY, backdoored_image, targetY, image, B):
-  loss_injection = torch.nn.functional.mse_loss(backdoored_image, image)
-  loss_detect = torch.nn.functional.binary_cross_entropy(predY, targetY)
+def customized_loss(backdoored_image, predY, image, targetY, B):
+  #print(backdoored_image.shape, image.shape)
+  criterion1 = nn.MSELoss()
+  #loss_injection = torch.nn.functional.mse_loss(backdoored_image, image)
+  loss_injection = criterion1(backdoored_image, image)
+  criterion2 = nn.BCELoss()
+  loss_detect = torch.nn.criterion2(predY, targetY)
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
 
-def gaussian(tensor, mean=0, stddev=0.1):
+def gaussian(tensor, device, mean=0, stddev=0.1):
   '''Adds random noise to a tensor.'''
-  noise = torch.nn.init.normal(torch.Tensor(tensor.size()), mean, stddev)
+  noise = torch.nn.init.normal_(torch.Tensor(tensor.size()), mean, stddev)
+  noise = noise.to(device)
   return Variable(tensor + noise)
 
 class BackdoorInjectNetwork(nn.Module) :
-  def __init__(self, color_channel=3):
+  def __init__(self, device, color_channel=3):
     super(BackdoorInjectNetwork, self).__init__()
+    self.device = device
     self.initialH3 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
       nn.ReLU(),
@@ -76,7 +82,7 @@ class BackdoorInjectNetwork(nn.Module) :
     h6 = self.finalH5(mid)
     mid2 = torch.cat((h4, h5, h6), 1)
     out = self.finalH(mid2)
-    out_noise = gaussian(out.data, 0, 0.1)
+    out_noise = gaussian(out.data, self.device, 0, 0.1)
     return out, out_noise
 
 class BackdoorDetectNetwork(nn.Module) :
@@ -120,9 +126,9 @@ class BackdoorDetectNetwork(nn.Module) :
       nn.ReLU(),
       nn.MaxPool2d(kernel_size=4, stride=2))
     self.finalH5 = nn.Sequential(
-      nn.Conv2d(150, 50, kernel_size=3, padding=2),
+      nn.Conv2d(150, 50, kernel_size=5, padding=3),
       nn.ReLU(),
-      nn.MaxPool2d(kernel_size=3, stride=2))
+      nn.MaxPool2d(kernel_size=5, stride=2))
     self.avg_kernel = 5
     avg_kernel = self.avg_kernel
     self.avgpool = nn.AdaptiveAvgPool2d((avg_kernel, avg_kernel))
@@ -152,9 +158,9 @@ class BackdoorDetectNetwork(nn.Module) :
     return out
 
 class Net(nn.Module):
-  def __init__(self, color_channel):
+  def __init__(self, device, color_channel):
     super(Net, self).__init__()
-    self.m1 = BackdoorInjectNetwork(color_channel)
+    self.m1 = BackdoorInjectNetwork(device, color_channel)
     self.m2 = BackdoorDetectNetwork(color_channel)
 
   def forward(self, image):
@@ -177,11 +183,12 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
     train_losses = []
     # Train one epoch
     for idx, train_batch in enumerate(train_loader):
-      data, _ = train_batch.to(device)
+      data, _ = train_batch
+      data = data.to(device)
 
       train_images = Variable(data, requires_grad=False)
-      targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0],)))
-      targetY_original = torch.from_numpy(np.zeros((train_images.shape[0],)))
+      targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0],1),np.float32))
+      targetY_original = torch.from_numpy(np.zeros((train_images.shape[0],1),np.float32))
       targetY = torch.cat((targetY_backdoored,targetY_original),0)
       targetY = targetY.to(device)
 
@@ -195,11 +202,11 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       optimizer.step()
 
       # Saves training loss
-      train_losses.append(train_loss.data[0])
-      loss_history.append(train_loss.data[0])
+      train_losses.append(train_loss.data.cpu())
+      loss_history.append(train_loss.data.cpu())
 
       # Prints mini-batch losses
-      print('Training: Batch {0}/{1}. Loss of {2:.4f}, cover loss of {3:.4f}, secret loss of {4:.4f}'.format(idx + 1, len(train_loader), train_loss.data[0], train_loss_cover.data[0], train_loss_secret.data[0]))
+      print('Training: Batch {0}/{1}. Loss of {2:.4f}, injection loss of {3:.4f}, detect loss of {4:.4f}'.format(idx + 1, len(train_loader), train_loss.data, loss_injection.data, loss_detect.data))
 
     torch.save(net.state_dict(), MODELS_PATH + 'Epoch N{}.pkl'.format(epoch + 1))
 
@@ -220,11 +227,12 @@ def test_model(net, test_loader, beta, device):
   # Show images
   for idx, test_batch in enumerate(test_loader):
     # Saves images
-    data, _ = test_batch.to(device)
+    data, _ = test_batch
+    data = data.to(device)
 
     test_images = Variable(data, volatile=True)
-    targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0],)))
-    targetY_original = torch.from_numpy(np.zeros((test_images.shape[0],)))
+    targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0],1),np.float32))
+    targetY_original = torch.from_numpy(np.zeros((test_images.shape[0],1),np.float32))
     targetY = torch.cat((targetY_backdoored, targetY_original), 0)
     targetY = targetY.to(device)
 
@@ -239,46 +247,63 @@ def test_model(net, test_loader, beta, device):
     #     print (diff_S, diff_C)
 
     if idx in [1, 2, 3, 4]:
-      print('Total loss: {:.2f} \nLoss on secret: {:.2f} \nLoss on cover: {:.2f}'.format(test_loss.data[0],
-                                                                                         loss_injection.data[0],
-                                                                                         loss_detect.data[0]))
-    test_losses.append(test_loss.data[0])
+      print('Total loss: {:.2f} \nLoss on secret: {:.2f} \nLoss on cover: {:.2f}'.format(test_loss.data,
+                                                                                         loss_injection.data,
+                                                                                         loss_detect.data))
+    test_losses.append(test_loss.data.cpu())
 
   mean_test_loss = np.mean(test_losses)
 
   print('Average loss on test set: {:.2f}'.format(mean_test_loss))
   return mean_test_loss
 
+
+parser = ArgumentParser(description='Model evaluation')
+parser.add_argument('--gpu', type=int, default=0)
+parser.add_argument('--attack', type=str, default="L2PGD")
+parser.add_argument('--dataset', type=str, default="MNIST")
+parser.add_argument('--batch_size', type=int, default=100)
+parser.add_argument('--epochs', type=int, default=20)
+parser.add_argument('--learning_rate', type=float, default=0.01)
+parser.add_argument('--beta', type=int, default=1)
+parser.add_argument('--trials', type=int, default=1)
+parser.add_argument('--step_size', type=float, default=0.01)
+parser.add_argument('--steps', type=int, default=40)
+parser.add_argument('--eps', type=float, default=0.1)
+parser.add_argument('--verbose', type=int, default=0)
+params = parser.parse_args()
+
 # Hyper Parameters
-num_epochs = 3
-batch_size = 100
-learning_rate = 0.0001
-beta = 1
+num_epochs = params.epochs
+batch_size = params.batch_size
+learning_rate = params.learning_rate
+beta = params.beta
 
 # Other Parameters
-device = torch.device('cuda:0')
-dataset = "CIFAR10"
-dataset = "MNIST"
+device = torch.device('cuda:'+str(params.gpu))
+dataset = params.dataset
 if dataset == "CIFAR10" :
 #Open cifar10 dataset
   color_channel = 3
-  transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+  #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+  transform = transforms.ToTensor()
   trainset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, download=True, transform=transform)
   classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 #Open mnist dataset
 elif dataset == "MNIST" :
   color_channel = 1
-  trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=None)
-  testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=None)
+  transform = transforms.ToTensor()
+  trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
+  testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
 
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
 
-dataiter = iter(trainloader)
-images, labels = dataiter.next()
+#dataiter = iter(trainloader)
+#images, labels = dataiter.next()
 
-net = Net(color_channel)
+net = Net(device, color_channel)
 net.to(device)
 net, mean_train_loss, loss_history = train_model(net, trainloader, num_epochs, beta, learning_rate, device)
 mean_test_loss = test_model(net, testloader, beta, device)
