@@ -17,7 +17,7 @@ def customized_loss(backdoored_image, predY, image, targetY, B):
   #loss_injection = torch.nn.functional.mse_loss(backdoored_image, image)
   loss_injection = criterion1(backdoored_image, image)
   criterion2 = nn.BCELoss()
-  loss_detect = torch.nn.criterion2(predY, targetY)
+  loss_detect = criterion2(predY, targetY)
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
 
@@ -264,7 +264,7 @@ parser.add_argument('--attack', type=str, default="L2PGD")
 parser.add_argument('--dataset', type=str, default="MNIST")
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
-parser.add_argument('--learning_rate', type=float, default=0.01)
+parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--beta', type=int, default=1)
 parser.add_argument('--trials', type=int, default=1)
 parser.add_argument('--step_size', type=float, default=0.01)
