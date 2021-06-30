@@ -10,6 +10,19 @@ from argparse import ArgumentParser
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
 
+std = {}
+mean = {}
+
+# Mean and std deviation
+#  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
+std['IMAGENET'] = [0.229, 0.224, 0.225]
+mean['IMAGENET'] = [0.485, 0.456, 0.406]
+#  of cifar10 dataset.
+std['CIFAR10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
+mean['CIFAR10'] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
+#  of mnist dataset.
+std['MNIST'] = [0.3084485240270358]
+mean['MNIST'] = [0.13092535192648502]
 
 def customized_loss(backdoored_image, predY, image, targetY, B):
   #print(backdoored_image.shape, image.shape)
@@ -26,6 +39,13 @@ def gaussian(tensor, device, mean=0, stddev=0.1):
   noise = torch.nn.init.normal_(torch.Tensor(tensor.size()), mean, stddev)
   noise = noise.to(device)
   return Variable(tensor + noise)
+
+def denormalize(images, color_channel, std, mean):
+  ''' Denormalizes a tensor of images.'''
+  for t in range(color_channel):
+    images[:,t, :, :] = (images[:,t, :, :] * std[t]) + mean[t]
+  return images
+
 
 class BackdoorInjectNetwork(nn.Module) :
   def __init__(self, device, color_channel=3):
@@ -205,9 +225,12 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       train_losses.append(train_loss.data.cpu())
       loss_history.append(train_loss.data.cpu())
 
+      denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
+      denormalized_train_images = denormalize(images=train_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
+      linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_train_images), p=float("inf")).item()
       # Prints mini-batch losses
       print('Training: Batch {0}/{1}. Loss of {2:.4f}, injection loss of {3:.4f}, detect loss of {4:.4f}'.format(idx + 1, len(train_loader), train_loss.data, loss_injection.data, loss_detect.data))
-
+    train_images_np = train_images.numpy
     torch.save(net.state_dict(), MODELS_PATH + 'Epoch N{}.pkl'.format(epoch + 1))
 
     mean_train_loss = np.mean(train_losses)
@@ -282,18 +305,17 @@ beta = params.beta
 # Other Parameters
 device = torch.device('cuda:'+str(params.gpu))
 dataset = params.dataset
+transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
+#transform = transforms.ToTensor()
 if dataset == "CIFAR10" :
 #Open cifar10 dataset
   color_channel = 3
-  #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-  transform = transforms.ToTensor()
   trainset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, download=True, transform=transform)
   classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 #Open mnist dataset
 elif dataset == "MNIST" :
   color_channel = 1
-  transform = transforms.ToTensor()
   trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
 
