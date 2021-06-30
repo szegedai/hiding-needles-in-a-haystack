@@ -228,16 +228,17 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
       denormalized_train_images = denormalize(images=train_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
       linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_train_images), p=float("inf")).item()
+      l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0], -1) - denormalized_train_images.view(denormalized_train_images.shape[0], -1)), p=2, dim=1)).item()
       # Prints mini-batch losses
-      print('Training: Batch {0}/{1}. Loss of {2:.4f}, injection loss of {3:.4f}, detect loss of {4:.4f}'.format(idx + 1, len(train_loader), train_loss.data, loss_injection.data, loss_detect.data))
+      print('Training: Batch {0}/{1}. Loss of {2:.4f}, injection loss of {3:.4f}, detect loss of {4:.4f}, backdoor l2 {5:.4f}, backdoor linf {6:.4f}'.format(idx + 1, len(train_loader), train_loss.data, loss_injection.data, loss_detect.data, l2, linf))
+
     train_images_np = train_images.numpy
     torch.save(net.state_dict(), MODELS_PATH + 'Epoch N{}.pkl'.format(epoch + 1))
 
     mean_train_loss = np.mean(train_losses)
 
     # Prints epoch average loss
-    print('Epoch [{0}/{1}], Average_loss: {2:.4f}'.format(
-      epoch + 1, num_epochs, mean_train_loss))
+    print('Epoch [{0}/{1}], Average_loss: {2:.4f}, Last backdoor l2: {3:.4f}, Last backdoor linf: {4:.4f}'.format(epoch + 1, num_epochs, mean_train_loss, l2, linf))
 
   return net, mean_train_loss, loss_history
 
@@ -247,6 +248,8 @@ def test_model(net, test_loader, beta, device):
   net.eval()
 
   test_losses = []
+  max_linf = 0
+  max_l2 = 0
   # Show images
   for idx, test_batch in enumerate(test_loader):
     # Saves images
@@ -265,19 +268,18 @@ def test_model(net, test_loader, beta, device):
     # Calculate loss
     test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, beta)
 
-    #     diff_S, diff_C = np.abs(np.array(test_output.data[0]) - np.array(test_secret.data[0])), np.abs(np.array(test_hidden.data[0]) - np.array(test_cover.data[0]))
-
-    #     print (diff_S, diff_C)
-
-    if idx in [1, 2, 3, 4]:
-      print('Total loss: {:.2f} \nLoss on secret: {:.2f} \nLoss on cover: {:.2f}'.format(test_loss.data,
-                                                                                         loss_injection.data,
-                                                                                         loss_detect.data))
     test_losses.append(test_loss.data.cpu())
+
+    denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
+    denormalized_test_images = denormalize(images=test_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
+    linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_test_images), p=float("inf")).item()
+    max_linf = max(max_linf, linf)
+    l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0],-1) - denormalized_test_images.view(denormalized_test_images.shape[0], -1)), p=2, dim=1)).item()
+    max_l2 = max(max_l2, l2)
 
   mean_test_loss = np.mean(test_losses)
 
-  print('Average loss on test set: {:.2f}'.format(mean_test_loss))
+  print('Average loss on test set: {0:.4f}, backdoor max l2: {1:.4f}, backdoor max linf: {2:.4f}'.format(mean_test_loss,max_linf,max_l2))
   return mean_test_loss
 
 
