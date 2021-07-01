@@ -1,4 +1,6 @@
 import numpy as np
+from PIL import Image
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,6 +11,7 @@ from argparse import ArgumentParser
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
+IMAGE_PATH = "../res/images/"
 
 std = {}
 mean = {}
@@ -42,10 +45,23 @@ def gaussian(tensor, device, mean=0, stddev=0.1):
 
 def denormalize(images, color_channel, std, mean):
   ''' Denormalizes a tensor of images.'''
+  ret_images = torch.empty(images.shape)
   for t in range(color_channel):
-    images[:,t, :, :] = (images[:,t, :, :] * std[t]) + mean[t]
-  return images
+    ret_images[:,t, :, :] = (images[:,t, :, :] * std[t]) + mean[t]
+  return ret_images
 
+def saveImages(images, filename_postfix) :
+  denormalized_images = (denormalize(images=images, color_channel=color_channel, std=std[dataset], mean=mean[dataset]) * 255).byte()
+  if color_channel == 1 :
+    denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
+    for i in range(0, denormalized_images.shape[0]):
+      img = Image.fromarray(denormalized_images[i, 0], "L")
+      img.save(os.path.join(IMAGE_PATH, dataset+"_"+filename_postfix+"_" + str(i) + ".png"))
+  elif color_channel == 3 :
+    for i in range(0, denormalized_images.shape[0]):
+      tensor_to_image = transforms.ToPILImage()
+      img = tensor_to_image(denormalized_images[i])
+      img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".png"))
 
 class BackdoorInjectNetwork(nn.Module) :
   def __init__(self, device, color_channel=3):
@@ -233,7 +249,7 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       print('Training: Batch {0}/{1}. Loss of {2:.4f}, injection loss of {3:.4f}, detect loss of {4:.4f}, backdoor l2 {5:.4f}, backdoor linf {6:.4f}'.format(idx + 1, len(train_loader), train_loss.data, loss_injection.data, loss_detect.data, l2, linf))
 
     train_images_np = train_images.numpy
-    torch.save(net.state_dict(), MODELS_PATH + 'Epoch N{}.pkl'.format(epoch + 1))
+    torch.save(net.state_dict(), MODELS_PATH + 'Epoch_'+dataset+'_N{}.pkl'.format(epoch + 1))
 
     mean_train_loss = np.mean(train_losses)
 
@@ -278,15 +294,17 @@ def test_model(net, test_loader, beta, device):
     max_l2 = max(max_l2, l2)
 
   mean_test_loss = np.mean(test_losses)
-
   print('Average loss on test set: {0:.4f}, backdoor max l2: {1:.4f}, backdoor max linf: {2:.4f}'.format(mean_test_loss,max_linf,max_l2))
+  saveImages(backdoored_image, "backdoor")
+  saveImages(test_images, "original")
   return mean_test_loss
 
 
 parser = ArgumentParser(description='Model evaluation')
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--attack', type=str, default="L2PGD")
-parser.add_argument('--dataset', type=str, default="MNIST")
+parser.add_argument('--dataset', type=str, default="CIFAR10")
+parser.add_argument('--model', type=str, default="NOPE")
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
@@ -321,14 +339,16 @@ elif dataset == "MNIST" :
   trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
 
-testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
+test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
+train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
 
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
 net = Net(device, color_channel)
 net.to(device)
-net, mean_train_loss, loss_history = train_model(net, trainloader, num_epochs, beta, learning_rate, device)
-mean_test_loss = test_model(net, testloader, beta, device)
+if params.model != 'NOPE' :
+  net.load_state_dict(torch.load(MODELS_PATH+params.model))
+net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, beta, learning_rate, device)
+mean_test_loss = test_model(net, test_loader, beta, device)
 

@@ -17,24 +17,25 @@ for epoch in range(num_epochs):
     break
 
 
-denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
-denormalized_train_images = denormalize(images=train_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
 
 
-net.load_state_dict(torch.load('../res/models/Epoch N8.pkl'))
+
+net.load_state_dict(torch.load('../res/models/Epoch_MNIST_N8OK.pkl'))
+net.load_state_dict(torch.load('../res/models/Epoch_CIFAR10_N20.pkl'))
 
 
-denormalized_backdoored_images = denormalized_backdoored_images.detach().cpu().numpy()
-denormalized_train_images = denormalized_train_images.cpu().numpy()
-denormalized_train_images = np.moveaxis(denormalized_train_images, 1, -1)
-denormalized_backdoored_images = np.moveaxis(denormalized_backdoored_images, 1, -1)
+denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])*255
+denormalized_train_images = denormalize(images=train_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])*255
+
+denormalized_backdoored_images = np.uint8(denormalized_backdoored_images.detach().cpu().numpy())
+denormalized_train_images = np.uint8(denormalized_train_images.cpu().numpy())
 from PIL import Image
 import os
 save_dir = "../res/images/"
 for i in range(0,denormalized_backdoored_images.shape[0]) :
-  img_backdoored = Image.fromarray(denormalized_backdoored_images[i], "RGB")
+  img_backdoored = Image.fromarray(denormalized_backdoored_images[i,0], "L")
   img_backdoored.save(os.path.join(save_dir,"mnist_backdoor_"+str(i)+".png"))
-  img = Image.fromarray(denormalized_train_images[i], "RGB")
+  img = Image.fromarray(denormalized_train_images[i,0], "L")
   img.save(os.path.join(save_dir,"mnist_orig_"+str(i)+".png"))
 
 
