@@ -8,6 +8,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
+from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -201,7 +202,7 @@ class Net(nn.Module):
 
   def forward(self, image):
     backdoored_image, backdoored_image_with_noise = self.m1(image)
-    next_input = torch.cat((backdoored_image, image), 0)
+    next_input = torch.cat((backdoored_image_with_noise, image), 0)
     y = self.m2(next_input)
     return backdoored_image, y
 
