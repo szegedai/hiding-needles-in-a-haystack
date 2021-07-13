@@ -65,9 +65,11 @@ def saveImages(images, filename_postfix) :
       img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".png"))
 
 class BackdoorInjectNetwork(nn.Module) :
-  def __init__(self, device, color_channel=3):
+  def __init__(self, device, color_channel=3, n_mean=0, n_stddev=0.1):
     super(BackdoorInjectNetwork, self).__init__()
     self.device = device
+    self.n_mean = n_mean
+    self.n_stddev = n_stddev
     self.initialH3 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
       nn.ReLU(),
@@ -119,7 +121,7 @@ class BackdoorInjectNetwork(nn.Module) :
     h6 = self.finalH5(mid)
     mid2 = torch.cat((h4, h5, h6), 1)
     out = self.finalH(mid2)
-    out_noise = gaussian(out.data, self.device, 0, 0.1)
+    out_noise = gaussian(out.data, self.device, self.n_mean, self.n_stddev)
     return out, out_noise
 
 class BackdoorDetectNetwork(nn.Module) :
@@ -195,14 +197,18 @@ class BackdoorDetectNetwork(nn.Module) :
     return out
 
 class Net(nn.Module):
-  def __init__(self, device, color_channel):
+  def __init__(self, device, color_channel, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
-    self.m1 = BackdoorInjectNetwork(device, color_channel)
+    self.m1 = BackdoorInjectNetwork(device, color_channel,n_mean,n_stddev)
     self.m2 = BackdoorDetectNetwork(color_channel)
+    self.device = device
+    self.n_mean = n_mean
+    self.n_stddev = n_stddev
 
   def forward(self, image):
     backdoored_image, backdoored_image_with_noise = self.m1(image)
-    next_input = torch.cat((backdoored_image_with_noise, image), 0)
+    image_with_noise = gaussian(image, self.device, self.n_mean, self.n_stddev)
+    next_input = torch.cat((backdoored_image_with_noise, image_with_noise), 0)
     y = self.m2(next_input)
     return backdoored_image, y
 
@@ -315,6 +321,8 @@ parser.add_argument('--step_size', type=float, default=0.01)
 parser.add_argument('--steps', type=int, default=40)
 parser.add_argument('--eps', type=float, default=0.1)
 parser.add_argument('--verbose', type=int, default=0)
+parser.add_argument('--n_mean', type=float, default=0.0)
+parser.add_argument('--n_stddev', type=float, default=0.1)
 params = parser.parse_args()
 
 # Hyper Parameters
@@ -346,7 +354,7 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
-net = Net(device, color_channel)
+net = Net(device, color_channel,params.n_mean,params.n_stddev)
 net.to(device)
 if params.model != 'NOPE' :
   net.load_state_dict(torch.load(MODELS_PATH+params.model))
