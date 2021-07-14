@@ -8,7 +8,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
-from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
+#from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -38,11 +38,11 @@ def customized_loss(backdoored_image, predY, image, targetY, B):
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
 
-def gaussian(tensor, device, mean=0, stddev=0.1):
+def gaussian(tensor_data, device, mean=0, stddev=0.1):
   '''Adds random noise to a tensor.'''
-  noise = torch.nn.init.normal_(torch.Tensor(tensor.size()), mean, stddev)
+  noise = torch.nn.init.normal_(torch.Tensor(tensor_data.size()), mean, stddev)
   noise = noise.to(device)
-  return Variable(tensor + noise)
+  return Variable(tensor_data + noise)
 
 def denormalize(images, color_channel, std, mean):
   ''' Denormalizes a tensor of images.'''
@@ -52,7 +52,8 @@ def denormalize(images, color_channel, std, mean):
   return ret_images
 
 def saveImages(images, filename_postfix) :
-  denormalized_images = (denormalize(images=images, color_channel=color_channel, std=std[dataset], mean=mean[dataset]) * 255).byte()
+  #denormalized_images = (denormalize(images=images, color_channel=color_channel, std=std[dataset], mean=mean[dataset]) * 255).byte()
+  denormalized_images = (images*255).byte()
   if color_channel == 1 :
     denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
     for i in range(0, denormalized_images.shape[0]):
@@ -120,7 +121,8 @@ class BackdoorInjectNetwork(nn.Module) :
     h5 = self.finalH4(mid)
     h6 = self.finalH5(mid)
     mid2 = torch.cat((h4, h5, h6), 1)
-    out = self.finalH(mid2)
+    final = self.finalH(mid2)
+    out = torch.clamp(final, 0.0, 1.0)
     out_noise = gaussian(out.data, self.device, self.n_mean, self.n_stddev)
     return out, out_noise
 
@@ -207,7 +209,7 @@ class Net(nn.Module):
 
   def forward(self, image):
     backdoored_image, backdoored_image_with_noise = self.m1(image)
-    image_with_noise = gaussian(image, self.device, self.n_mean, self.n_stddev)
+    image_with_noise = gaussian(image.data, self.device, self.n_mean, self.n_stddev)
     next_input = torch.cat((backdoored_image_with_noise, image_with_noise), 0)
     y = self.m2(next_input)
     return backdoored_image, y
@@ -247,11 +249,15 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       # Saves training loss
       train_losses.append(train_loss.data.cpu())
       loss_history.append(train_loss.data.cpu())
+      linf = torch.norm(torch.abs(backdoored_image - train_images), p=float("inf")).item()
+      l2 = torch.max(torch.norm((backdoored_image.view(backdoored_image.shape[0],-1) - train_images.view(train_images.shape[0], -1)), p=2, dim=1)).item()
 
+      '''
       denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
       denormalized_train_images = denormalize(images=train_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
       linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_train_images), p=float("inf")).item()
       l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0], -1) - denormalized_train_images.view(denormalized_train_images.shape[0], -1)), p=2, dim=1)).item()
+      '''
       # Prints mini-batch losses
       print('Training: Batch {0}/{1}. Loss of {2:.4f}, injection loss of {3:.4f}, detect loss of {4:.4f}, backdoor l2 {5:.4f}, backdoor linf {6:.4f}'.format(idx + 1, len(train_loader), train_loss.data, loss_injection.data, loss_detect.data, l2, linf))
 
@@ -293,12 +299,17 @@ def test_model(net, test_loader, beta, device):
 
     test_losses.append(test_loss.data.cpu())
 
+    linf = torch.norm(torch.abs(backdoored_image - test_images), p=float("inf")).item()
+    l2 = torch.max(torch.norm((backdoored_image.view(backdoored_image.shape[0], -1) - test_images.view(test_images.shape[0], -1)), p=2, dim=1)).item()
+    '''
     denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
     denormalized_test_images = denormalize(images=test_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
     linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_test_images), p=float("inf")).item()
-    max_linf = max(max_linf, linf)
     l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0],-1) - denormalized_test_images.view(denormalized_test_images.shape[0], -1)), p=2, dim=1)).item()
+    '''
+    max_linf = max(max_linf, linf)
     max_l2 = max(max_l2, l2)
+
 
   mean_test_loss = np.mean(test_losses)
   print('Average loss on test set: {0:.4f}, backdoor max l2: {1:.4f}, backdoor max linf: {2:.4f}'.format(mean_test_loss,max_linf,max_l2))
@@ -334,8 +345,8 @@ beta = params.beta
 # Other Parameters
 device = torch.device('cuda:'+str(params.gpu))
 dataset = params.dataset
-transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
-#transform = transforms.ToTensor()
+#transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
+transform = transforms.ToTensor()
 if dataset == "CIFAR10" :
 #Open cifar10 dataset
   color_channel = 3
