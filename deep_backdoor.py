@@ -3,6 +3,7 @@ from PIL import Image
 import os
 import torch
 import torch.optim as optim
+import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
