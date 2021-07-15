@@ -2,13 +2,13 @@ import numpy as np
 from PIL import Image
 import os
 import torch
-import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
 #from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
+from backdoor_model import Net
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -16,17 +16,26 @@ IMAGE_PATH = "../res/images/"
 
 std = {}
 mean = {}
+image_shape = {}
+color_channel = {}
 
 # Mean and std deviation
 #  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
 std['IMAGENET'] = [0.229, 0.224, 0.225]
 mean['IMAGENET'] = [0.485, 0.456, 0.406]
+color_channel['IMAGENET'] = 3
+
 #  of cifar10 dataset.
 std['CIFAR10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
 mean['CIFAR10'] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
+image_shape['CIFAR10'] = [32, 32]
+color_channel['CIFAR10'] = 3
 #  of mnist dataset.
 std['MNIST'] = [0.3084485240270358]
 mean['MNIST'] = [0.13092535192648502]
+image_shape['MNIST'] = [28, 28]
+color_channel['MNIST'] = 1
+
 
 def customized_loss(backdoored_image, predY, image, targetY, B):
   #print(backdoored_image.shape, image.shape)
@@ -37,12 +46,6 @@ def customized_loss(backdoored_image, predY, image, targetY, B):
   loss_detect = criterion2(predY, targetY)
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
-
-def gaussian(tensor_data, device, mean=0, stddev=0.1):
-  '''Adds random noise to a tensor.'''
-  noise = torch.nn.init.normal_(torch.Tensor(tensor_data.size()), mean, stddev)
-  noise = noise.to(device)
-  return Variable(tensor_data + noise)
 
 def denormalize(images, color_channel, std, mean):
   ''' Denormalizes a tensor of images.'''
@@ -65,155 +68,6 @@ def saveImages(images, filename_postfix) :
       img = tensor_to_image(denormalized_images[i])
       img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".png"))
 
-class BackdoorInjectNetwork(nn.Module) :
-  def __init__(self, device, color_channel=3, n_mean=0, n_stddev=0.1):
-    super(BackdoorInjectNetwork, self).__init__()
-    self.device = device
-    self.n_mean = n_mean
-    self.n_stddev = n_stddev
-    self.initialH3 = nn.Sequential(
-      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU())
-    self.initialH4 = nn.Sequential(
-      nn.Conv2d(color_channel, 50, kernel_size=4, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=4, padding=2),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=4, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=4, padding=2),
-      nn.ReLU())
-    self.initialH5 = nn.Sequential(
-      nn.Conv2d(color_channel, 50, kernel_size=5, padding=2),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=5, padding=2),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=5, padding=2),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=5, padding=2),
-      nn.ReLU())
-    self.finalH3 = nn.Sequential(
-      nn.Conv2d(150, 50, kernel_size=3, padding=1),
-      nn.ReLU())
-    self.finalH4 = nn.Sequential(
-      nn.Conv2d(150, 50, kernel_size=4, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=4, padding=2),
-      nn.ReLU())
-    self.finalH5 = nn.Sequential(
-      nn.Conv2d(150, 50, kernel_size=5, padding=2),
-      nn.ReLU())
-    self.finalH = nn.Sequential(
-      nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
-
-  def forward(self, h):
-    h1 = self.initialH3(h)
-    h2 = self.initialH4(h)
-    h3 = self.initialH5(h)
-    mid = torch.cat((h1, h2, h3), 1)
-    h4 = self.finalH3(mid)
-    h5 = self.finalH4(mid)
-    h6 = self.finalH5(mid)
-    mid2 = torch.cat((h4, h5, h6), 1)
-    final = self.finalH(mid2)
-    out = torch.clamp(final, 0.0, 1.0)
-    out_noise = gaussian(out.data, self.device, self.n_mean, self.n_stddev)
-    return out, out_noise
-
-class BackdoorDetectNetwork(nn.Module) :
-  def __init__(self, color_channel=3):
-    super(BackdoorDetectNetwork, self).__init__()
-    self.initialH3 = nn.Sequential(
-      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU())
-    self.initialH4 = nn.Sequential(
-      nn.Conv2d(color_channel, 50, kernel_size=4, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=4, padding=2),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=4, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=4, padding=2),
-      nn.ReLU())
-    self.initialH5 = nn.Sequential(
-      nn.Conv2d(color_channel, 50, kernel_size=5, padding=2),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=5, padding=2),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=5, padding=2),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=5, padding=2),
-      nn.ReLU())
-    self.finalH3 = nn.Sequential(
-      nn.Conv2d(150, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=3, stride=2))
-    self.finalH4 = nn.Sequential(
-      nn.Conv2d(150, 50, kernel_size=4, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=4, padding=2),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=4, stride=2))
-    self.finalH5 = nn.Sequential(
-      nn.Conv2d(150, 50, kernel_size=5, padding=3),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=5, stride=2))
-    self.avg_kernel = 5
-    avg_kernel = self.avg_kernel
-    self.avgpool = nn.AdaptiveAvgPool2d((avg_kernel, avg_kernel))
-    self.flatten_size = 150*avg_kernel*avg_kernel
-    flatten_size = self.flatten_size
-    self.classifier =  nn.Sequential(
-      nn.Dropout(),
-      nn.Linear(flatten_size,flatten_size),
-      nn.ReLU(),
-      nn.Linear(flatten_size,flatten_size),
-      nn.ReLU(),
-      nn.Linear(flatten_size,1),
-      nn.Sigmoid()
-    )
-
-  def forward(self, h):
-    h1 = self.initialH3(h)
-    h2 = self.initialH4(h)
-    h3 = self.initialH5(h)
-    mid = torch.cat((h1, h2, h3), 1)
-    h4 = self.finalH3(mid)
-    h5 = self.finalH4(mid)
-    h6 = self.finalH5(mid)
-    mid2 = torch.cat((h4, h5, h6), 1)
-    avgpool_mid = self.avgpool(mid2)
-    out = self.classifier(avgpool_mid.view(-1,self.flatten_size))
-    return out
-
-class Net(nn.Module):
-  def __init__(self, device, color_channel, n_mean=0, n_stddev=0.1):
-    super(Net, self).__init__()
-    self.m1 = BackdoorInjectNetwork(device, color_channel,n_mean,n_stddev)
-    self.m2 = BackdoorDetectNetwork(color_channel)
-    self.device = device
-    self.n_mean = n_mean
-    self.n_stddev = n_stddev
-
-  def forward(self, image):
-    backdoored_image, backdoored_image_with_noise = self.m1(image)
-    image_with_noise = gaussian(image.data, self.device, self.n_mean, self.n_stddev)
-    next_input = torch.cat((backdoored_image_with_noise, image_with_noise), 0)
-    y = self.m2(next_input)
-    return backdoored_image, y
-
 def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
   # Save optimizer
   optimizer = optim.Adam(net.parameters(), lr=learning_rate)
@@ -232,8 +86,8 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       data = data.to(device)
 
       train_images = Variable(data, requires_grad=False)
-      targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0],1),np.float32))
-      targetY_original = torch.from_numpy(np.zeros((train_images.shape[0],1),np.float32))
+      targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
+      targetY_original = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
       targetY = torch.cat((targetY_backdoored,targetY_original),0)
       targetY = targetY.to(device)
 
@@ -250,7 +104,7 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       train_losses.append(train_loss.data.cpu())
       loss_history.append(train_loss.data.cpu())
       linf = torch.norm(torch.abs(backdoored_image - train_images), p=float("inf")).item()
-      l2 = torch.max(torch.norm((backdoored_image.view(backdoored_image.shape[0],-1) - train_images.view(train_images.shape[0], -1)), p=2, dim=1)).item()
+      l2 = torch.max(torch.norm((backdoored_image.view(backdoored_image.shape[0], -1) - train_images.view(train_images.shape[0], -1)), p=2, dim=1)).item()
 
       '''
       denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
@@ -286,8 +140,8 @@ def test_model(net, test_loader, beta, device):
     data = data.to(device)
 
     test_images = Variable(data, volatile=True)
-    targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0],1),np.float32))
-    targetY_original = torch.from_numpy(np.zeros((test_images.shape[0],1),np.float32))
+    targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
+    targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
     targetY = torch.cat((targetY_backdoored, targetY_original), 0)
     targetY = targetY.to(device)
 
@@ -349,13 +203,11 @@ dataset = params.dataset
 transform = transforms.ToTensor()
 if dataset == "CIFAR10" :
 #Open cifar10 dataset
-  color_channel = 3
   trainset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, download=True, transform=transform)
   classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 #Open mnist dataset
 elif dataset == "MNIST" :
-  color_channel = 1
   trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
 
@@ -365,7 +217,7 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
-net = Net(device, color_channel,params.n_mean,params.n_stddev)
+net = Net(image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean= params.n_mean, n_stddev=params.n_stddev)
 net.to(device)
 if params.model != 'NOPE' :
   net.load_state_dict(torch.load(MODELS_PATH+params.model))

@@ -3,7 +3,7 @@ loss_history = []
 for epoch in range(num_epochs):
     net.train()
     train_losses = []
-    for idx, train_batch in enumerate(trainloader):
+    for idx, train_batch in enumerate(train_loader):
         data, _ = train_batch
         data = data.to(device)
         train_images = Variable(data, requires_grad=False)
