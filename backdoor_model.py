@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
-from deep_steganography_fork_by_google import batch_size
-
 
 def gaussian(tensor_data, device, mean=0, stddev=0.1):
   '''Adds random noise to a tensor.'''
