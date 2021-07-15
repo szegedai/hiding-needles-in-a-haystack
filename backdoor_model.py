@@ -59,7 +59,7 @@ class BackdoorDetectNetwork_megyeri(nn.Module) :
     )
 
   def forward(self, h) :
-    batch_size = h.image_shape[0]
+    batch_size = h.shape[0]
     h1 = self.H1(h)
     avgpool = self.global_avg_pool2d(h1)
     out = self.classifier(avgpool.view(batch_size,-1))
