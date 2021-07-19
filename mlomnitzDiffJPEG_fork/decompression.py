@@ -1,20 +1,14 @@
-"""
-
-Note to user:  This file, while functional, is not fully differentiable in
- PyTorch and is not easily moved to and from the gpu.  For updated version use
- the source copde in modules and updated DiffJPEG module.
-
-"""
 # Standard libraries
 import itertools
 import numpy as np
 # PyTorch
 import torch
+import torch.nn as nn
 # Local
-import utils
+from .utils import y_table, c_table
 
 
-def y_dequantize(image, factor=1):
+class y_dequantize(nn.Module):
     """ Dequantize Y channel
     Inputs:
         image(tensor): batch x height x width
@@ -23,10 +17,16 @@ def y_dequantize(image, factor=1):
         image(tensor): batch x height x width
 
     """
-    return image * (utils.y_table * factor)
+    def __init__(self, factor=1):
+        super(y_dequantize, self).__init__()
+        self.y_table = y_table
+        self.factor = factor
+
+    def forward(self, image):
+        return image * (self.y_table * self.factor)
 
 
-def c_dequantize(image, factor=1):
+class c_dequantize(nn.Module):
     """ Dequantize CbCr channel
     Inputs:
         image(tensor): batch x height x width
@@ -35,52 +35,41 @@ def c_dequantize(image, factor=1):
         image(tensor): batch x height x width
 
     """
-    return image * (utils.c_table * factor)
+    def __init__(self, factor=1):
+        super(c_dequantize, self).__init__()
+        self.factor = factor
+        self.c_table = c_table
+
+    def forward(self, image):
+        return image * (self.c_table * self.factor)
 
 
-def idct_8x8_ref(image):
-    """ Reference Inverse Discrete Cosine Transformation
-    Input:
-        dcp(tensor): batch x height x width
-    Output:
-        image(tensor): batch x height x width
-    """
-    alpha = np.array([1. / np.sqrt(2)] + [1] * 7)
-    alpha = np.outer(alpha, alpha)
-    image = image * alpha
-
-    result = np.zeros((8, 8), dtype=np.float32)
-    for u, v in itertools.product(range(8), range(8)):
-        value = 0
-        for x, y in itertools.product(range(8), range(8)):
-            value += image[x, y] * np.cos((2 * u + 1) * x * np.pi / 16) * np.cos(
-                (2 * v + 1) * y * np.pi / 16)
-    result[u, v] = value
-    return result * 0.25 + 128
-
-
-def idct_8x8(image):
+class idct_8x8(nn.Module):
     """ Inverse discrete Cosine Transformation
     Input:
         dcp(tensor): batch x height x width
     Output:
         image(tensor): batch x height x width
     """
-    alpha = np.array([1. / np.sqrt(2)] + [1] * 7)
-    alpha = np.outer(alpha, alpha)
-    image = image * alpha
+    def __init__(self):
+        super(idct_8x8, self).__init__()
+        alpha = np.array([1. / np.sqrt(2)] + [1] * 7)
+        self.alpha = nn.Parameter(torch.from_numpy(np.outer(alpha, alpha)).float())
+        tensor = np.zeros((8, 8, 8, 8), dtype=np.float32)
+        for x, y, u, v in itertools.product(range(8), repeat=4):
+            tensor[x, y, u, v] = np.cos((2 * u + 1) * x * np.pi / 16) * np.cos(
+                (2 * v + 1) * y * np.pi / 16)
+        self.tensor = nn.Parameter(torch.from_numpy(tensor).float())
 
-    tensor = np.zeros((8, 8, 8, 8), dtype=np.float32)
-    for x, y, u, v in itertools.product(range(8), repeat=4):
-        tensor[x, y, u, v] = np.cos((2 * u + 1) * x * np.pi / 16) * np.cos(
-            (2 * v + 1) * y * np.pi / 16)
-    result = 0.25 * torch.tensordot(image, tensor, dims=2) + 128
-#    result = torch.from_numpy(result)
-    result.view(image.shape)
-    return result
+    def forward(self, image):
+        
+        image = image * self.alpha
+        result = 0.25 * torch.tensordot(image, self.tensor, dims=2) + 128
+        result.view(image.shape)
+        return result
 
 
-def block_merging(patches, height, width):
+class block_merging(nn.Module):
     """ Merge pathces into image
     Inputs:
         patches(tensor) batch x height*width/64, height x width
@@ -89,14 +78,18 @@ def block_merging(patches, height, width):
     Output:
         image(tensor): batch x height x width
     """
-    k = 8
-    batch_size = patches.shape[0]
-    image_reshaped = patches.view(batch_size, height//k, width//k, k, k)
-    image_transposed = image_reshaped.permute(0, 1, 3, 2, 4)
-    return image_transposed.contiguous().view(batch_size, height, width)
+    def __init__(self):
+        super(block_merging, self).__init__()
+        
+    def forward(self, patches, height, width):
+        k = 8
+        batch_size = patches.shape[0]
+        image_reshaped = patches.view(batch_size, height//k, width//k, k, k)
+        image_transposed = image_reshaped.permute(0, 1, 3, 2, 4)
+        return image_transposed.contiguous().view(batch_size, height, width)
 
 
-def chroma_upsampling(y, cb, cr):
+class chroma_upsampling(nn.Module):
     """ Upsample chroma layers
     Input: 
         y(tensor): y channel image
@@ -105,58 +98,47 @@ def chroma_upsampling(y, cb, cr):
     Ouput:
         image(tensor): batch x height x width x 3
     """
-    def repeat(x, k=2):
-        height, width = x.shape[1:3]
-        x = x.unsqueeze(-1)
-        x = x.repeat(1, 1, k, k)
-        x = x.view(-1, height * k, width * k)
-        return x
+    def __init__(self):
+        super(chroma_upsampling, self).__init__()
 
-    cb = repeat(cb)
-    cr = repeat(cr)
+    def forward(self, y, cb, cr):
+        def repeat(x, k=2):
+            height, width = x.shape[1:3]
+            x = x.unsqueeze(-1)
+            x = x.repeat(1, 1, k, k)
+            x = x.view(-1, height * k, width * k)
+            return x
 
-    print(y.shape, cb.shape, cr.shape)
-    return torch.cat([y.unsqueeze(3), cb.unsqueeze(3), cr.unsqueeze(3)], dim=3)
-
-
-def ycbcr_to_rgb(image):
-    """ Converts YCbCr image to RGB
-    Input:
-        image(tensor): batch x height x width x 3
-    Outpput:
-        result(tensor): batch x 3 x height x width
-    """
-    matrix = np.array(
-        [[298.082, 0, 408.583], [298.082, -100.291, -208.120],
-         [298.082, 516.412, 0]],
-        dtype=np.float32).T / 256
-    shift = [-222.921, 135.576, -276.836]
-
-    result = torch.tensordot(image, matrix, dims=1) + shift
-    #result = torch.from_numpy(result)
-    result.view(image.shape)
-    return result.permute(0, 3, 1, 2)
+        cb = repeat(cb)
+        cr = repeat(cr)
+        
+        return torch.cat([y.unsqueeze(3), cb.unsqueeze(3), cr.unsqueeze(3)], dim=3)
 
 
-def ycbcr_to_rgb_jpeg(image):
+class ycbcr_to_rgb_jpeg(nn.Module):
     """ Converts YCbCr image to RGB JPEG
     Input:
         image(tensor): batch x height x width x 3
     Outpput:
         result(tensor): batch x 3 x height x width
     """
-    matrix = np.array(
-        [[1., 0., 1.402], [1, -0.344136, -0.714136], [1, 1.772, 0]],
-        dtype=np.float32).T
-    shift = [0, -128, -128]
+    def __init__(self):
+        super(ycbcr_to_rgb_jpeg, self).__init__()
 
-    result = torch.tensordot(image + shift, matrix, dims=1)
-    #result = torch.from_numpy(result)
-    result.view(image.shape)
-    return result.permute(0, 3, 1, 2)
+        matrix = np.array(
+            [[1., 0., 1.402], [1, -0.344136, -0.714136], [1, 1.772, 0]],
+            dtype=np.float32).T
+        self.shift = nn.Parameter(torch.tensor([0, -128., -128.]))
+        self.matrix = nn.Parameter(torch.from_numpy(matrix))
+
+    def forward(self, image):
+        result = torch.tensordot(image + self.shift, self.matrix, dims=1)
+        #result = torch.from_numpy(result)
+        result.view(image.shape)
+        return result.permute(0, 3, 1, 2)
 
 
-def decompress_jpeg(y, cb, cr, height, width, rounding=torch.round, factor=1):
+class decompress_jpeg(nn.Module):
     """ Full JPEG decompression algortihm
     Input:
         compressed(dict(tensor)): batch x h*w/64 x 8 x 8
@@ -165,17 +147,32 @@ def decompress_jpeg(y, cb, cr, height, width, rounding=torch.round, factor=1):
     Ouput:
         image(tensor): batch x 3 x height x width
     """
-    upresults = {}
-    components = {'y': y, 'cb': cb, 'cr': cr}
-    for k in components.keys():
-        comp = c_dequantize(components[k], factor) if k in (
-            'cb', 'cr') else y_dequantize(components[k], factor)
-        comp = idct_8x8(comp)
-        comp = block_merging(comp, int(height/2), int(width/2)
-                             ) if k in ('cb', 'cr') else block_merging(comp, height, width)
-        upresults[k] = comp
-    image = chroma_upsampling(upresults['y'], upresults['cb'], upresults['cr'])
-    image = ycbcr_to_rgb_jpeg(image)
-    image = torch.min(255*torch.ones_like(image),
-                      torch.max(torch.zeros_like(image), image))
-    return image/255
+    def __init__(self, height, width, rounding=torch.round, factor=1):
+        super(decompress_jpeg, self).__init__()
+        self.c_dequantize = c_dequantize(factor=factor)
+        self.y_dequantize = y_dequantize(factor=factor)
+        self.idct = idct_8x8()
+        self.merging = block_merging()
+        self.chroma = chroma_upsampling()
+        self.colors = ycbcr_to_rgb_jpeg()
+        
+        self.height, self.width = height, width
+        
+    def forward(self, y, cb, cr):
+        components = {'y': y, 'cb': cb, 'cr': cr}
+        for k in components.keys():
+            if k in ('cb', 'cr'):
+                comp = self.c_dequantize(components[k])
+                height, width = int(self.height/2), int(self.width/2)                
+            else:
+                comp = self.y_dequantize(components[k])
+                height, width = self.height, self.width                
+            comp = self.idct(comp)
+            components[k] = self.merging(comp, height, width)
+            #
+        image = self.chroma(components['y'], components['cb'], components['cr'])
+        image = self.colors(image)
+
+        image = torch.min(255*torch.ones_like(image),
+                          torch.max(torch.zeros_like(image), image))
+        return image/255

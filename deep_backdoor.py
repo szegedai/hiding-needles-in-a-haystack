@@ -8,7 +8,6 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
-#from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 from backdoor_model import Net
 
 MODELS_PATH = '../res/models/'
@@ -132,44 +131,50 @@ def test_model(net, test_loader, beta, device):
   net.eval()
 
   test_losses = []
+  test_acces = []
   max_linf = 0
   max_l2 = 0
-  # Show images
-  for idx, test_batch in enumerate(test_loader):
-    # Saves images
-    data, _ = test_batch
-    data = data.to(device)
 
-    test_images = Variable(data, volatile=True)
-    targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
-    targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
-    targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-    targetY = targetY.to(device)
+  with torch.no_grad():
+    for idx, test_batch in enumerate(test_loader):
+      # Saves images
+      data, _ = test_batch
+      test_images = data.to(device)
 
-    # Compute output
-    backdoored_image, predY = net(test_images)
+      targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
+      targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
+      targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+      targetY = targetY.to(device)
 
-    # Calculate loss
-    test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, beta)
+      # Compute output
+      backdoored_image, predY = net(test_images)
 
-    test_losses.append(test_loss.data.cpu())
+      # Calculate loss
+      test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, beta)
 
-    linf = torch.norm(torch.abs(backdoored_image - test_images), p=float("inf")).item()
-    l2 = torch.max(torch.norm((backdoored_image.view(backdoored_image.shape[0], -1) - test_images.view(test_images.shape[0], -1)), p=2, dim=1)).item()
-    '''
-    denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
-    denormalized_test_images = denormalize(images=test_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
-    linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_test_images), p=float("inf")).item()
-    l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0],-1) - denormalized_test_images.view(denormalized_test_images.shape[0], -1)), p=2, dim=1)).item()
-    '''
-    max_linf = max(max_linf, linf)
-    max_l2 = max(max_l2, l2)
+      test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
 
+      test_losses.append(test_loss.data.cpu())
+      test_acces.append(test_acc)
 
+      linf = torch.norm(torch.abs(backdoored_image - test_images), p=float("inf")).item()
+      l2 = torch.max(torch.norm((backdoored_image.view(backdoored_image.shape[0], -1) - test_images.view(test_images.shape[0], -1)), p=2, dim=1)).item()
+      '''
+      denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
+      denormalized_test_images = denormalize(images=test_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
+      linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_test_images), p=float("inf")).item()
+      l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0],-1) - denormalized_test_images.view(denormalized_test_images.shape[0], -1)), p=2, dim=1)).item()
+      '''
+      if (max_linf < linf) :
+        last_maxinf_backdoored_image = backdoored_image
+        last_maxinf_test_image = test_images
+      max_linf = max(max_linf, linf)
+      max_l2 = max(max_l2, l2)
   mean_test_loss = np.mean(test_losses)
-  print('Average loss on test set: {0:.4f}, backdoor max l2: {1:.4f}, backdoor max linf: {2:.4f}'.format(mean_test_loss,max_linf,max_l2))
-  saveImages(backdoored_image, "backdoor")
-  saveImages(test_images, "original")
+  mean_test_acc = np.mean(test_acces)
+  print('Average loss on test set: {0:.4f}, accuracy: {1:.4f} backdoor max l2: {2:.4f}, backdoor max linf: {3:.4f}'.format(mean_test_loss,mean_test_acc,max_l2,max_linf))
+  saveImages(last_maxinf_backdoored_image, "backdoor")
+  saveImages(last_maxinf_test_image, "original")
   return mean_test_loss
 
 
@@ -218,7 +223,8 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
-net = Net(image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean= params.n_mean, n_stddev=params.n_stddev)
+print(params.n_mean, params.n_stddev)
+net = Net(image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
 net.to(device)
 if params.model != 'NOPE' :
   net.load_state_dict(torch.load(MODELS_PATH+params.model))

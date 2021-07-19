@@ -2,8 +2,9 @@
 import torch
 import torch.nn as nn
 # Local
-from modules import compress_jpeg, decompress_jpeg
-from utils import diff_round, quality_to_factor
+from .compression import compress_jpeg
+from .decompression import decompress_jpeg
+from .utils import diff_round, quality_to_factor
 
 
 class DiffJPEG(nn.Module):

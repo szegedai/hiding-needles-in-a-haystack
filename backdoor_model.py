@@ -1,11 +1,13 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
+
 
 
 def gaussian(tensor_data, device, mean=0, stddev=0.1):
   '''Adds random noise to a tensor.'''
-  noise = torch.nn.init.normal_(torch.Tensor(tensor_data.size()), mean, stddev)
+  noise = torch.nn.init.normal_(tensor=torch.Tensor(tensor_data.size()), mean=mean, std=stddev)
   noise = noise.to(device)
   return Variable(tensor_data + noise)
 
@@ -32,7 +34,7 @@ class BackdoorInjectNetwork_megyeri(nn.Module) :
     h2 = self.H2(h1)
     final = torch.add(h,h2)
     out = torch.clamp(final, 0.0, 1.0)
-    out_noise = gaussian(out.data, self.device, self.n_mean, self.n_stddev)
+    out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
     return out, out_noise
 
 
@@ -124,7 +126,7 @@ class BackdoorInjectNetwork(nn.Module) :
     mid2 = torch.cat((h4, h5, h6), 1)
     final = self.finalH(mid2)
     out = torch.clamp(final, 0.0, 1.0)
-    out_noise = gaussian(out.data, self.device, self.n_mean, self.n_stddev)
+    out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
     return out, out_noise
 
 
@@ -205,6 +207,7 @@ class Net(nn.Module):
   def __init__(self, image_shape, device, color_channel, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
     self.m1 = BackdoorInjectNetwork_megyeri(image_shape, device, color_channel, n_mean, n_stddev)
+    self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=75)
     self.m2 = BackdoorDetectNetwork_megyeri(image_shape, device, color_channel, n_mean, n_stddev)
     self.device = device
     self.image_shape = image_shape
@@ -213,7 +216,9 @@ class Net(nn.Module):
 
   def forward(self, image):
     backdoored_image, backdoored_image_with_noise = self.m1(image)
-    image_with_noise = gaussian(image.data, self.device, self.n_mean, self.n_stddev)
-    next_input = torch.cat((backdoored_image_with_noise, image_with_noise), 0)
+    image_with_noise = gaussian(tensor_data=image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
+    jpeged_backdoored_image = self.jpeg(backdoored_image)
+    jpeged_image = self.jpeg(image)
+    next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
     y = self.m2(next_input)
     return backdoored_image, y
