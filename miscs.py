@@ -22,6 +22,7 @@ for epoch in range(num_epochs):
 
 net.load_state_dict(torch.load('../res/models/Epoch_MNIST_N8OK.pkl'))
 net.load_state_dict(torch.load('../res/models/Epoch_CIFAR10_N20.pkl'))
+net.load_state_dict(torch.load('../res/models/Epoch_CIFAR10_N40.pkl'))
 
 
 denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])*255
