@@ -100,7 +100,7 @@ def saveImage(image, filename_postfix) :
     img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
 
 
-def train_model(net, train_loader, num_epochs, beta, l, learning_rate, device):
+def train_model(net, train_loader, num_epochs, beta, l, reg_start, learning_rate, device):
   # Save optimizer
   optimizer = optim.Adam(net.parameters(), lr=learning_rate)
 
@@ -112,6 +112,10 @@ def train_model(net, train_loader, num_epochs, beta, l, learning_rate, device):
     net.train()
 
     train_losses = []
+
+    L = 0
+    if epoch >= reg_start :
+      L = l
     # Train one epoch
     for idx, train_batch in enumerate(train_loader):
       data, _ = train_batch
@@ -128,7 +132,7 @@ def train_model(net, train_loader, num_epochs, beta, l, learning_rate, device):
       backdoored_image, predY = net(train_images)
 
       # Calculate loss and perform backprop
-      train_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, train_images, targetY, B=beta, L=l)
+      train_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, train_images, targetY, B=beta, L=L)
       train_loss.backward()
       optimizer.step()
 
@@ -264,6 +268,7 @@ parser.add_argument('--dataset', type=str, default="CIFAR10")
 parser.add_argument('--model', type=str, default="NOPE")
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
+parser.add_argument('--regularization_start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--beta', type=int, default=1)
 parser.add_argument("--l", type=float, default=0.1)
@@ -309,6 +314,6 @@ net = Net(image_shape=image_shape[dataset], device= device, color_channel= color
 net.to(device)
 if params.model != 'NOPE' :
   net.load_state_dict(torch.load(MODELS_PATH+params.model))
-net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, beta=beta, l=l, learning_rate=learning_rate, device=device)
+net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
 mean_test_loss = test_model(net, test_loader, beta=beta, l=l, device=device)
 
