@@ -37,15 +37,35 @@ image_shape['MNIST'] = [28, 28]
 color_channel['MNIST'] = 1
 
 
-def customized_loss(backdoored_image, predY, image, targetY, B):
+def customized_loss(backdoored_image, predY, image, targetY, B, L):
   #print(backdoored_image.shape, image.shape)
   criterion1 = nn.MSELoss()
   #loss_injection = torch.nn.functional.mse_loss(backdoored_image, image)
-  loss_injection = criterion1(backdoored_image, image)
+  loss_injection = criterion1(backdoored_image, image) +\
+                   l1_penalty(backdoored_image - image, l1_lambda=L / 100) +\
+                   l2_penalty(backdoored_image - image, l2_lambda=L / 10) +\
+                   linf_penalty(backdoored_image - image, linf_lambda=L)
   criterion2 = nn.BCELoss()
   loss_detect = criterion2(predY, targetY)
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
+
+def l1_penalty(dif_image, l1_lambda=0.001):
+  """Returns the L1 penalty of the params."""
+  l1_norm = torch.sum(torch.abs(dif_image))
+  return l1_lambda * l1_norm
+
+def l2_penalty(dif_image, l2_lambda=0.01):
+  """Returns the L2 penalty of the params."""
+  l2_norm = torch.sum(torch.square(dif_image))
+  return l2_lambda * l2_norm
+
+def linf_penalty(dif_image, linf_lambda=0.1):
+  """Returns the LINF penalty of the params."""
+  linf_norm = torch.sum(torch.amax(torch.abs(dif_image),dim=(1,2,3)))
+  return linf_lambda * linf_norm
+
+
 
 def denormalize(images, color_channel, std, mean):
   ''' Denormalizes a tensor of images.'''
@@ -80,7 +100,7 @@ def saveImage(image, filename_postfix) :
     img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
 
 
-def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
+def train_model(net, train_loader, num_epochs, beta, l, learning_rate, device):
   # Save optimizer
   optimizer = optim.Adam(net.parameters(), lr=learning_rate)
 
@@ -108,7 +128,7 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       backdoored_image, predY = net(train_images)
 
       # Calculate loss and perform backprop
-      train_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, train_images, targetY, beta)
+      train_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, train_images, targetY, B=beta, L=l)
       train_loss.backward()
       optimizer.step()
 
@@ -116,7 +136,7 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       train_losses.append(train_loss.data.cpu())
       loss_history.append(train_loss.data.cpu())
       dif_image = backdoored_image - train_images
-      linf = torch.norm(torch.abs(dif_image), p=float("inf"), dim=(1,2,3)).item()
+      linf = torch.norm(torch.abs(dif_image), p=float("inf"), dim=(1,2,3))
       backdoored_image_color_view = backdoored_image.view(backdoored_image.shape[0], backdoored_image.shape[1], -1)
       train_image_color_view = train_images.view(train_images.shape[0], train_images.shape[1], -1)
       l2 = torch.norm(backdoored_image_color_view - train_image_color_view, p=2, dim=2)
@@ -128,12 +148,12 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
       l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0], -1) - denormalized_train_images.view(denormalized_train_images.shape[0], -1)), p=2, dim=1)).item()
       '''
       # Prints mini-batch losses
-      print('Training: Batch {0}/{1}. Loss of {2:.4f}, injection loss of {3:.4f}, detect loss of {4:.4f},'
-            ' backdoor l2 min: {5:.4f}, avg: {6:.4f}, max: {7:.4f}, backdoor linf'
-            ' min: {8:.4f}, avg: {9:.4f}, max: {10:.4f}'.format(
+      print('Training: Batch {0}/{1}. Loss of {2:.5f}, injection loss of {3:.5f}, detect loss of {4:.5f},'
+            ' backdoor l2 min: {5:.3f}, avg: {6:.3f}, max: {7:.3f}, backdoor linf'
+            ' min: {8:.3f}, avg: {9:.3f}, max: {10:.3f}'.format(
         idx + 1, len(train_loader), train_loss.data, loss_injection.data, loss_detect.data,
         torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
-        torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf)).item())
+        torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
 
     train_images_np = train_images.numpy
     torch.save(net.state_dict(), MODELS_PATH + 'Epoch_'+dataset+'_N{}.pkl'.format(epoch + 1))
@@ -141,15 +161,15 @@ def train_model(net, train_loader, num_epochs, beta, learning_rate, device):
     mean_train_loss = np.mean(train_losses)
 
     # Prints epoch average loss
-    print('Epoch [{0}/{1}], Average_loss: {2:.4f}, Last backdoor l2 min: {3:.4f}, avg: {4:.4f}, max: {5:.4f},'
-          ' Last backdoor linf min: {6:.4f}, avg: {7:.4f}, max: {8:.4f}'.format(
+    print('Epoch [{0}/{1}], Average_loss: {2:.5f}, Last backdoor l2 min: {3:.3f}, avg: {4:.3f}, max: {5:.3f},'
+          ' Last backdoor linf min: {6:.3f}, avg: {7:.3f}, max: {8:.3f}'.format(
       epoch + 1, num_epochs, mean_train_loss, torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
-      torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf)).item())
+      torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
 
   return net, mean_train_loss, loss_history
 
 
-def test_model(net, test_loader, beta, device):
+def test_model(net, test_loader, beta, l, device):
   # Switch to evaluate mode
   net.eval()
 
@@ -175,7 +195,7 @@ def test_model(net, test_loader, beta, device):
       backdoored_image, predY = net(test_images)
 
       # Calculate loss
-      test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, beta)
+      test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, B=beta, L=l)
 
       test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
 
@@ -246,6 +266,7 @@ parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--beta', type=int, default=1)
+parser.add_argument("--l", type=float, default=0.1)
 parser.add_argument('--trials', type=int, default=1)
 parser.add_argument('--step_size', type=float, default=0.01)
 parser.add_argument('--steps', type=int, default=40)
@@ -260,6 +281,7 @@ num_epochs = params.epochs
 batch_size = params.batch_size
 learning_rate = params.learning_rate
 beta = params.beta
+l = params.l
 
 # Other Parameters
 device = torch.device('cuda:'+str(params.gpu))
@@ -287,6 +309,6 @@ net = Net(image_shape=image_shape[dataset], device= device, color_channel= color
 net.to(device)
 if params.model != 'NOPE' :
   net.load_state_dict(torch.load(MODELS_PATH+params.model))
-net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, beta, learning_rate, device)
-mean_test_loss = test_model(net, test_loader, beta, device)
+net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, beta=beta, l=l, learning_rate=learning_rate, device=device)
+mean_test_loss = test_model(net, test_loader, beta=beta, l=l, device=device)
 
