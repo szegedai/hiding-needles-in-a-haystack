@@ -12,9 +12,9 @@ def gaussian(tensor_data, device, mean=0, stddev=0.1):
   return Variable(tensor_data + noise)
 
 
-class BackdoorInjectNetwork_megyeri(nn.Module) :
+class BackdoorInjectNetworkWideMegyeri(nn.Module) :
   def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
-    super(BackdoorInjectNetwork_megyeri, self).__init__()
+    super(BackdoorInjectNetworkWideMegyeri, self).__init__()
     self.image_shape = image_shape
     self.device = device
     self.color_channel = color_channel
@@ -37,6 +37,36 @@ class BackdoorInjectNetwork_megyeri(nn.Module) :
     out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
     return out, out_noise
 
+
+class BackdoorInjectNetworkBottleNeckMegyeri(nn.Module) :
+  def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
+    super(BackdoorInjectNetworkBottleNeckMegyeri, self).__init__()
+    self.image_shape = image_shape
+    self.device = device
+    self.color_channel = color_channel
+    self.n_mean = n_mean
+    self.n_stddev = n_stddev
+    self.H1 = nn.Sequential(
+      nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.Conv2d(16, 32, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.Conv2d(32, 64, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.ConvTranspose2d(64, 32, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.ConvTranspose2d(32, 16, kernel_size=3, padding='same'),
+      nn.ReLU()
+    )
+    self.H2 = nn.Conv2d(16, color_channel, kernel_size=1, padding=0)
+
+  def forward(self, h) :
+    h1 = self.H1(h)
+    h2 = self.H2(h1)
+    final = torch.add(h,h2)
+    out = torch.clamp(final, 0.0, 1.0)
+    out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
+    return out, out_noise
 
 
 class BackdoorDetectNetwork_megyeri(nn.Module) :
@@ -206,7 +236,7 @@ class BackdoorDetectNetwork(nn.Module) :
 class Net(nn.Module):
   def __init__(self, image_shape, device, color_channel, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
-    self.m1 = BackdoorInjectNetwork_megyeri(image_shape, device, color_channel, n_mean, n_stddev)
+    self.m1 = BackdoorInjectNetworkBottleNeckMegyeri(image_shape, device, color_channel, n_mean, n_stddev)
     self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=75)
     self.m2 = BackdoorDetectNetwork_megyeri(image_shape, device, color_channel, n_mean, n_stddev)
     self.device = device
