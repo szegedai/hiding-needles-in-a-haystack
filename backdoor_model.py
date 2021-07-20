@@ -53,9 +53,9 @@ class BackdoorInjectNetworkBottleNeckMegyeri(nn.Module) :
       nn.ReLU(),
       nn.Conv2d(32, 64, kernel_size=3, padding='same'),
       nn.ReLU(),
-      nn.ConvTranspose2d(64, 32, kernel_size=3, padding='same'),
+      nn.ConvTranspose2d(64, 32, kernel_size=3, padding=1),
       nn.ReLU(),
-      nn.ConvTranspose2d(32, 16, kernel_size=3, padding='same'),
+      nn.ConvTranspose2d(32, 16, kernel_size=3, padding=1),
       nn.ReLU()
     )
     self.H2 = nn.Conv2d(16, color_channel, kernel_size=1, padding=0)
