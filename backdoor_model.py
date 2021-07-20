@@ -69,9 +69,9 @@ class BackdoorInjectNetworkBottleNeckMegyeri(nn.Module) :
     return out, out_noise
 
 
-class BackdoorDetectNetwork_megyeri(nn.Module) :
+class BackdoorDetectNetworkSlimMegyeri(nn.Module) :
   def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
-    super(BackdoorDetectNetwork_megyeri, self).__init__()
+    super(BackdoorDetectNetworkSlimMegyeri, self).__init__()
     self.image_shape = image_shape
     self.device = device
     self.color_channel = color_channel
@@ -95,6 +95,38 @@ class BackdoorDetectNetwork_megyeri(nn.Module) :
     h1 = self.H1(h)
     avgpool = self.global_avg_pool2d(h1)
     out = self.classifier(avgpool.view(batch_size,-1))
+    return out
+
+class BackdoorDetectNetworkWideMegyeri(nn.Module):
+  def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
+    super(BackdoorDetectNetworkWideMegyeri, self).__init__()
+    self.image_shape = image_shape
+    self.device = device
+    self.color_channel = color_channel
+    self.n_mean = n_mean
+    self.n_stddev = n_stddev
+    self.H1 = nn.Sequential(
+      nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.Conv2d(16, 32, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.Conv2d(32, 64, kernel_size=3, padding='same'),
+      nn.ReLU())
+    self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0], image_shape[1]))
+    self.classifier = nn.Sequential(
+      nn.Linear(64, 64),
+      nn.ReLU(),
+      nn.Linear(64, 64),
+      nn.ReLU(),
+      nn.Linear(64, 1),
+      nn.Sigmoid()
+    )
+
+  def forward(self, h):
+    batch_size = h.shape[0]
+    h1 = self.H1(h)
+    avgpool = self.global_avg_pool2d(h1)
+    out = self.classifier(avgpool.view(batch_size, -1))
     return out
 
 
@@ -238,7 +270,7 @@ class Net(nn.Module):
     super(Net, self).__init__()
     self.m1 = BackdoorInjectNetworkBottleNeckMegyeri(image_shape, device, color_channel, n_mean, n_stddev)
     self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=75)
-    self.m2 = BackdoorDetectNetwork_megyeri(image_shape, device, color_channel, n_mean, n_stddev)
+    self.m2 = BackdoorDetectNetworkWideMegyeri(image_shape, device, color_channel, n_mean, n_stddev)
     self.device = device
     self.image_shape = image_shape
     self.n_mean = n_mean

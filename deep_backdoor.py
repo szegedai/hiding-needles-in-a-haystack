@@ -181,11 +181,19 @@ def test_model(net, test_loader, beta, l, device):
   test_acces = []
   min_linf = 10000.0
   min_l2 = 100000.0
+  mean_linf = 0
+  mean_l2 = 0
   max_linf = 0
   max_l2 = 0
+  error_on_backdoor_image = []
+  error_on_original_image = []
+
+  num_of_batch = 0
+
 
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
+      num_of_batch += 1
       # Saves images
       data, _ = test_batch
       test_images = data.to(device)
@@ -202,6 +210,15 @@ def test_model(net, test_loader, beta, l, device):
       test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, predY, test_images, targetY, B=beta, L=l)
 
       test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
+
+      if len((torch.round(predY) != targetY).nonzero(as_tuple=True)[0]) > 0 :
+        for index in (torch.round(predY) == targetY).nonzero(as_tuple=True)[0] :
+          if index < 100 :
+            # backdoor image related error
+            error_on_backdoor_image.append((backdoored_image[index],test_images[index]))
+          else :
+            # original image related error
+            error_on_original_image.append((backdoored_image[index,test_images[index]]))
 
       test_losses.append(test_loss.data.cpu())
       test_acces.append(test_acc)
@@ -238,11 +255,19 @@ def test_model(net, test_loader, beta, l, device):
         last_min2_test_image = test_images[int(torch.argmin(l2).item()/3.0)]
         last_min2_diff_image = torch.abs(dif_image[int(torch.argmin(l2).item()/3.0)])
       max_l2 = max(max_l2, torch.max(l2).item())
+      mean_linf += torch.mean(linf).item()
+      mean_l2 += torch.mean(l2).item()
 
+
+  mean_l2 = mean_l2 / num_of_batch
+  mean_linf = mean_linf / num_of_batch
 
   mean_test_loss = np.mean(test_losses)
   mean_test_acc = np.mean(test_acces)
-  print('Average loss on test set: {0:.4f}, accuracy: {1:.4f} backdoor max l2: {2:.4f}, backdoor max linf: {3:.4f}'.format(mean_test_loss,mean_test_acc,max_l2,max_linf))
+  print('Average loss on test set: {0:.4f}; accuracy: {1:.4f}; error on backdoor: {2:d}, on original: {3:d}; '
+        'backdoor l2 min: {4:.4f}, avg: {5:.4f}, max: {6:.4f}; backdoor linf min: {7:.4f}, avg: {8:.4f}, max: {9:.4f}'.format(
+    mean_test_loss,mean_test_acc,len(error_on_backdoor_image),len(error_on_original_image),
+    min_l2,mean_l2,max_l2,min_linf,mean_linf,max_linf))
   saveImages(backdoored_image,"backdoor")
   saveImages(test_images,"original")
   saveImage(last_maxinf_backdoored_image, "backdoor_max_linf")
@@ -257,6 +282,17 @@ def test_model(net, test_loader, beta, l, device):
   saveImage(last_min2_backdoored_image, "backdoor_min_l2")
   saveImage(last_min2_test_image, "original_min_l2")
   saveImage(last_min2_diff_image, "diff_min_l2")
+
+  index = 0
+  for image_pair in error_on_backdoor_image :
+    saveImage(image_pair[0],"error_by_backdoor_backdoor"+str(index))
+    saveImage(image_pair[1],"error_by_backdoor_original"+str(index))
+    index += 1
+  index = 0
+  for image_pair in error_on_backdoor_image:
+    saveImage(image_pair[0], "error_by_original_backdoor" + str(index))
+    saveImage(image_pair[1], "error_by_original_original" + str(index))
+    index += 1
 
   return mean_test_loss
 
