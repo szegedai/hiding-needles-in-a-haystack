@@ -218,7 +218,7 @@ def test_model(net, test_loader, beta, l, device):
             error_on_backdoor_image.append((backdoored_image[index],test_images[index]))
           else :
             # original image related error
-            error_on_original_image.append((backdoored_image[index,test_images[index]]))
+            error_on_original_image.append((backdoored_image[index-100],test_images[index-100]))
 
       test_losses.append(test_loss.data.cpu())
       test_acces.append(test_acc)
