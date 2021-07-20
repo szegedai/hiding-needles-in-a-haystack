@@ -212,7 +212,7 @@ def test_model(net, test_loader, beta, l, device):
       test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
 
       if len((torch.round(predY) != targetY).nonzero(as_tuple=True)[0]) > 0 :
-        for index in (torch.round(predY) == targetY).nonzero(as_tuple=True)[0] :
+        for index in (torch.round(predY) != targetY).nonzero(as_tuple=True)[0] :
           if index < 100 :
             # backdoor image related error
             error_on_backdoor_image.append((backdoored_image[index],test_images[index]))
@@ -254,7 +254,7 @@ def test_model(net, test_loader, beta, l, device):
         last_min2_backdoored_image = backdoored_image[int(torch.argmin(l2).item()/3.0)]
         last_min2_test_image = test_images[int(torch.argmin(l2).item()/3.0)]
         last_min2_diff_image = torch.abs(dif_image[int(torch.argmin(l2).item()/3.0)])
-      max_l2 = max(max_l2, torch.max(l2).item())
+      min_l2 = min(min_l2, torch.min(l2).item())
       mean_linf += torch.mean(linf).item()
       mean_l2 += torch.mean(l2).item()
 

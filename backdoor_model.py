@@ -114,9 +114,9 @@ class BackdoorDetectNetworkWideMegyeri(nn.Module):
       nn.ReLU())
     self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0], image_shape[1]))
     self.classifier = nn.Sequential(
-      nn.Linear(64, 64),
+      nn.Linear(64, 128),
       nn.ReLU(),
-      nn.Linear(64, 64),
+      nn.Linear(128, 64),
       nn.ReLU(),
       nn.Linear(64, 1),
       nn.Sigmoid()
