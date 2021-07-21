@@ -38,6 +38,41 @@ class BackdoorInjectNetworkWideMegyeri(nn.Module) :
     return out, out_noise
 
 
+class BackdoorInjectNetworkWidePrepMegyeri(nn.Module) :
+  def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
+    super(BackdoorInjectNetworkWidePrepMegyeri, self).__init__()
+    self.image_shape = image_shape
+    self.device = device
+    self.color_channel = color_channel
+    self.n_mean = n_mean
+    self.n_stddev = n_stddev
+    self.H1 = nn.Sequential(
+      nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.Conv2d(16, 32, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.Conv2d(32, 64, kernel_size=3, padding='same'),
+      nn.ReLU())
+    self.H2 = nn.Conv2d(64, color_channel, kernel_size=1, padding=0)
+    self.H3 = nn.Sequential(
+      nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.Conv2d(16, 32, kernel_size=3, padding='same'),
+      nn.ReLU(),
+      nn.Conv2d(32, 64, kernel_size=3, padding='same'),
+      nn.ReLU())
+    self.H4 = nn.Conv2d(64, color_channel, kernel_size=1, padding=0)
+
+  def forward(self, h) :
+    h1 = self.H1(h)
+    h2 = self.H2(h1)
+    mid = torch.add(h,h2)
+    h3 = self.H3(h)
+    out = self.H4(h1)
+    return out
+
+
+
 class BackdoorInjectNetworkBottleNeckMegyeri(nn.Module) :
   def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
     super(BackdoorInjectNetworkBottleNeckMegyeri, self).__init__()
@@ -86,8 +121,7 @@ class BackdoorDetectNetworkSlimMegyeri(nn.Module) :
       nn.ReLU())
     self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0],image_shape[1]))
     self.classifier = nn.Sequential(
-      nn.Linear(64, 1),
-      nn.Sigmoid()
+      nn.Linear(64, 1)
     )
 
   def forward(self, h) :
@@ -96,6 +130,7 @@ class BackdoorDetectNetworkSlimMegyeri(nn.Module) :
     avgpool = self.global_avg_pool2d(h1)
     out = self.classifier(avgpool.view(batch_size,-1))
     return out
+
 
 class BackdoorDetectNetworkWideMegyeri(nn.Module):
   def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
@@ -118,8 +153,7 @@ class BackdoorDetectNetworkWideMegyeri(nn.Module):
       nn.ReLU(),
       nn.Linear(128, 64),
       nn.ReLU(),
-      nn.Linear(64, 1),
-      nn.Sigmoid()
+      nn.Linear(64, 1)
     )
 
   def forward(self, h):
@@ -268,16 +302,18 @@ class BackdoorDetectNetwork(nn.Module) :
 class Net(nn.Module):
   def __init__(self, image_shape, device, color_channel, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
-    self.m1 = BackdoorInjectNetworkBottleNeckMegyeri(image_shape, device, color_channel, n_mean, n_stddev)
+    self.m1 = BackdoorInjectNetworkWidePrepMegyeri(image_shape, device, color_channel, n_mean, n_stddev)
     self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=75)
-    self.m2 = BackdoorDetectNetworkWideMegyeri(image_shape, device, color_channel, n_mean, n_stddev)
+    self.m2 = BackdoorDetectNetworkSlimMegyeri(image_shape, device, color_channel, n_mean, n_stddev)
     self.device = device
     self.image_shape = image_shape
     self.n_mean = n_mean
     self.n_stddev = n_stddev
 
   def forward(self, image):
-    backdoored_image, backdoored_image_with_noise = self.m1(image)
+    backdoored_image = self.m1(image)
+    backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+    backdoored_image_with_noise = gaussian(tensor_data=backdoored_image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
     image_with_noise = gaussian(tensor_data=image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
     jpeged_backdoored_image = self.jpeg(backdoored_image)
     jpeged_image = self.jpeg(image)
