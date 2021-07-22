@@ -295,18 +295,15 @@ class BackdoorDetectNetwork(nn.Module) :
       nn.ReLU())
     self.finalH3 = nn.Sequential(
       nn.Conv2d(150, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=3, stride=2))
+      nn.ReLU())
     self.finalH4 = nn.Sequential(
       nn.Conv2d(150, 50, kernel_size=4, padding=1),
       nn.ReLU(),
       nn.Conv2d(50, 50, kernel_size=4, padding=2),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=4, stride=2))
+      nn.ReLU())
     self.finalH5 = nn.Sequential(
-      nn.Conv2d(150, 50, kernel_size=5, padding=3),
-      nn.ReLU(),
-      nn.MaxPool2d(kernel_size=5, stride=2))
+      nn.Conv2d(150, 50, kernel_size=5, padding=2),
+      nn.ReLU())
     self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0], image_shape[1]))
     self.classifier =  nn.Sequential(
       nn.Linear(150,1)

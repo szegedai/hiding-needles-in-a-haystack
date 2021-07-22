@@ -16,7 +16,13 @@ for epoch in range(num_epochs):
         break
     break
 
-
+for epoch in range(num_epochs):
+    for idx, train_batch in enumerate(train_loader):
+        data, _ = train_batch
+        data = data.to(device)
+        train_images = Variable(data, requires_grad=False)
+        break
+    break
 
 
 
