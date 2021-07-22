@@ -356,7 +356,7 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
-print(params.n_mean, params.n_stddev)
+print(params.n_mean, params.n_stddev, image_shape[dataset])
 net = Net(image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
 net.to(device)
 if params.model != 'NOPE' :

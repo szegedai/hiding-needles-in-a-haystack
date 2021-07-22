@@ -328,9 +328,9 @@ class BackdoorDetectNetwork(nn.Module) :
 class Net(nn.Module):
   def __init__(self, image_shape, device, color_channel, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
-    self.m1 = BackdoorInjectNetwork(image_shape, color_channel)
+    self.m1 = BackdoorInjectNetwork(image_shape=image_shape, color_channel=color_channel)
     self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=75)
-    self.m2 = BackdoorDetectNetwork(image_shape, color_channel)
+    self.m2 = BackdoorDetectNetwork(image_shape=image_shape, color_channel=color_channel)
     self.device = device
     self.image_shape = image_shape
     self.n_mean = n_mean
