@@ -310,6 +310,7 @@ class BackdoorDetectNetwork(nn.Module) :
     )
 
   def forward(self, h):
+    batch_size = h.shape[0]
     h1 = self.initialH3(h)
     h2 = self.initialH4(h)
     h3 = self.initialH5(h)
@@ -319,7 +320,7 @@ class BackdoorDetectNetwork(nn.Module) :
     h6 = self.finalH5(mid)
     mid2 = torch.cat((h4, h5, h6), 1)
     avgpool_mid = self.global_avg_pool2d(mid2)
-    out = self.classifier(avgpool_mid)
+    out = self.classifier(avgpool_mid.view(batch_size, -1))
     return out
 
 class Net(nn.Module):
