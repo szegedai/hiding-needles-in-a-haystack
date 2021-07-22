@@ -170,6 +170,46 @@ class BackdoorInjectNetwork(nn.Module) :
     self.device = device
     self.n_mean = n_mean
     self.n_stddev = n_stddev
+    self.initialH0 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.initialH1 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.initialH2 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.midH0 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.midH1 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.midH2 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.midH = nn.Sequential(
+      nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
     self.initialH3 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
       nn.ReLU(),
@@ -212,23 +252,33 @@ class BackdoorInjectNetwork(nn.Module) :
       nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
 
   def forward(self, h):
-    h1 = self.initialH3(h)
-    h2 = self.initialH4(h)
-    h3 = self.initialH5(h)
+    p1 = self.initialH0(h)
+    p2 = self.initialH1(h)
+    p3 = self.initialH2(h)
+    pmid = torch.cat((p1, p2, p3), 1)
+    p4 = self.midH0(pmid)
+    p5 = self.midH1(mid)
+    p6 = self.midH2(mid)
+    pmid2 = torch.cat((p4, p5, p6), 1)
+    pfinal = self.midH(pmid2)
+    hmid = torch.add(h,pfinal)     
+    h1 = self.initialH3(hmid)
+    h2 = self.initialH4(hmid)
+    h3 = self.initialH5(hmid)
     mid = torch.cat((h1, h2, h3), 1)
     h4 = self.finalH3(mid)
     h5 = self.finalH4(mid)
     h6 = self.finalH5(mid)
     mid2 = torch.cat((h4, h5, h6), 1)
     final = self.finalH(mid2)
-    out = torch.clamp(final, 0.0, 1.0)
-    out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
-    return out, out_noise
+    #out = torch.clamp(final, 0.0, 1.0)
+    #out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
+    return final
 
 
 
 class BackdoorDetectNetwork(nn.Module) :
-  def __init__(self, color_channel=3):
+  def __init__(self, image_shape, color_channel=3):
     super(BackdoorDetectNetwork, self).__init__()
     self.initialH3 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
@@ -271,19 +321,9 @@ class BackdoorDetectNetwork(nn.Module) :
       nn.Conv2d(150, 50, kernel_size=5, padding=3),
       nn.ReLU(),
       nn.MaxPool2d(kernel_size=5, stride=2))
-    self.avg_kernel = 5
-    avg_kernel = self.avg_kernel
-    self.avgpool = nn.AdaptiveAvgPool2d((avg_kernel, avg_kernel))
-    self.flatten_size = 150*avg_kernel*avg_kernel
-    flatten_size = self.flatten_size
+    self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0], image_shape[1]))
     self.classifier =  nn.Sequential(
-      nn.Dropout(),
-      nn.Linear(flatten_size,flatten_size),
-      nn.ReLU(),
-      nn.Linear(flatten_size,flatten_size),
-      nn.ReLU(),
-      nn.Linear(flatten_size,1),
-      nn.Sigmoid()
+      nn.Linear(150,1)
     )
 
   def forward(self, h):
@@ -295,8 +335,8 @@ class BackdoorDetectNetwork(nn.Module) :
     h5 = self.finalH4(mid)
     h6 = self.finalH5(mid)
     mid2 = torch.cat((h4, h5, h6), 1)
-    avgpool_mid = self.avgpool(mid2)
-    out = self.classifier(avgpool_mid.view(-1,self.flatten_size))
+    avgpool_mid = self.global_avg_pool2d(mid2)
+    out = self.classifier(avgpool_mid)
     return out
 
 class Net(nn.Module):
