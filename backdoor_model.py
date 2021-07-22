@@ -13,13 +13,10 @@ def gaussian(tensor_data, device, mean=0, stddev=0.1):
 
 
 class BackdoorInjectNetworkWideMegyeri(nn.Module) :
-  def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
+  def __init__(self, image_shape, color_channel=3):
     super(BackdoorInjectNetworkWideMegyeri, self).__init__()
     self.image_shape = image_shape
-    self.device = device
     self.color_channel = color_channel
-    self.n_mean = n_mean
-    self.n_stddev = n_stddev
     self.H1 = nn.Sequential(
       nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
       nn.ReLU(),
@@ -39,13 +36,10 @@ class BackdoorInjectNetworkWideMegyeri(nn.Module) :
 
 
 class BackdoorInjectNetworkWidePrepMegyeri(nn.Module) :
-  def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
+  def __init__(self, image_shape, color_channel=3):
     super(BackdoorInjectNetworkWidePrepMegyeri, self).__init__()
     self.image_shape = image_shape
-    self.device = device
     self.color_channel = color_channel
-    self.n_mean = n_mean
-    self.n_stddev = n_stddev
     self.H1 = nn.Sequential(
       nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
       nn.ReLU(),
@@ -74,13 +68,10 @@ class BackdoorInjectNetworkWidePrepMegyeri(nn.Module) :
 
 
 class BackdoorInjectNetworkBottleNeckMegyeri(nn.Module) :
-  def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
+  def __init__(self, image_shape, color_channel=3):
     super(BackdoorInjectNetworkBottleNeckMegyeri, self).__init__()
     self.image_shape = image_shape
-    self.device = device
     self.color_channel = color_channel
-    self.n_mean = n_mean
-    self.n_stddev = n_stddev
     self.H1 = nn.Sequential(
       nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
       nn.ReLU(),
@@ -105,13 +96,10 @@ class BackdoorInjectNetworkBottleNeckMegyeri(nn.Module) :
 
 
 class BackdoorDetectNetworkSlimMegyeri(nn.Module) :
-  def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
+  def __init__(self, image_shape, color_channel=3):
     super(BackdoorDetectNetworkSlimMegyeri, self).__init__()
     self.image_shape = image_shape
-    self.device = device
     self.color_channel = color_channel
-    self.n_mean = n_mean
-    self.n_stddev = n_stddev
     self.H1 = nn.Sequential(
       nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
       nn.ReLU(),
@@ -133,13 +121,10 @@ class BackdoorDetectNetworkSlimMegyeri(nn.Module) :
 
 
 class BackdoorDetectNetworkWideMegyeri(nn.Module):
-  def __init__(self, image_shape, device, color_channel=3, n_mean=0, n_stddev=0.1):
+  def __init__(self, image_shape, color_channel=3):
     super(BackdoorDetectNetworkWideMegyeri, self).__init__()
     self.image_shape = image_shape
-    self.device = device
     self.color_channel = color_channel
-    self.n_mean = n_mean
-    self.n_stddev = n_stddev
     self.H1 = nn.Sequential(
       nn.Conv2d(color_channel, 16, kernel_size=3, padding='same'),
       nn.ReLU(),
@@ -165,11 +150,10 @@ class BackdoorDetectNetworkWideMegyeri(nn.Module):
 
 
 class BackdoorInjectNetwork(nn.Module) :
-  def __init__(self, device, color_channel=3, n_mean=0, n_stddev=0.1):
+  def __init__(self, image_shape, color_channel=3):
     super(BackdoorInjectNetwork, self).__init__()
-    self.device = device
-    self.n_mean = n_mean
-    self.n_stddev = n_stddev
+    self.image_shape = image_shape
+    self.color_channel = color_channel
     self.initialH0 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
       nn.ReLU(),
@@ -257,8 +241,8 @@ class BackdoorInjectNetwork(nn.Module) :
     p3 = self.initialH2(h)
     pmid = torch.cat((p1, p2, p3), 1)
     p4 = self.midH0(pmid)
-    p5 = self.midH1(mid)
-    p6 = self.midH2(mid)
+    p5 = self.midH1(pmid)
+    p6 = self.midH2(pmid)
     pmid2 = torch.cat((p4, p5, p6), 1)
     pfinal = self.midH(pmid2)
     hmid = torch.add(h,pfinal)     
@@ -278,8 +262,10 @@ class BackdoorInjectNetwork(nn.Module) :
 
 
 class BackdoorDetectNetwork(nn.Module) :
-  def __init__(self, image_shape, color_channel=3):
+  def __init__(self,  image_shape, color_channel=3):
     super(BackdoorDetectNetwork, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
     self.initialH3 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
       nn.ReLU(),
