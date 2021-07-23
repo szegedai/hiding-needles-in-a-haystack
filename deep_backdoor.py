@@ -8,7 +8,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
-from backdoor_model import Net
+from backdoor_model import Net, DETECTORS, GENERATORS
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -313,6 +313,8 @@ parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--attack', type=str, default="L2PGD")
 parser.add_argument('--dataset', type=str, default="CIFAR10")
 parser.add_argument('--model', type=str, default="NOPE")
+parser.add_argument("--model_det", type=str, required=True, help="|".join(DETECTORS.keys()))
+parser.add_argument("--model_gen", type=str, required=True, help="|".join(GENERATORS.keys()))
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--regularization_start_epoch', type=int, default=0)
@@ -357,10 +359,9 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #images, labels = dataiter.next()
 
 print(params.n_mean, params.n_stddev, image_shape[dataset])
-net = Net(image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
+net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
 net.to(device)
 if params.model != 'NOPE' :
   net.load_state_dict(torch.load(MODELS_PATH+params.model))
 net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
 mean_test_loss = test_model(net, test_loader, beta=beta, l=l, device=device)
-

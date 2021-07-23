@@ -3,15 +3,6 @@ import torch.nn as nn
 from torch.autograd import Variable
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 
-
-
-def gaussian(tensor_data, device, mean=0, stddev=0.1):
-  '''Adds random noise to a tensor.'''
-  noise = torch.nn.init.normal_(tensor=torch.Tensor(tensor_data.size()), mean=mean, std=stddev)
-  noise = noise.to(device)
-  return Variable(tensor_data + noise)
-
-
 class BackdoorInjectNetworkWideMegyeri(nn.Module) :
   def __init__(self, image_shape, color_channel=3):
     super(BackdoorInjectNetworkWideMegyeri, self).__init__()
@@ -31,8 +22,7 @@ class BackdoorInjectNetworkWideMegyeri(nn.Module) :
     h2 = self.H2(h1)
     final = torch.add(h,h2)
     out = torch.clamp(final, 0.0, 1.0)
-    out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
-    return out, out_noise
+    return out
 
 
 class BackdoorInjectNetworkWidePrepMegyeri(nn.Module) :
@@ -91,8 +81,7 @@ class BackdoorInjectNetworkBottleNeckMegyeri(nn.Module) :
     h2 = self.H2(h1)
     final = torch.add(h,h2)
     out = torch.clamp(final, 0.0, 1.0)
-    out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
-    return out, out_noise
+    return out
 
 
 class BackdoorDetectNetworkSlimMegyeri(nn.Module) :
@@ -149,9 +138,9 @@ class BackdoorDetectNetworkWideMegyeri(nn.Module):
     return out
 
 
-class BackdoorInjectNetwork(nn.Module) :
+class BackdoorInjectNetworkDeepStegano(nn.Module) :
   def __init__(self, image_shape, color_channel=3):
-    super(BackdoorInjectNetwork, self).__init__()
+    super(BackdoorInjectNetworkDeepStegano, self).__init__()
     self.image_shape = image_shape
     self.color_channel = color_channel
     self.initialH0 = nn.Sequential(
@@ -261,9 +250,9 @@ class BackdoorInjectNetwork(nn.Module) :
 
 
 
-class BackdoorDetectNetwork(nn.Module) :
+class BackdoorDetectNetworkDeepStegano(nn.Module) :
   def __init__(self,  image_shape, color_channel=3):
-    super(BackdoorDetectNetwork, self).__init__()
+    super(BackdoorDetectNetworkDeepStegano, self).__init__()
     self.image_shape = image_shape
     self.color_channel = color_channel
     self.initialH3 = nn.Sequential(
@@ -323,12 +312,19 @@ class BackdoorDetectNetwork(nn.Module) :
     out = self.classifier(avgpool_mid.view(batch_size, -1))
     return out
 
+
+def gaussian(tensor_data, device, mean=0, stddev=0.1):
+  '''Adds random noise to a tensor.'''
+  noise = torch.nn.init.normal_(tensor=torch.Tensor(tensor_data.size()), mean=mean, std=stddev)
+  noise = noise.to(device)
+  return Variable(tensor_data + noise)
+
 class Net(nn.Module):
-  def __init__(self, image_shape, device, color_channel, n_mean=0, n_stddev=0.1):
+  def __init__(self, gen_holder, det_holder, image_shape, device, color_channel, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
-    self.m1 = BackdoorInjectNetwork(image_shape=image_shape, color_channel=color_channel)
+    self.m1 = gen_holder(image_shape=image_shape, color_channel=color_channel)
     self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=75)
-    self.m2 = BackdoorDetectNetwork(image_shape=image_shape, color_channel=color_channel)
+    self.m2 = det_holder(image_shape=image_shape, color_channel=color_channel)
     self.device = device
     self.image_shape = image_shape
     self.n_mean = n_mean
@@ -339,8 +335,17 @@ class Net(nn.Module):
     backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
     backdoored_image_with_noise = gaussian(tensor_data=backdoored_image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
     image_with_noise = gaussian(tensor_data=image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
-    jpeged_backdoored_image = self.jpeg(backdoored_image)
-    jpeged_image = self.jpeg(image)
+    jpeged_backdoored_image = self.jpeg(backdoored_image_with_noise)
+    jpeged_image = self.jpeg(image_with_noise)
     next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
     logits = self.m2(next_input)
     return backdoored_image, logits
+
+
+DETECTORS = {'detdeepstegano': BackdoorDetectNetworkDeepStegano,
+             'detslimmegyeri': BackdoorDetectNetworkSlimMegyeri,
+             'detwidemegyeri': BackdoorDetectNetworkWideMegyeri}
+GENERATORS = {'genwidemegyeri': BackdoorInjectNetworkWideMegyeri,
+              'genbnmegyeri': BackdoorInjectNetworkBottleNeckMegyeri,
+              'genwideprepmegyeri': BackdoorInjectNetworkWidePrepMegyeri,
+              'gendeepstegano': BackdoorInjectNetworkDeepStegano}
