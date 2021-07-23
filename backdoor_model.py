@@ -394,10 +394,10 @@ class Net(nn.Module):
   def forward(self, image):
     backdoored_image = self.m1(image)
     backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-    backdoored_image_with_noise = gaussian(tensor_data=backdoored_image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
-    image_with_noise = gaussian(tensor_data=image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
-    jpeged_backdoored_image = self.jpeg(backdoored_image_with_noise)
-    jpeged_image = self.jpeg(image_with_noise)
+    #backdoored_image_with_noise = gaussian(tensor_data=backdoored_image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
+    #image_with_noise = gaussian(tensor_data=image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
+    jpeged_backdoored_image = self.jpeg(backdoored_image)
+    jpeged_image = self.jpeg(image)
     next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
     logits = self.m2(next_input)
     return backdoored_image, logits
