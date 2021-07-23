@@ -51,8 +51,8 @@ class BackdoorInjectNetworkWidePrepMegyeri(nn.Module) :
     h1 = self.H1(h)
     h2 = self.H2(h1)
     mid = torch.add(h,h2)
-    h3 = self.H3(h)
-    out = self.H4(h1)
+    h3 = self.H3(mid)
+    out = self.H4(h3)
     return out
 
 
@@ -137,6 +137,67 @@ class BackdoorDetectNetworkWideMegyeri(nn.Module):
     out = self.classifier(avgpool.view(batch_size, -1))
     return out
 
+class BackdoorDetectNetworkSlimArpi(nn.Module) :
+  def __init__(self, image_shape, color_channel=3):
+    super(BackdoorDetectNetworkSlimArpi, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
+    self.H1 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0], image_shape[1]))
+    self.classifier = nn.Sequential(
+      nn.Linear(50, 1)
+    )
+
+  def forward(self, h) :
+    batch_size = h.shape[0]
+    h1 = self.H1(h)
+    avgpool = self.global_avg_pool2d(h1)
+    out = self.classifier(avgpool.view(batch_size,-1))
+    return out
+
+class BackdoorInjectNetworkArpi(nn.Module) :
+  def __init__(self, image_shape, color_channel=3):
+    super(BackdoorInjectNetworkArpi, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
+    self.H1 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.H2 = nn.Sequential(
+      nn.Conv2d(50, color_channel, kernel_size=1, padding=0))
+    self.H3 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.H4 = nn.Sequential(
+      nn.Conv2d(50, color_channel, kernel_size=1, padding=0))
+
+  def forward(self, h) :
+    h1 = self.H1(h)
+    h2 = self.H2(h1)
+    mid = torch.add(h,h2)
+    h3 = self.H3(mid)
+    out = self.H4(h3)
+    return out
 
 class BackdoorInjectNetworkDeepStegano(nn.Module) :
   def __init__(self, image_shape, color_channel=3):
@@ -343,9 +404,11 @@ class Net(nn.Module):
 
 
 DETECTORS = {'detdeepstegano': BackdoorDetectNetworkDeepStegano,
+             'detslimarpi': BackdoorDetectNetworkArpi,
              'detslimmegyeri': BackdoorDetectNetworkSlimMegyeri,
              'detwidemegyeri': BackdoorDetectNetworkWideMegyeri}
 GENERATORS = {'genwidemegyeri': BackdoorInjectNetworkWideMegyeri,
               'genbnmegyeri': BackdoorInjectNetworkBottleNeckMegyeri,
               'genwideprepmegyeri': BackdoorInjectNetworkWidePrepMegyeri,
+              'genwidepreparpi': BackdoorInjectNetworkArpi,
               'gendeepstegano': BackdoorInjectNetworkDeepStegano}
