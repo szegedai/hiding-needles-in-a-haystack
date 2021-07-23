@@ -404,7 +404,7 @@ class Net(nn.Module):
 
 
 DETECTORS = {'detdeepstegano': BackdoorDetectNetworkDeepStegano,
-             'detslimarpi': BackdoorDetectNetworkArpi,
+             'detslimarpi': BackdoorDetectNetworkSlimArpi,
              'detslimmegyeri': BackdoorDetectNetworkSlimMegyeri,
              'detwidemegyeri': BackdoorDetectNetworkWideMegyeri}
 GENERATORS = {'genwidemegyeri': BackdoorInjectNetworkWideMegyeri,
