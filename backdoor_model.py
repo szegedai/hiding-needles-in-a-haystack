@@ -383,24 +383,28 @@ def gaussian(tensor_data, device, mean=0, stddev=0.1):
 class Net(nn.Module):
   def __init__(self, gen_holder, det_holder, image_shape, device, color_channel, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
-    self.m1 = gen_holder(image_shape=image_shape, color_channel=color_channel)
+    self.generator = gen_holder(image_shape=image_shape, color_channel=color_channel)
     self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=75)
-    self.m2 = det_holder(image_shape=image_shape, color_channel=color_channel)
+    self.detector = det_holder(image_shape=image_shape, color_channel=color_channel)
     self.device = device
     self.image_shape = image_shape
     self.n_mean = n_mean
     self.n_stddev = n_stddev
 
   def forward(self, image):
-    backdoored_image = self.m1(image)
+    backdoored_image = self.generator(image)
     backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-    #backdoored_image_with_noise = gaussian(tensor_data=backdoored_image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
-    #image_with_noise = gaussian(tensor_data=image.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
+    #image_with_noise, backdoored_image_with_noise = self.make_noised_images(image, backdoored_image, self.n_mean, self.n_stddev)
     jpeged_backdoored_image = self.jpeg(backdoored_image)
     jpeged_image = self.jpeg(image)
     next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
-    logits = self.m2(next_input)
+    logits = self.detector(next_input)
     return backdoored_image, logits
+
+  def make_noised_images(self, image, backbackdoored_image, mean, stddev):
+    image_with_noise = gaussian(tensor_data=image.data, device=self.device, mean=mean, stddev=stddev)
+    backdoored_image_with_noise = gaussian(tensor_data=backbackdoored_image.data, device=self.device, mean=mean, stddev=stddev)
+    return image_with_noise,backdoored_image_with_noise
 
 
 DETECTORS = {'detdeepstegano': BackdoorDetectNetworkDeepStegano,

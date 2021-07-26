@@ -39,17 +39,30 @@ color_channel['MNIST'] = 1
 LINF_EPS = 8.0/255.0
 L2_EPS = 0.5
 
-def customized_loss(backdoored_image, logits, image, targetY, B, L):
-  #print(backdoored_image.shape, image.shape)
-  criterion1 = nn.MSELoss()
-  #loss_injection = torch.nn.functional.mse_loss(backdoored_image, image)
-  loss_injection = criterion1(backdoored_image, image) +\
-                   l1_penalty(backdoored_image - image, l1_lambda=L / 100) +\
-                   l2_penalty(backdoored_image - image, l2_lambda=L / 10) +\
-                   linf_penalty(backdoored_image - image, linf_lambda=L)
-  #criterion2 = nn.BCELoss()
-  criterion2 = nn.BCEWithLogitsLoss()
-  loss_detect = criterion2(logits, targetY)
+LOSSES = ["lossbyadd","simple"]
+
+CRITERION_GENERATOR = nn.MSELoss()
+#CRITERION_DETECT = nn.BCELoss()
+CRITERION_DETECT = nn.BCEWithLogitsLoss()
+
+L1_MODIFIER = 1.0/100.0
+L2_MODIFIER = 1.0/10.0
+LINF_MODIFIER = 1.0
+
+def generator_loss(backdoored_image, image, L) :
+  loss_injection = CRITERION_GENERATOR(backdoored_image, image) + \
+                   l1_penalty(backdoored_image - image, l1_lambda=L * L1_MODIFIER) + \
+                   l2_penalty(backdoored_image - image, l2_lambda=L * L2_MODIFIER) + \
+                   linf_penalty(backdoored_image - image, linf_lambda=L * LINF_MODIFIER)
+  return loss_injection
+
+def detector_loss(logits,targetY) :
+  loss_detect = CRITERION_DETECT(logits, targetY)
+  return loss_detect
+
+def loss_by_add(backdoored_image, logits, image, targetY, B, L):
+  loss_injection = generator_loss(backdoored_image,image,L)
+  loss_detect = detector_loss(logits,targetY)
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
 
@@ -103,16 +116,24 @@ def saveImage(image, filename_postfix) :
     img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
 
 
-def train_model(net, train_loader, num_epochs, beta, l, reg_start, learning_rate, device):
+def train_model(net, train_loader, num_epochs, loss_mode, beta, l, reg_start, learning_rate, device):
   # Save optimizer
-  optimizer = optim.Adam(net.parameters(), lr=learning_rate)
+  if loss_mode == "simple" :
+    optimizer_generator = optim.Adam(net.generator.parameters(), lr=learning_rate)
+    optimizer_detector = optim.Adam(net.detector.parameters(), lr=learning_rate)
+  else :
+    optimizer = optim.Adam(net.parameters(), lr=learning_rate)
 
   loss_history = []
   # Iterate over batches performing forward and backward passes
   for epoch in range(num_epochs):
 
     # Train mode
-    net.train()
+    if loss_mode == "simple":
+      net.generator.train()
+      net.detector.train()
+    else :
+      net.train()
 
     train_losses = []
 
@@ -130,14 +151,37 @@ def train_model(net, train_loader, num_epochs, beta, l, reg_start, learning_rate
       targetY = torch.cat((targetY_backdoored,targetY_original),0)
       targetY = targetY.to(device)
 
-      # Forward + Backward + Optimize
-      optimizer.zero_grad()
-      backdoored_image, logits = net(train_images)
+      if loss_mode == "simple" :
+        # Forward + Backward + Optimize
+        optimizer_generator.zero_grad()
+        optimizer_detector.zero_grad()
+        backdoored_image = net.generator(train_images)
+        backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+        jpeged_backdoored_image = net.jpeg(backdoored_image)
+        jpeged_image = net.jpeg(train_images)
+        next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
+        logits = net.detector(next_input)
 
-      # Calculate loss and perform backprop
-      train_loss, loss_injection, loss_detect = customized_loss(backdoored_image, logits, train_images, targetY, B=beta, L=L)
-      train_loss.backward()
-      optimizer.step()
+        # Calculate loss and perform backprop
+        loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, L)
+        loss_generator.backward()
+        optimizer_generator.step()
+        loss_detector = detector_loss(logits, targetY)
+        loss_detector.backward()
+        optimizer_detector.step()
+        train_loss = loss_generator + loss_detector
+
+      else :
+        # Forward + Backward + Optimize
+        optimizer.zero_grad()
+        backdoored_image, logits = net(train_images)
+
+        # Calculate loss and perform backprop
+        train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, B=beta, L=L)
+        train_loss.backward()
+        optimizer.step()
+
+
 
       # Saves training loss
       train_losses.append(train_loss.data.cpu())
@@ -158,11 +202,11 @@ def train_model(net, train_loader, num_epochs, beta, l, reg_start, learning_rate
       print('Training: Batch {0}/{1}. Loss of {2:.5f}, injection loss of {3:.5f}, detect loss of {4:.5f},'
             ' backdoor l2 min: {5:.3f}, avg: {6:.3f}, max: {7:.3f}, backdoor linf'
             ' min: {8:.3f}, avg: {9:.3f}, max: {10:.3f}'.format(
-        idx + 1, len(train_loader), train_loss.data, loss_injection.data, loss_detect.data,
+        idx + 1, len(train_loader), train_loss.data, loss_generator.data, loss_detector.data,
         torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
         torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
 
-    train_images_np = train_images.numpy
+    #train_images_np = train_images.numpy
     torch.save(net.state_dict(), MODELS_PATH + 'Epoch_'+dataset+'_N{}.pkl'.format(epoch + 1))
 
     mean_train_loss = np.mean(train_losses)
@@ -176,9 +220,13 @@ def train_model(net, train_loader, num_epochs, beta, l, reg_start, learning_rate
   return net, mean_train_loss, loss_history
 
 
-def test_model(net, test_loader, beta, l, device):
+def test_model(net, test_loader, loss_mode, beta, l, device):
   # Switch to evaluate mode
-  net.eval()
+  if loss_mode == "simple" :
+    net.generator.eval()
+    net.detector.eval()
+  else :
+    net.eval()
 
   test_losses = []
   test_acces = []
@@ -208,10 +256,25 @@ def test_model(net, test_loader, beta, l, device):
       targetY = targetY.to(device)
 
       # Compute output
-      backdoored_image, logits = net(test_images)
+      if loss_mode == "simple" :
+        # Compute output
+        backdoored_image = net.generator(test_images)
+        backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+        jpeged_backdoored_image = net.jpeg(backdoored_image)
+        jpeged_image = net.jpeg(test_images)
+        next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
+        logits = net.detector(next_input)
 
-      # Calculate loss
-      test_loss, loss_injection, loss_detect = customized_loss(backdoored_image, logits, test_images, targetY, B=beta, L=l)
+        # Calculate loss
+        loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, l)
+        loss_detector = detector_loss(logits, targetY)
+        test_loss = loss_generator + loss_detector
+
+      else :
+        # Compute output
+        backdoored_image, logits = net(test_images)
+        # Calculate loss
+        test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, B=beta, L=l)
 
       predY = torch.sigmoid(logits)
       test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
@@ -315,6 +378,7 @@ parser.add_argument('--dataset', type=str, default="CIFAR10")
 parser.add_argument('--model', type=str, default="NOPE")
 parser.add_argument("--model_det", type=str, required=True, help="|".join(DETECTORS.keys()))
 parser.add_argument("--model_gen", type=str, required=True, help="|".join(GENERATORS.keys()))
+parser.add_argument("--loss_mode", type=str, required=True, help="|".join(LOSSES), default="lossbyadd")
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--regularization_start_epoch', type=int, default=0)
@@ -358,10 +422,9 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
-print(params.n_mean, params.n_stddev, image_shape[dataset])
 net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
 net.to(device)
 if params.model != 'NOPE' :
   net.load_state_dict(torch.load(MODELS_PATH+params.model))
-net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
-mean_test_loss = test_model(net, test_loader, beta=beta, l=l, device=device)
+net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+mean_test_loss = test_model(net, test_loader, params.loss_mode, beta=beta, l=l, device=device)
