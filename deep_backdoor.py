@@ -131,8 +131,8 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
   # Iterate over batches performing forward and backward passes
   round = int(np.ceil( (num_epochs-reg_start) / l_step ))
   print('Learning start. L will change at every {0} epoch.'.format(round))
+  L = 0
   for epoch in range(num_epochs):
-    L = 0
     if epoch >= reg_start:
       L = l
 
