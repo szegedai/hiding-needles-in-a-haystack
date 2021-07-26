@@ -431,7 +431,7 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
-if params.loss_mode == simple :
+if params.loss_mode == "simple" :
   generator = GENERATORS[params.model_gen](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
   generator.to(device)
   if params.generator != 'NOPE':
