@@ -157,7 +157,6 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_st
       if loss_mode == "simple" :
         # Forward + Backward + Optimize
         optimizer_generator.zero_grad()
-        optimizer_detector.zero_grad()
         backdoored_image = net1(train_images)
         backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
         jpeged_backdoored_image = jpeg(backdoored_image)
@@ -169,6 +168,7 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_st
         loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, L)
         loss_generator.backward()
         optimizer_generator.step()
+        optimizer_detector.zero_grad()
         loss_detector = detector_loss(logits, targetY)
         loss_detector.backward()
         optimizer_detector.step()
