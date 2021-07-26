@@ -130,10 +130,13 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
   loss_history = []
   # Iterate over batches performing forward and backward passes
   round = int(np.ceil( (num_epochs-reg_start) / l_step ))
-  print('Learning start. L will change at every {0} epoch.'.format(round))
-  L = 0
+  print('Learning start. Regularization will start in {0} epoch. L will change at every {1} epoch.'.format(reg_start,round))
+  if reg_start > 0 :
+    L = 0
+  else :
+    L = l
   for epoch in range(num_epochs):
-    if epoch >= reg_start:
+    if epoch == reg_start:
       L = l
 
     # Train mode
