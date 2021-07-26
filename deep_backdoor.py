@@ -136,7 +136,7 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
     if epoch >= reg_start:
       L = l
     if (epoch-reg_start) > 0 and (epoch-reg_start) % round == 0 :
-      L = L/10
+      L = L*10
       print('L is changed to {0:.6f} in {1} epoch.'.format(L,epoch))
 
     # Train mode
