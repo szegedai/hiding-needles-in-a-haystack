@@ -123,6 +123,7 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_st
     optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
     optimizer_detector = optim.Adam(net2.parameters(), lr=learning_rate)
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=75)
+    jpeg.to(device)
   else :
     optimizer = optim.Adam(net1.parameters(), lr=learning_rate)
 
@@ -231,6 +232,7 @@ def test_model(net1, net2, test_loader, loss_mode, beta, l, device):
   if loss_mode == "simple" :
     net1.eval()
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=75)
+    jpeg.to(device)
     net2.eval()
   else :
     net1.eval()
