@@ -129,6 +129,8 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
 
   loss_history = []
   # Iterate over batches performing forward and backward passes
+  if l_step < 1 :
+    l_step = 1
   round = int(np.ceil( (num_epochs-reg_start) / l_step ))
   print('Learning start. Regularization will start in {0} epoch. L will change at every {1} epoch.'.format(reg_start,round))
   if reg_start > 0 :
@@ -397,9 +399,9 @@ parser.add_argument('--dataset', type=str, default="CIFAR10")
 parser.add_argument('--model', type=str, default="NOPE")
 parser.add_argument('--generator', type=str, default="NOPE")
 parser.add_argument('--detector', type=str, default="NOPE")
-parser.add_argument("--model_det", type=str, required=True, help="|".join(DETECTORS.keys()))
-parser.add_argument("--model_gen", type=str, required=True, help="|".join(GENERATORS.keys()))
-parser.add_argument("--loss_mode", type=str, required=True, help="|".join(LOSSES), default="lossbyadd")
+parser.add_argument("--model_det", type=str, help="|".join(DETECTORS.keys()), default='detwidemegyeri')
+parser.add_argument("--model_gen", type=str, help="|".join(GENERATORS.keys()), default='genbnmegyeri')
+parser.add_argument("--loss_mode", type=str, help="|".join(LOSSES), default="lossbyadd")
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--regularization_start_epoch', type=int, default=0)
