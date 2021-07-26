@@ -117,11 +117,11 @@ def saveImage(image, filename_postfix) :
     img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
 
 
-def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_start, learning_rate, device):
+def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step, reg_start, learning_rate, device):
   # Save optimizer
   if loss_mode == "simple" :
     optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
-    optimizer_detector = optim.Adam(net2.parameters(), lr=learning_rate)
+    optimizer_detector = optim.Adam(net2.parameters(), lr=learning_rate*100)
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=75)
     jpeg.to(device)
   else :
@@ -129,7 +129,15 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_st
 
   loss_history = []
   # Iterate over batches performing forward and backward passes
+  round = int( (num_epochs-reg_start) / l_step )
+  print('Learning start. L will change at every {0} epoch.'.format(round))
   for epoch in range(num_epochs):
+    L = 0
+    if epoch >= reg_start:
+      L = l
+    if (epoch-reg_start) > 0 and (epoch-reg_start) % round == 0 :
+      L = L/10
+      print('L is changed to {0:.6f} in {1} epoch.'.format(L,epoch))
 
     # Train mode
     if loss_mode == "simple":
@@ -140,9 +148,6 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_st
 
     train_losses = []
 
-    L = 0
-    if epoch >= reg_start :
-      L = l
     # Train one epoch
     for idx, train_batch in enumerate(train_loader):
       data, _ = train_batch
@@ -225,7 +230,7 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_st
       epoch + 1, num_epochs, mean_train_loss, torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
       torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
 
-  return net1, net2, mean_train_loss, loss_history
+  return net1, net2, mean_train_loss, loss_history, L
 
 
 def test_model(net1, net2, test_loader, loss_mode, beta, l, device):
@@ -397,6 +402,7 @@ parser.add_argument('--regularization_start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--beta', type=int, default=1)
 parser.add_argument("--l", type=float, default=0.1)
+parser.add_argument("--l_step", type=int, default=1)
 parser.add_argument('--trials', type=int, default=1)
 parser.add_argument('--step_size', type=float, default=0.01)
 parser.add_argument('--steps', type=int, default=40)
@@ -412,6 +418,7 @@ batch_size = params.batch_size
 learning_rate = params.learning_rate
 beta = params.beta
 l = params.l
+l_step = params.l_step
 
 # Other Parameters
 device = torch.device('cuda:'+str(params.gpu))
@@ -443,12 +450,12 @@ if params.loss_mode == "simple" :
   detector.to(device)
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
-  generator, detector, mean_train_loss, loss_history = train_model(generator, detector, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+  generator, detector, mean_train_loss, loss_history, l = train_model(generator, detector, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
   mean_test_loss = test_model(generator, detector, test_loader, params.loss_mode, beta=beta, l=l, device=device)
 else :
   net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
-  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+  net, _ ,mean_train_loss, loss_history, l = train_model(net, None, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
   mean_test_loss = test_model(net, None, test_loader, params.loss_mode, beta=beta, l=l, device=device)
