@@ -135,9 +135,6 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
     L = 0
     if epoch >= reg_start:
       L = l
-    if (epoch-reg_start) > 0 and (epoch-reg_start) % round == 0 :
-      L = L*10
-      print('L is changed to {0:.6f} in {1} epoch.'.format(L,epoch))
 
     # Train mode
     if loss_mode == "simple":
@@ -229,6 +226,10 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
           ' Last backdoor linf min: {6:.3f}, avg: {7:.3f}, max: {8:.3f}'.format(
       epoch + 1, num_epochs, mean_train_loss, torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
       torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
+
+    if (epoch-reg_start) > 0 and (epoch-reg_start) % round == 0 :
+      L = L*10
+      print('L will changed to {0:.6f} in the next epoch'.format(L))
 
   return net1, net2, mean_train_loss, loss_history, L
 
