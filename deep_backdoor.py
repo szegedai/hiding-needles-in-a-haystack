@@ -8,6 +8,7 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
+from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 from backdoor_model import Net, DETECTORS, GENERATORS
 
 MODELS_PATH = '../res/models/'
@@ -116,13 +117,14 @@ def saveImage(image, filename_postfix) :
     img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
 
 
-def train_model(net, train_loader, num_epochs, loss_mode, beta, l, reg_start, learning_rate, device):
+def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_start, learning_rate, device):
   # Save optimizer
   if loss_mode == "simple" :
-    optimizer_generator = optim.Adam(net.generator.parameters(), lr=learning_rate)
-    optimizer_detector = optim.Adam(net.detector.parameters(), lr=learning_rate)
+    optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
+    optimizer_detector = optim.Adam(net2.parameters(), lr=learning_rate)
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=75)
   else :
-    optimizer = optim.Adam(net.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(net1.parameters(), lr=learning_rate)
 
   loss_history = []
   # Iterate over batches performing forward and backward passes
@@ -130,10 +132,10 @@ def train_model(net, train_loader, num_epochs, loss_mode, beta, l, reg_start, le
 
     # Train mode
     if loss_mode == "simple":
-      net.generator.train()
-      net.detector.train()
+      net1.train()
+      net2.train()
     else :
-      net.train()
+      net1.train()
 
     train_losses = []
 
@@ -155,12 +157,12 @@ def train_model(net, train_loader, num_epochs, loss_mode, beta, l, reg_start, le
         # Forward + Backward + Optimize
         optimizer_generator.zero_grad()
         optimizer_detector.zero_grad()
-        backdoored_image = net.generator(train_images)
+        backdoored_image = net1(train_images)
         backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-        jpeged_backdoored_image = net.jpeg(backdoored_image)
-        jpeged_image = net.jpeg(train_images)
+        jpeged_backdoored_image = jpeg(backdoored_image)
+        jpeged_image = jpeg(train_images)
         next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
-        logits = net.detector(next_input)
+        logits = net2(next_input)
 
         # Calculate loss and perform backprop
         loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, L)
@@ -174,7 +176,7 @@ def train_model(net, train_loader, num_epochs, loss_mode, beta, l, reg_start, le
       else :
         # Forward + Backward + Optimize
         optimizer.zero_grad()
-        backdoored_image, logits = net(train_images)
+        backdoored_image, logits = net1(train_images)
 
         # Calculate loss and perform backprop
         train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, B=beta, L=L)
@@ -207,7 +209,11 @@ def train_model(net, train_loader, num_epochs, loss_mode, beta, l, reg_start, le
         torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
 
     #train_images_np = train_images.numpy
-    torch.save(net.state_dict(), MODELS_PATH + 'Epoch_'+dataset+'_N{}.pkl'.format(epoch + 1))
+    if loss_mode == "simple" :
+      torch.save(net1.state_dict(), MODELS_PATH + 'Epoch_' + dataset + 'G_N{}.pkl'.format(epoch + 1))
+      torch.save(net2.state_dict(), MODELS_PATH + 'Epoch_' + dataset + 'D_N{}.pkl'.format(epoch + 1))
+    else :
+      torch.save(net1.state_dict(), MODELS_PATH + 'Epoch_'+dataset+'_N{}.pkl'.format(epoch + 1))
 
     mean_train_loss = np.mean(train_losses)
 
@@ -217,16 +223,17 @@ def train_model(net, train_loader, num_epochs, loss_mode, beta, l, reg_start, le
       epoch + 1, num_epochs, mean_train_loss, torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
       torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
 
-  return net, mean_train_loss, loss_history
+  return net1, net2, mean_train_loss, loss_history
 
 
-def test_model(net, test_loader, loss_mode, beta, l, device):
+def test_model(net1, net2, test_loader, loss_mode, beta, l, device):
   # Switch to evaluate mode
   if loss_mode == "simple" :
-    net.generator.eval()
-    net.detector.eval()
+    net1.eval()
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=75)
+    net2.eval()
   else :
-    net.eval()
+    net1.eval()
 
   test_losses = []
   test_acces = []
@@ -258,12 +265,12 @@ def test_model(net, test_loader, loss_mode, beta, l, device):
       # Compute output
       if loss_mode == "simple" :
         # Compute output
-        backdoored_image = net.generator(test_images)
+        backdoored_image = net1(test_images)
         backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-        jpeged_backdoored_image = net.jpeg(backdoored_image)
-        jpeged_image = net.jpeg(test_images)
+        jpeged_backdoored_image = jpeg(backdoored_image)
+        jpeged_image = jpeg(test_images)
         next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
-        logits = net.detector(next_input)
+        logits = net2(next_input)
 
         # Calculate loss
         loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, l)
@@ -272,7 +279,7 @@ def test_model(net, test_loader, loss_mode, beta, l, device):
 
       else :
         # Compute output
-        backdoored_image, logits = net(test_images)
+        backdoored_image, logits = net1(test_images)
         # Calculate loss
         test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, B=beta, L=l)
 
@@ -376,6 +383,8 @@ parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--attack', type=str, default="L2PGD")
 parser.add_argument('--dataset', type=str, default="CIFAR10")
 parser.add_argument('--model', type=str, default="NOPE")
+parser.add_argument('--generator', type=str, default="NOPE")
+parser.add_argument('--detector', type=str, default="NOPE")
 parser.add_argument("--model_det", type=str, required=True, help="|".join(DETECTORS.keys()))
 parser.add_argument("--model_gen", type=str, required=True, help="|".join(GENERATORS.keys()))
 parser.add_argument("--loss_mode", type=str, required=True, help="|".join(LOSSES), default="lossbyadd")
@@ -422,9 +431,21 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
-net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
-net.to(device)
-if params.model != 'NOPE' :
-  net.load_state_dict(torch.load(MODELS_PATH+params.model))
-net, mean_train_loss, loss_history = train_model(net, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
-mean_test_loss = test_model(net, test_loader, params.loss_mode, beta=beta, l=l, device=device)
+if params.loss_mode == simple :
+  generator = GENERATORS[params.model_gen](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
+  generator.to(device)
+  if params.generator != 'NOPE':
+    generator.load_state_dict(torch.load(MODELS_PATH+params.generator))
+  detector = DETECTORS[params.model_det](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
+  detector.to(device)
+  if params.detector != 'NOPE':
+    detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
+  generator, detector, mean_train_loss, loss_history = train_model(generator, detector, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+  mean_test_loss = test_model(generator, detector, test_loader, params.loss_mode, beta=beta, l=l, device=device)
+else :
+  net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
+  net.to(device)
+  if params.model != 'NOPE' :
+    net.load_state_dict(torch.load(MODELS_PATH+params.model))
+  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+  mean_test_loss = test_model(net, None, test_loader, params.loss_mode, beta=beta, l=l, device=device)
