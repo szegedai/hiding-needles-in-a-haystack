@@ -129,7 +129,7 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
 
   loss_history = []
   # Iterate over batches performing forward and backward passes
-  round = int( (num_epochs-reg_start) / l_step )
+  round = int(np.ceil( (num_epochs-reg_start) / l_step ))
   print('Learning start. L will change at every {0} epoch.'.format(round))
   for epoch in range(num_epochs):
     L = 0
@@ -231,7 +231,7 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
       L = L*10
       print('L will changed to {0:.6f} in the next epoch'.format(L))
 
-  return net1, net2, mean_train_loss, loss_history, L
+  return net1, net2, mean_train_loss, loss_history
 
 
 def test_model(net1, net2, test_loader, loss_mode, beta, l, device):
@@ -420,6 +420,7 @@ learning_rate = params.learning_rate
 beta = params.beta
 l = params.l
 l_step = params.l_step
+last_l = l * np.power(10,l_step-1)
 
 # Other Parameters
 device = torch.device('cuda:'+str(params.gpu))
@@ -451,12 +452,13 @@ if params.loss_mode == "simple" :
   detector.to(device)
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
-  generator, detector, mean_train_loss, loss_history, l = train_model(generator, detector, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
-  mean_test_loss = test_model(generator, detector, test_loader, params.loss_mode, beta=beta, l=l, device=device)
+  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+
+  mean_test_loss = test_model(generator, detector, test_loader, params.loss_mode, beta=beta, l=last_l, device=device)
 else :
   net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
-  net, _ ,mean_train_loss, loss_history, l = train_model(net, None, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
-  mean_test_loss = test_model(net, None, test_loader, params.loss_mode, beta=beta, l=l, device=device)
+  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+  mean_test_loss = test_model(net, None, test_loader, params.loss_mode, beta=beta, l=last_l, device=device)
