@@ -159,16 +159,17 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, reg_st
         optimizer_generator.zero_grad()
         backdoored_image = net1(train_images)
         backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+        # Calculate loss and perform backprop
+        loss_generator = generator_loss(backdoored_image, train_images, L)
+        loss_generator.backward()
+        optimizer_generator.step()
+
+        optimizer_detector.zero_grad()
+        backdoored_image = Variable(backdoored_image, requires_grad=False)
         jpeged_backdoored_image = jpeg(backdoored_image)
         jpeged_image = jpeg(train_images)
         next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
         logits = net2(next_input)
-
-        # Calculate loss and perform backprop
-        loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, L)
-        loss_generator.backward()
-        optimizer_generator.step()
-        optimizer_detector.zero_grad()
         loss_detector = detector_loss(logits, targetY)
         loss_detector.backward()
         optimizer_detector.step()
