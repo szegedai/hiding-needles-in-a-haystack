@@ -40,7 +40,7 @@ color_channel['MNIST'] = 1
 LINF_EPS = 8.0/255.0
 L2_EPS = 0.5
 
-LOSSES = ["lossbyadd","lossbyaddmegyeri","simple"]
+LOSSES = ["lossbyadd","lossbyaddmegyeri","lossbyaddarpi","simple"]
 
 CRITERION_GENERATOR = nn.MSELoss()
 #CRITERION_DETECT = nn.BCELoss()
@@ -63,6 +63,10 @@ def generator_loss_by_megyeri(backdoored_image, image, L) :
                    linf_penalty(backdoored_image - image, linf_lambda=L * LINF_MODIFIER)
   return loss_injection
 
+def generator_loss_by_arpi(backdoored_image, image, L) :
+  loss_injection = CRITERION_GENERATOR(backdoored_image, image) + \
+                   linf_penalty(backdoored_image - image, linf_lambda=L * LINF_MODIFIER)
+  return loss_injection
 
 def detector_loss(logits,targetY) :
   loss_detect = CRITERION_DETECT(logits, targetY)
@@ -76,6 +80,12 @@ def loss_by_add(backdoored_image, logits, image, targetY, B, L):
 
 def loss_by_add_by_megyeri(backdoored_image, logits, image, targetY, B, L):
   loss_injection = generator_loss_by_megyeri(backdoored_image,image,L)
+  loss_detect = detector_loss(logits,targetY)
+  loss_all = loss_injection + B * loss_detect
+  return loss_all, loss_injection, loss_detect
+
+def loss_by_add_by_arpi(backdoored_image, logits, image, targetY, B, L):
+  loss_injection = generator_loss_by_arpi(backdoored_image,image,L)
   loss_detect = detector_loss(logits,targetY)
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
@@ -203,6 +213,15 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
         train_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, train_images, targetY, B=beta, L=L)
         train_loss.backward()
         optimizer.step()
+      elif loss_mode == "lossbyaddarpi":
+        # Forward + Backward + Optimize
+        optimizer.zero_grad()
+        backdoored_image, logits = net1(train_images)
+
+        # Calculate loss and perform backprop
+        train_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, train_images, targetY, B=beta, L=L)
+        train_loss.backward()
+        optimizer.step()
       else :
         # Forward + Backward + Optimize
         optimizer.zero_grad()
@@ -316,6 +335,11 @@ def test_model(net1, net2, test_loader, loss_mode, beta, l, device):
         backdoored_image, logits = net1(test_images)
         # Calculate loss
         test_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, test_images, targetY, B=beta, L=l)
+      elif loss_mode == "lossbyaddarpi" :
+        # Compute output
+        backdoored_image, logits = net1(test_images)
+        # Calculate loss
+        test_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, test_images, targetY, B=beta, L=l)
       else :
         # Compute output
         backdoored_image, logits = net1(test_images)
