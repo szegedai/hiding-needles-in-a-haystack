@@ -181,10 +181,10 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
       train_images = Variable(data, requires_grad=False)
       targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
       targetY_original = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
-      targetY = torch.cat((targetY_backdoored,targetY_original),0)
-      targetY = targetY.to(device)
 
       if loss_mode == "simple" :
+        targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+        targetY = targetY.to(device)
         # Forward + Backward + Optimize
         optimizer_generator.zero_grad()
         backdoored_image = net1(train_images)
@@ -205,6 +205,8 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
         optimizer_detector.step()
         train_loss = loss_generator + loss_detector
       elif loss_mode == "lossbyaddmegyeri":
+        targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+        targetY = targetY.to(device)
         # Forward + Backward + Optimize
         optimizer.zero_grad()
         backdoored_image, logits = net1(train_images)
@@ -214,15 +216,28 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
         train_loss.backward()
         optimizer.step()
       elif loss_mode == "lossbyaddarpi":
+        targetY_backdoored_noise = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
+        targetY_original_noise = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
+
+        targetY = torch.cat((targetY_backdoored, targetY_backdoored_noise, targetY_original, targetY_original_noise), 0)
+        targetY = targetY.to(device)
         # Forward + Backward + Optimize
         optimizer.zero_grad()
-        backdoored_image, logits = net1(train_images)
+        backdoored_image =  net1.generator(train_images)
+        backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+        image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image, net1.n_mean, net1.n_stddev)
+        jpeged_image = net1.jpeg(train_images)
+        jpeged_backdoored_image = net1.jpeg(backdoored_image)
+        next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise, jpeged_image, image_with_noise), 0)
+        logits = net1.detector(next_input)
 
         # Calculate loss and perform backprop
-        train_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, train_images, targetY, B=beta, L=L)
+        train_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, train_images, targetY, B=beta, L=L)
         train_loss.backward()
         optimizer.step()
       else :
+        targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+        targetY = targetY.to(device)
         # Forward + Backward + Optimize
         optimizer.zero_grad()
         backdoored_image, logits = net1(train_images)
@@ -337,9 +352,12 @@ def test_model(net1, net2, test_loader, loss_mode, beta, l, device):
         test_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, test_images, targetY, B=beta, L=l)
       elif loss_mode == "lossbyaddarpi" :
         # Compute output
-        backdoored_image, logits = net1(test_images)
+        backdoored_image = net1.generator(test_images)
+        backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+        next_input = torch.cat((backdoored_image,test_images),0)
+        logits = net1.detector(next_input)
         # Calculate loss
-        test_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, test_images, targetY, B=beta, L=l)
+        test_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, test_images, targetY, B=beta, L=l)
       else :
         # Compute output
         backdoored_image, logits = net1(test_images)
