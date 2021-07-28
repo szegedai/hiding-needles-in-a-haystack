@@ -163,6 +163,37 @@ class BackdoorDetectNetworkSlimArpi(nn.Module) :
     out = self.classifier(avgpool.view(batch_size,-1))
     return out
 
+class BackdoorDetectNetworkWideArpi(nn.Module) :
+  def __init__(self, image_shape, color_channel=3):
+    super(BackdoorDetectNetworkWideArpi, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
+    self.H1 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0], image_shape[1]))
+    self.classifier = nn.Sequential(
+      nn.Linear(50, 50),
+      nn.ReLU(),
+      nn.Linear(50, 50),
+      nn.ReLU(),
+      nn.Linear(50, 1)
+    )
+
+  def forward(self, h) :
+    batch_size = h.shape[0]
+    h1 = self.H1(h)
+    avgpool = self.global_avg_pool2d(h1)
+    out = self.classifier(avgpool.view(batch_size,-1))
+    return out
+
+
 class BackdoorInjectNetworkArpi(nn.Module) :
   def __init__(self, image_shape, color_channel=3):
     super(BackdoorInjectNetworkArpi, self).__init__()
@@ -409,6 +440,7 @@ class Net(nn.Module):
 
 DETECTORS = {'detdeepstegano': BackdoorDetectNetworkDeepStegano,
              'detslimarpi': BackdoorDetectNetworkSlimArpi,
+             'detwidearpi': BackdoorDetectNetworkWideArpi,
              'detslimmegyeri': BackdoorDetectNetworkSlimMegyeri,
              'detwidemegyeri': BackdoorDetectNetworkWideMegyeri}
 GENERATORS = {'genwidemegyeri': BackdoorInjectNetworkWideMegyeri,
