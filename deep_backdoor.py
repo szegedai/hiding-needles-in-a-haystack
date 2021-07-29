@@ -41,8 +41,10 @@ LINF_EPS = 8.0/255.0
 L2_EPS = 0.5
 
 LOSSES = ["lossbyadd","lossbyaddmegyeri","lossbyaddarpi","simple"]
+TRAINS_ON = ["normal","jpeged","noised","jpeg&noise","jpeg&noise&normal"]
+SCENARIOS = ["normal","jpeged","realjpeg"]
 
-CRITERION_GENERATOR = nn.MSELoss()
+CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
 #CRITERION_DETECT = nn.BCELoss()
 CRITERION_DETECT = nn.BCEWithLogitsLoss()
 
@@ -64,8 +66,7 @@ def generator_loss_by_megyeri(backdoored_image, image, L) :
   return loss_injection
 
 def generator_loss_by_arpi(backdoored_image, image, L) :
-  loss_injection = CRITERION_GENERATOR(backdoored_image, image) + \
-                   linf_penalty(backdoored_image - image, linf_lambda=L * LINF_MODIFIER)
+  loss_injection = torch.sqrt(CRITERION_GENERATOR(backdoored_image, image)+1e-8)
   return loss_injection
 
 def detector_loss(logits,targetY) :
@@ -128,6 +129,38 @@ def saveImages(images, filename_postfix) :
       img = tensor_to_image(denormalized_images[i])
       img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".png"))
 
+def saveImagesAsJpeg(images, filename_postfix, quality=75 ) :
+  #denormalized_images = (denormalize(images=images, color_channel=color_channel[dataset], std=std[dataset], mean=mean[dataset]) * 255).byte()
+  denormalized_images = (images*255).byte()
+  if color_channel[dataset] == 1 :
+    denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
+    for i in range(0, denormalized_images.shape[0]):
+      img = Image.fromarray(denormalized_images[i, 0], "L")
+      img.save(os.path.join(IMAGE_PATH, dataset+"_"+filename_postfix+"_" + str(i) + ".jpeg"), format='JPEG', quality=quality)
+  elif color_channel[dataset] == 3 :
+    for i in range(0, denormalized_images.shape[0]):
+      tensor_to_image = transforms.ToPILImage()
+      img = tensor_to_image(denormalized_images[i])
+      img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg"), format='JPEG', quality=quality)
+
+def openJpegImages(num_of_images, filename_postfix) :
+  loader = transforms.Compose([transforms.ToTensor()])
+  opened_image_tensors = torch.empty(0,color_channel[dataset],image_shape[dataset][0],image_shape[dataset][1])
+  for i in range(0, num_of_images) :
+    if color_channel[dataset] == 1  :
+      opened_image = Image.open(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")).convert('L')
+    elif color_channel[dataset] == 3  :
+      opened_image = Image.open(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")).convert('RGB')
+    opened_image_tensor = loader(opened_image).unsqueeze(0)
+    opened_image_tensors = torch.cat((opened_image_tensors,opened_image_tensor),0)
+  return opened_image_tensors
+
+def removeImages(num_of_images, filename_postfix) :
+  for i in range(0, num_of_images):
+    fileName = os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")
+    if os.path.exists(fileName):
+      os.remove(fileName)
+
 def saveImage(image, filename_postfix) :
   denormalized_images = (image * 255).byte()
   if color_channel[dataset] == 1:
@@ -140,7 +173,7 @@ def saveImage(image, filename_postfix) :
     img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
 
 
-def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step, reg_start, learning_rate, device):
+def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, beta, l, l_step, reg_start, learning_rate, device):
   # Save optimizer
   if loss_mode == "simple" :
     optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
@@ -204,50 +237,72 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
         loss_detector.backward()
         optimizer_detector.step()
         train_loss = loss_generator + loss_detector
-      elif loss_mode == "lossbyaddmegyeri":
-        targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-        targetY = targetY.to(device)
+      else:
         # Forward + Backward + Optimize
         optimizer.zero_grad()
-        backdoored_image, logits = net1(train_images)
-
+        # ["normal","jpeged","noised","jpeg&noise","jpeg&noise&normal"]
+        if train_scope == "normal" :
+          targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+          targetY = targetY.to(device)
+          backdoored_image = net1.generator(train_images)
+          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+          next_input = torch.cat((backdoored_image,train_images),0)
+          logits = net1.detector(next_input)
+        elif train_scope == "jpeged" :
+          targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+          targetY = targetY.to(device)
+          backdoored_image = net1.generator(train_images)
+          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+          jpeged_image = net1.jpeg(train_images)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image)
+          next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
+          logits = net1.detector(next_input)
+        elif train_scope == "noised" :
+          targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+          targetY = targetY.to(device)
+          backdoored_image = net1.generator(train_images)
+          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image, net1.n_mean, net1.n_stddev)
+          next_input = torch.cat((backdoored_image_with_noise, image_with_noise),0)
+          logits = net1.detector(next_input)
+        elif train_scope == "jpeg&noise":
+          targetY_backdoored_noise = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
+          targetY_original_noise = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
+          targetY = torch.cat((targetY_backdoored, targetY_backdoored_noise, targetY_original, targetY_original_noise),0)
+          targetY = targetY.to(device)
+          backdoored_image = net1.generator(train_images)
+          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image, net1.n_mean, net1.n_stddev)
+          jpeged_image = net1.jpeg(train_images)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image)
+          next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise, jpeged_image, image_with_noise), 0)
+          logits = net1.detector(next_input)
+        else :
+          # "jpeg&noise&normal"
+          targetY_backdoored_jpeged = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
+          targetY_original_jpeged = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
+          targetY_backdoored_noise = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
+          targetY_original_noise = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
+          targetY = torch.cat((targetY_backdoored, targetY_backdoored_jpeged, targetY_backdoored_noise,
+                               targetY_original, targetY_original_jpeged, targetY_original_noise),0)
+          targetY = targetY.to(device)
+          backdoored_image = net1.generator(train_images)
+          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image, net1.n_mean, net1.n_stddev)
+          jpeged_image = net1.jpeg(train_images)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image)
+          next_input = torch.cat((backdoored_image, jpeged_backdoored_image, backdoored_image_with_noise,
+                                  train_images, jpeged_image, image_with_noise),0)
+          logits = net1.detector(next_input)
         # Calculate loss and perform backprop
-        train_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, train_images, targetY, B=beta, L=L)
+        if loss_mode == "lossbyaddmegyeri":
+          train_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, train_images, targetY, B=beta, L=L)
+        elif loss_mode == "lossbyaddarpi" :
+          train_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, train_images, targetY, B=beta, L=L)
+        else :
+          train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, B=beta, L=L)
         train_loss.backward()
         optimizer.step()
-      elif loss_mode == "lossbyaddarpi":
-        targetY_backdoored_noise = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
-        targetY_original_noise = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
-
-        targetY = torch.cat((targetY_backdoored, targetY_backdoored_noise, targetY_original, targetY_original_noise), 0)
-        targetY = targetY.to(device)
-        # Forward + Backward + Optimize
-        optimizer.zero_grad()
-        backdoored_image =  net1.generator(train_images)
-        backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-        image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image, net1.n_mean, net1.n_stddev)
-        jpeged_image = net1.jpeg(train_images)
-        jpeged_backdoored_image = net1.jpeg(backdoored_image)
-        next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise, jpeged_image, image_with_noise), 0)
-        logits = net1.detector(next_input)
-
-        # Calculate loss and perform backprop
-        train_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, train_images, targetY, B=beta, L=L)
-        train_loss.backward()
-        optimizer.step()
-      else :
-        targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-        targetY = targetY.to(device)
-        # Forward + Backward + Optimize
-        optimizer.zero_grad()
-        backdoored_image, logits = net1(train_images)
-
-        # Calculate loss and perform backprop
-        train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, B=beta, L=L)
-        train_loss.backward()
-        optimizer.step()
-
-
 
       # Saves training loss
       train_losses.append(train_loss.data.cpu())
@@ -294,7 +349,7 @@ def train_model(net1, net2, train_loader, num_epochs, loss_mode, beta, l, l_step
   return net1, net2, mean_train_loss, loss_history
 
 
-def test_model(net1, net2, test_loader, loss_mode, beta, l, device):
+def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, jpeg_q=75):
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
@@ -345,24 +400,33 @@ def test_model(net1, net2, test_loader, loss_mode, beta, l, device):
         loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, l)
         loss_detector = detector_loss(logits, targetY)
         test_loss = loss_generator + loss_detector
-      elif loss_mode == "lossbyaddmegyeri" :
-        # Compute output
-        backdoored_image, logits = net1(test_images)
-        # Calculate loss
-        test_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, test_images, targetY, B=beta, L=l)
-      elif loss_mode == "lossbyaddarpi" :
-        # Compute output
+      else :
         backdoored_image = net1.generator(test_images)
         backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-        next_input = torch.cat((backdoored_image,test_images),0)
+        # SCENARIOS = ["normal","jpeged","realjpeg"]
+        if scenario == "realjpeg" :
+          saveImagesAsJpeg(backdoored_image,"tmpBckdr",jpeg_q)
+          opened_real_jpeged_backdoored_image = openJpegImages(backdoored_image.shape[0],"tmpBckdr")
+          saveImagesAsJpeg(test_images,"tmpOrig",jpeg_q)
+          opened_real_jpeged_original_image = openJpegImages(test_images.shape[0],"tmpOrig")
+          next_input = torch.cat((opened_real_jpeged_backdoored_image, opened_real_jpeged_original_image), 0)
+          removeImages(backdoored_image.shape[0],"tmpBckdr")
+          removeImages(test_images.shape[0],"tmpOrig")
+        elif scenario == "jpeged" :
+          jpeged_image = net1.jpeg(test_images)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image)
+          next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
+        else :
+          next_input = torch.cat((backdoored_image, test_images), 0)
         logits = net1.detector(next_input)
+
         # Calculate loss
-        test_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, test_images, targetY, B=beta, L=l)
-      else :
-        # Compute output
-        backdoored_image, logits = net1(test_images)
-        # Calculate loss
-        test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, B=beta, L=l)
+        if loss_mode == "lossbyaddmegyeri" :
+          test_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, test_images, targetY, B=beta, L=l)
+        elif loss_mode == "lossbyaddarpi" :
+          test_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, test_images, targetY, B=beta, L=l)
+        else :
+          test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, B=beta, L=l)
 
       predY = torch.sigmoid(logits)
       test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
@@ -469,11 +533,14 @@ parser.add_argument('--detector', type=str, default="NOPE")
 parser.add_argument("--model_det", type=str, help="|".join(DETECTORS.keys()), default='detwidemegyeri')
 parser.add_argument("--model_gen", type=str, help="|".join(GENERATORS.keys()), default='genbnmegyeri')
 parser.add_argument("--loss_mode", type=str, help="|".join(LOSSES), default="lossbyadd")
+parser.add_argument("--scenario", type=str, help="|".join(SCENARIOS), default="withoutjpeg")
+parser.add_argument("--train_scope", type=str, help="|".join(TRAINS_ON), default="normal")
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--regularization_start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--beta', type=int, default=1)
+parser.add_argument('--jpeg_q', type=int, default=75)
 parser.add_argument("--l", type=float, default=0.1)
 parser.add_argument("--l_step", type=int, default=1)
 parser.add_argument('--trials', type=int, default=1)
@@ -482,7 +549,7 @@ parser.add_argument('--steps', type=int, default=40)
 parser.add_argument('--eps', type=float, default=0.1)
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--n_mean', type=float, default=0.0)
-parser.add_argument('--n_stddev', type=float, default=0.1)
+parser.add_argument('--n_stddev', type=float, default=1.0/255.0)
 params = parser.parse_args()
 
 # Hyper Parameters
@@ -524,13 +591,13 @@ if params.loss_mode == "simple" :
   detector.to(device)
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
-  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
 
-  mean_test_loss = test_model(generator, detector, test_loader, params.loss_mode, beta=beta, l=last_l, device=device)
+  mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q)
 else :
-  net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev)
+  net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q, device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
-  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
-  mean_test_loss = test_model(net, None, test_loader, params.loss_mode, beta=beta, l=last_l, device=device)
+  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+  mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q)

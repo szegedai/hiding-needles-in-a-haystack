@@ -412,10 +412,10 @@ def gaussian(tensor_data, device, mean=0, stddev=0.1):
   return Variable(tensor_data + noise)
 
 class Net(nn.Module):
-  def __init__(self, gen_holder, det_holder, image_shape, device, color_channel, n_mean=0, n_stddev=0.1):
+  def __init__(self, gen_holder, det_holder, image_shape, color_channel, jpeg_q, device, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
     self.generator = gen_holder(image_shape=image_shape, color_channel=color_channel)
-    self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=75)
+    self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=jpeg_q)
     self.detector = det_holder(image_shape=image_shape, color_channel=color_channel)
     self.device = device
     self.image_shape = image_shape
