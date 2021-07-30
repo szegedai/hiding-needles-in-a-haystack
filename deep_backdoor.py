@@ -153,6 +153,7 @@ def openJpegImages(num_of_images, filename_postfix) :
       opened_image = Image.open(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")).convert('RGB')
     opened_image_tensor = loader(opened_image).unsqueeze(0)
     opened_image_tensors = torch.cat((opened_image_tensors,opened_image_tensor),0)
+  opened_image_tensors = opened_image_tensors.to(device)
   return opened_image_tensors
 
 def removeImages(num_of_images, filename_postfix) :

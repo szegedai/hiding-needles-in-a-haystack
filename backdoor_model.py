@@ -415,7 +415,7 @@ class Net(nn.Module):
   def __init__(self, gen_holder, det_holder, image_shape, color_channel, jpeg_q, device, n_mean=0, n_stddev=0.1):
     super(Net, self).__init__()
     self.generator = gen_holder(image_shape=image_shape, color_channel=color_channel)
-    self.jpeg = DiffJPEG(image_shape[0],image_shape[0],differentiable=True,quality=jpeg_q)
+    self.jpeg = DiffJPEG(image_shape[0],image_shape[1],differentiable=True,quality=jpeg_q)
     self.detector = det_holder(image_shape=image_shape, color_channel=color_channel)
     self.device = device
     self.image_shape = image_shape
