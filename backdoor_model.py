@@ -387,7 +387,11 @@ class BackdoorDetectNetworkDeepStegano(nn.Module) :
       nn.ReLU())
     self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0], image_shape[1]))
     self.classifier =  nn.Sequential(
-      nn.Linear(150,1)
+      nn.Linear(150,1500),
+      nn.ReLU(),
+      nn.Linear(1500, 1500),
+      nn.ReLU(),
+      nn.Linear(1500, 1),
     )
 
   def forward(self, h):
