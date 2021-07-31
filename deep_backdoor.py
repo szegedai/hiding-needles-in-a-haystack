@@ -41,7 +41,7 @@ LINF_EPS = 8.0/255.0
 L2_EPS = 0.5
 
 LOSSES = ["lossbyadd","lossbyaddmegyeri","lossbyaddarpi","simple"]
-TRAINS_ON = ["normal","jpeged","noised","jpeg&noise","jpeg&noise&normal"]
+TRAINS_ON = ["normal","jpeged","noised","jpeg&noise","jpeg&normal","jpeg&noise&normal"]
 SCENARIOS = ["normal","jpeged","realjpeg"]
 
 CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
@@ -277,6 +277,19 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
           jpeged_image = net1.jpeg(train_images)
           jpeged_backdoored_image = net1.jpeg(backdoored_image)
           next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise, jpeged_image, image_with_noise), 0)
+          logits = net1.detector(next_input)
+        elif train_scope == "jpeg&normal" :
+          targetY_backdoored_jpeged = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
+          targetY_original_jpeged = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
+          targetY = torch.cat((targetY_backdoored, targetY_backdoored_jpeged,
+                               targetY_original, targetY_original_jpeged),0)
+          targetY = targetY.to(device)
+          backdoored_image = net1.generator(train_images)
+          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+          jpeged_image = net1.jpeg(train_images)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image)
+          next_input = torch.cat((backdoored_image, jpeged_backdoored_image,
+                                  train_images, jpeged_image), 0)
           logits = net1.detector(next_input)
         else :
           # "jpeg&noise&normal"
