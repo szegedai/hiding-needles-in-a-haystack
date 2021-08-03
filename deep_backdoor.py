@@ -222,15 +222,15 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
         # Forward + Backward + Optimize
         optimizer_generator.zero_grad()
         backdoored_image = net1(train_images)
-        backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
         # Calculate loss and perform backprop
         loss_generator = generator_loss(backdoored_image, train_images, L)
         loss_generator.backward()
         optimizer_generator.step()
 
         optimizer_detector.zero_grad()
-        backdoored_image = Variable(backdoored_image, requires_grad=False)
-        jpeged_backdoored_image = jpeg(backdoored_image)
+        backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+        backdoored_image_clipped = Variable(backdoored_image_clipped, requires_grad=False)
+        jpeged_backdoored_image = jpeg(backdoored_image_clipped)
         jpeged_image = jpeg(train_images)
         next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
         logits = net2(next_input)
@@ -246,24 +246,24 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
           targetY = torch.cat((targetY_backdoored, targetY_original), 0)
           targetY = targetY.to(device)
           backdoored_image = net1.generator(train_images)
-          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-          next_input = torch.cat((backdoored_image,train_images),0)
+          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+          next_input = torch.cat((backdoored_image_clipped,train_images),0)
           logits = net1.detector(next_input)
         elif train_scope == "jpeged" :
           targetY = torch.cat((targetY_backdoored, targetY_original), 0)
           targetY = targetY.to(device)
           backdoored_image = net1.generator(train_images)
-          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
           jpeged_image = net1.jpeg(train_images)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
           next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
           logits = net1.detector(next_input)
         elif train_scope == "noised" :
           targetY = torch.cat((targetY_backdoored, targetY_original), 0)
           targetY = targetY.to(device)
           backdoored_image = net1.generator(train_images)
-          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image, net1.n_mean, net1.n_stddev)
+          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
           next_input = torch.cat((backdoored_image_with_noise, image_with_noise),0)
           logits = net1.detector(next_input)
         elif train_scope == "jpeg&noise":
@@ -272,10 +272,10 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
           targetY = torch.cat((targetY_backdoored, targetY_backdoored_noise, targetY_original, targetY_original_noise),0)
           targetY = targetY.to(device)
           backdoored_image = net1.generator(train_images)
-          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image, net1.n_mean, net1.n_stddev)
+          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
           jpeged_image = net1.jpeg(train_images)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
           next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise, jpeged_image, image_with_noise), 0)
           logits = net1.detector(next_input)
         elif train_scope == "jpeg&normal" :
@@ -285,10 +285,10 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
                                targetY_original, targetY_original_jpeged),0)
           targetY = targetY.to(device)
           backdoored_image = net1.generator(train_images)
-          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
           jpeged_image = net1.jpeg(train_images)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image)
-          next_input = torch.cat((backdoored_image, jpeged_backdoored_image,
+          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+          next_input = torch.cat((backdoored_image_clipped, jpeged_backdoored_image,
                                   train_images, jpeged_image), 0)
           logits = net1.detector(next_input)
         else :
@@ -301,11 +301,11 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
                                targetY_original, targetY_original_jpeged, targetY_original_noise),0)
           targetY = targetY.to(device)
           backdoored_image = net1.generator(train_images)
-          backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image, net1.n_mean, net1.n_stddev)
+          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
           jpeged_image = net1.jpeg(train_images)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image)
-          next_input = torch.cat((backdoored_image, jpeged_backdoored_image, backdoored_image_with_noise,
+          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+          next_input = torch.cat((backdoored_image_clipped, jpeged_backdoored_image, backdoored_image_with_noise,
                                   train_images, jpeged_image, image_with_noise),0)
           logits = net1.detector(next_input)
         # Calculate loss and perform backprop
@@ -321,9 +321,9 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
       # Saves training loss
       train_losses.append(train_loss.data.cpu())
       loss_history.append(train_loss.data.cpu())
-      dif_image = backdoored_image - train_images
+      dif_image = backdoored_image_clipped - train_images
       linf = torch.norm(torch.abs(dif_image), p=float("inf"), dim=(1,2,3))
-      backdoored_image_color_view = backdoored_image.view(backdoored_image.shape[0], -1)
+      backdoored_image_color_view = backdoored_image_clipped.view(backdoored_image_clipped.shape[0], -1)
       train_image_color_view = train_images.view(train_images.shape[0], -1)
       l2 = torch.norm(backdoored_image_color_view - train_image_color_view, p=2, dim=1)
 
@@ -404,8 +404,8 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, jp
       if loss_mode == "simple" :
         # Compute output
         backdoored_image = net1(test_images)
-        backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-        jpeged_backdoored_image = jpeg(backdoored_image)
+        backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+        jpeged_backdoored_image = jpeg(backdoored_image_clipped)
         jpeged_image = jpeg(test_images)
         next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
         logits = net2(next_input)
@@ -416,22 +416,22 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, jp
         test_loss = loss_generator + loss_detector
       else :
         backdoored_image = net1.generator(test_images)
-        backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
+        backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
         # SCENARIOS = ["normal","jpeged","realjpeg"]
         if scenario == "realjpeg" :
-          saveImagesAsJpeg(backdoored_image,"tmpBckdr",jpeg_q)
-          opened_real_jpeged_backdoored_image = openJpegImages(backdoored_image.shape[0],"tmpBckdr")
+          saveImagesAsJpeg(backdoored_image_clipped,"tmpBckdr",jpeg_q)
+          opened_real_jpeged_backdoored_image = openJpegImages(backdoored_image_clipped.shape[0],"tmpBckdr")
           saveImagesAsJpeg(test_images,"tmpOrig",jpeg_q)
           opened_real_jpeged_original_image = openJpegImages(test_images.shape[0],"tmpOrig")
           next_input = torch.cat((opened_real_jpeged_backdoored_image, opened_real_jpeged_original_image), 0)
-          removeImages(backdoored_image.shape[0],"tmpBckdr")
+          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
           removeImages(test_images.shape[0],"tmpOrig")
         elif scenario == "jpeged" :
           jpeged_image = net1.jpeg(test_images)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
           next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
         else :
-          next_input = torch.cat((backdoored_image, test_images), 0)
+          next_input = torch.cat((backdoored_image_clipped, test_images), 0)
         logits = net1.detector(next_input)
 
         # Calculate loss

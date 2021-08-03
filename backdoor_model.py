@@ -21,8 +21,7 @@ class BackdoorInjectNetworkWideMegyeri(nn.Module) :
     h1 = self.H1(h)
     h2 = self.H2(h1)
     final = torch.add(h,h2)
-    out = torch.clamp(final, 0.0, 1.0)
-    return out
+    return final
 
 
 class BackdoorInjectNetworkWidePrepMegyeri(nn.Module) :
@@ -80,8 +79,7 @@ class BackdoorInjectNetworkBottleNeckMegyeri(nn.Module) :
     h1 = self.H1(h)
     h2 = self.H2(h1)
     final = torch.add(h,h2)
-    out = torch.clamp(final, 0.0, 1.0)
-    return out
+    return final
 
 
 class BackdoorDetectNetworkSlimMegyeri(nn.Module) :
@@ -210,25 +208,12 @@ class BackdoorInjectNetworkArpi(nn.Module) :
       nn.ReLU())
     self.H2 = nn.Sequential(
       nn.Conv2d(50, color_channel, kernel_size=1, padding=0))
-    self.H3 = nn.Sequential(
-      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU(),
-      nn.Conv2d(50, 50, kernel_size=3, padding=1),
-      nn.ReLU())
-    self.H4 = nn.Sequential(
-      nn.Conv2d(50, color_channel, kernel_size=1, padding=0))
 
   def forward(self, h) :
     h1 = self.H1(h)
     h2 = self.H2(h1)
     mid = torch.add(h,h2)
-    h3 = self.H3(mid)
-    out = self.H4(h3)
-    return out
+    return mid
 
 class BackdoorInjectNetworkDeepStegano(nn.Module) :
   def __init__(self, image_shape, color_channel=3):
@@ -275,6 +260,7 @@ class BackdoorInjectNetworkDeepStegano(nn.Module) :
       nn.ReLU())
     self.midH = nn.Sequential(
       nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
+    '''
     self.initialH3 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
       nn.ReLU(),
@@ -315,6 +301,7 @@ class BackdoorInjectNetworkDeepStegano(nn.Module) :
       nn.ReLU())
     self.finalH = nn.Sequential(
       nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
+    '''
 
   def forward(self, h):
     p1 = self.initialH0(h)
@@ -326,7 +313,8 @@ class BackdoorInjectNetworkDeepStegano(nn.Module) :
     p6 = self.midH2(pmid)
     pmid2 = torch.cat((p4, p5, p6), 1)
     pfinal = self.midH(pmid2)
-    hmid = torch.add(h,pfinal)     
+    hmid = torch.add(h,pfinal)
+    '''
     h1 = self.initialH3(hmid)
     h2 = self.initialH4(hmid)
     h3 = self.initialH5(hmid)
@@ -336,11 +324,8 @@ class BackdoorInjectNetworkDeepStegano(nn.Module) :
     h6 = self.finalH5(mid)
     mid2 = torch.cat((h4, h5, h6), 1)
     final = self.finalH(mid2)
-    #out = torch.clamp(final, 0.0, 1.0)
-    #out_noise = gaussian(tensor_data=out.data, device=self.device, mean=self.n_mean, stddev=self.n_stddev)
-    return final
-
-
+    '''
+    return hmid
 
 class BackdoorDetectNetworkDeepStegano(nn.Module) :
   def __init__(self,  image_shape, color_channel=3):
@@ -430,9 +415,9 @@ class Net(nn.Module):
 
   def forward(self, image):
     backdoored_image = self.generator(image)
-    backdoored_image = torch.clamp(backdoored_image, 0.0, 1.0)
-    #image_with_noise, backdoored_image_with_noise = self.make_noised_images(image, backdoored_image, self.n_mean, self.n_stddev)
-    jpeged_backdoored_image = self.jpeg(backdoored_image)
+    backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+    #image_with_noise, backdoored_image_with_noise = self.make_noised_images(image, backdoored_image_clipped, self.n_mean, self.n_stddev)
+    jpeged_backdoored_image = self.jpeg(backdoored_image_clipped)
     jpeged_image = self.jpeg(image)
     next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
     logits = self.detector(next_input)
