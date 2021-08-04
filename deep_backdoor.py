@@ -339,7 +339,8 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
           targetY = targetY.to(device)
           backdoored_image = net1.generator(train_images)
           backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
+          backdoored_image_l2_linf_clipped = l2_linf_clip(backdoored_image_clipped, train_images, l2_epsilon_clip, linf_epsilon_clip, device)
+          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_l2_linf_clipped, net1.n_mean, net1.n_stddev)
           jpeged_image = net1.jpeg(train_images)
           jpeged_backdoored_image = net1.jpeg(backdoored_image_l2_linf_clipped)
           next_input = torch.cat((backdoored_image_l2_linf_clipped, jpeged_backdoored_image, backdoored_image_with_noise,
