@@ -70,10 +70,8 @@ def generator_loss_by_arpi(backdoored_image, image, L) :
   return loss_injection
 
 def loss_only_detector(logits, targetY) :
-  loss_injection = torch.zeros(1)
   loss_detect = detector_loss(logits, targetY)
-  loss_all = loss_detect
-  return loss_all, loss_injection, loss_detect
+  return loss_detect
 
 def detector_loss(logits,targetY) :
   loss_detect = CRITERION_DETECT(logits, targetY)
@@ -347,7 +345,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
         elif loss_mode == "lossbyaddarpi" :
           train_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, train_images, targetY, B=beta, L=L)
         elif loss_mode == "onlydetectorloss" :
-          train_loss, loss_generator, loss_detector = loss_only_detector(logits, targetY)
+          train_loss = loss_only_detector(logits, targetY)
         else :
           train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, B=beta, L=L)
         train_loss.backward()
@@ -369,13 +367,17 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
       l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0], -1) - denormalized_train_images.view(denormalized_train_images.shape[0], -1)), p=2, dim=1)).item()
       '''
       # Prints mini-batch losses
-      print('Training: Batch {0}/{1}. Loss of {2:.5f}, injection loss of {3:.5f}, detect loss of {4:.5f},'
-            ' backdoor l2 min: {5:.3f}, avg: {6:.3f}, max: {7:.3f}, backdoor linf'
-            ' min: {8:.3f}, avg: {9:.3f}, max: {10:.3f}'.format(
+      if loss_mode == "onlydetectorloss" :
+        print('Training: Batch {0}/{1}. Loss of {2:.5f}'.format(
+              idx + 1, len(train_loader), train_loss.data, end=''))
+      else :
+        print('Training: Batch {0}/{1}. Loss of {2:.5f}, injection loss of {3:.5f}, detect loss of {4:.5f},'.format(
+              idx + 1, len(train_loader), train_loss.data, loss_generator.data, loss_detector.data, end=''))
+      print(' backdoor l2 min: {1:.3f}, avg: {2:.3f}, max: {3:.3f}, backdoor linf'
+            ' min: {4:.3f}, avg: {5:.3f}, max: {6:.3f}'.format(
         idx + 1, len(train_loader), train_loss.data, loss_generator.data, loss_detector.data,
         torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
         torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
-
     #train_images_np = train_images.numpy
     if loss_mode == "simple" :
       torch.save(net1.state_dict(), MODELS_PATH + 'Epoch_' + dataset + 'G_N{}.pkl'.format(epoch + 1))
