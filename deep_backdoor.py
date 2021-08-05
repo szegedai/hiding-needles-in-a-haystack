@@ -70,7 +70,7 @@ def generator_loss_by_arpi(backdoored_image, image, L) :
   return loss_injection
 
 def loss_only_detector(logits, targetY) :
-  loss_injection = 0.0
+  loss_injection = torch.zeros(1)
   loss_detect = detector_loss(logits, targetY)
   loss_all = loss_detect
   return loss_all, loss_injection, loss_detect
