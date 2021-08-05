@@ -37,7 +37,7 @@ mean['MNIST'] = [0.13092535192648502]
 image_shape['MNIST'] = [28, 28]
 color_channel['MNIST'] = 1
 
-LINF_EPS = 8.0/255.0
+LINF_EPS = (8.0/255.0) + 0.00001
 L2_EPS = 0.5
 
 LOSSES = ["onlydetectorloss","lossbyadd","lossbyaddl2p","lossbyaddmegyeri","lossbyaddarpi","simple"]
@@ -174,11 +174,10 @@ def saveImage(image, filename_postfix) :
     img = tensor_to_image(denormalized_images)
     img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
 
-def linf_clip(backdoored_image, original_images, linf_epsilon_clip, device) :
+def linf_clip(backdoored_image, original_images, linf_epsilon_clip) :
   diff_image = backdoored_image - original_images
   diff_image_clipped = torch.clamp(diff_image, -linf_epsilon_clip, linf_epsilon_clip)
-  clipped_inf = diff_image - diff_image_clipped
-  linf_clipped_backdoor = backdoored_image - clipped_inf
+  linf_clipped_backdoor = original_images + diff_image_clipped
   #diff_image_linf = linf_clipped_backdoor - original_images
   return linf_clipped_backdoor
 
@@ -474,8 +473,8 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         backdoored_image = net1.generator(test_images)
         backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
         if "clipl2linf" in scenario :
-          backdoored_image_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
-          backdoored_image_clipped = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip, device)
+          backdoored_image_l2_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
+          backdoored_image_clipped = linf_clip(backdoored_image_l2_clipped, test_images, linf_epsilon_clip)
         # ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2linf","jpeged;clipl2linf","realjpeg;clipl2linf"]
         if "realjpeg" in scenario :
           saveImagesAsJpeg(backdoored_image_clipped,"tmpBckdr",jpeg_q)
@@ -548,8 +547,8 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
       min_l2 = min(min_l2, torch.min(l2).item())
       mean_linf += torch.mean(linf).item()
       mean_l2 += torch.mean(l2).item()
-      mean_linf_in_eps += torch.mean( (linf < LINF_EPS).float() ).item()
-      mean_l2_in_eps += torch.mean( (l2 < L2_EPS).float() ).item()
+      mean_linf_in_eps += torch.mean( (linf <= LINF_EPS).float() ).item()
+      mean_l2_in_eps += torch.mean( (l2 <= L2_EPS).float() ).item()
 
 
 
