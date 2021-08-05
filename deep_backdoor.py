@@ -187,19 +187,17 @@ def l2_linf_clip(backdoored_image, original_images, l2_epsilon_clip, linf_epsilo
   diff_image_square = torch.square(diff_image)
   diff_image_square_sum = torch.sum(torch.square(diff_image), dim=(1, 2, 3))
   diff_image_square_sum_l2_to_be_deleted = diff_image_square_sum - torch.square(l2_to_be_deleted)
-  diff_image_square_sum_l2_divider = 1 - (diff_image_square_sum_l2_to_be_deleted / diff_image_square_sum)
+  diff_image_square_sum_l2_divider = torch.sqrt(1 - (diff_image_square_sum_l2_to_be_deleted / diff_image_square_sum))
   i = 0
   for l2_divider in diff_image_square_sum_l2_divider :
-    diff_image_square[i] = diff_image_square[i] * l2_divider
+    diff_image[i] = diff_image[i] * l2_divider
     i += 1
-  l2_clip = torch.sign(diff_image)*torch.sqrt(diff_image_square)
-  clipped_l2 = diff_image - l2_clip
-  l2_clipped_backdoor = backdoored_image - clipped_l2
-  diff_image_l2 = l2_clipped_backdoor - original_images
+  l2_clipped_backdoor = original_images + diff_image
+  #diff_image_l2 = l2_clipped_backdoor - original_images
   #new_l2 = torch.sqrt(torch.sum(torch.square(diff_image_l2), dim=(1, 2, 3)))
 
-  diff_image_clipped = torch.clamp(diff_image_l2, -linf_epsilon_clip, linf_epsilon_clip)
-  clipped_inf = diff_image_l2 - diff_image_clipped
+  diff_image_clipped = torch.clamp(diff_image, -linf_epsilon_clip, linf_epsilon_clip)
+  clipped_inf = diff_image - diff_image_clipped
   linf_clipped_backdoor = l2_clipped_backdoor - clipped_inf
   diff_image_l2_linf = linf_clipped_backdoor - original_images
   return linf_clipped_backdoor
