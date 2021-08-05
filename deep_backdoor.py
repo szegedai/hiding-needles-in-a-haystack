@@ -40,7 +40,7 @@ color_channel['MNIST'] = 1
 LINF_EPS = 8.0/255.0
 L2_EPS = 0.5
 
-LOSSES = ["onlydetectorloss","lossbyadd","lossbyaddmegyeri","lossbyaddarpi","simple"]
+LOSSES = ["onlydetectorloss","lossbyadd","lossbyaddl2p","lossbyaddmegyeri","lossbyaddarpi","simple"]
 TRAINS_ON = ["normal","jpeged","noised","jpeg&noise","jpeg&normal","jpeg&noise&normal"]
 SCENARIOS = ["normal","jpeged","realjpeg"]
 
@@ -59,13 +59,17 @@ def generator_loss(backdoored_image, image, L) :
                    linf_penalty(backdoored_image - image, linf_lambda=L * LINF_MODIFIER)
   return loss_injection
 
+def generator_loss_l2_penalty(backdoored_image, image, L) :
+  loss_injection = l2_penalty(backdoored_image - image, l2_lambda=L)
+  return loss_injection
+
 def generator_loss_by_megyeri(backdoored_image, image, L) :
   loss_injection = l1_penalty(backdoored_image - image, l1_lambda=L * L1_MODIFIER) + \
                    l2_penalty(backdoored_image - image, l2_lambda=L * L2_MODIFIER) + \
                    linf_penalty(backdoored_image - image, linf_lambda=L * LINF_MODIFIER)
   return loss_injection
 
-def generator_loss_by_arpi(backdoored_image, image, L) :
+def generator_loss_by_arpi(backdoored_image, image) :
   loss_injection = torch.sqrt(CRITERION_GENERATOR(backdoored_image, image)+1e-8)
   return loss_injection
 
@@ -77,20 +81,15 @@ def detector_loss(logits,targetY) :
   loss_detect = CRITERION_DETECT(logits, targetY)
   return loss_detect
 
-def loss_by_add(backdoored_image, logits, image, targetY, B, L):
-  loss_injection = generator_loss(backdoored_image,image,L)
-  loss_detect = detector_loss(logits,targetY)
-  loss_all = loss_injection + B * loss_detect
-  return loss_all, loss_injection, loss_detect
-
-def loss_by_add_by_megyeri(backdoored_image, logits, image, targetY, B, L):
-  loss_injection = generator_loss_by_megyeri(backdoored_image,image,L)
-  loss_detect = detector_loss(logits,targetY)
-  loss_all = loss_injection + B * loss_detect
-  return loss_all, loss_injection, loss_detect
-
-def loss_by_add_by_arpi(backdoored_image, logits, image, targetY, B, L):
-  loss_injection = generator_loss_by_arpi(backdoored_image,image,L)
+def loss_by_add(backdoored_image, logits, image, targetY, loss_mode, B, L):
+  if loss_mode == "lossbyaddarpi" :
+    loss_injection = generator_loss_by_arpi(backdoored_image, image)
+  elif loss_mode == "lossbyaddmegyeri" :
+    loss_injection = generator_loss_by_megyeri(backdoored_image, image, L)
+  elif loss_mode == "lossbyaddl2p" :
+    loss_injection = generator_loss_l2_penalty(backdoored_image, image, L)
+  else :
+    loss_injection = generator_loss(backdoored_image,image,L)
   loss_detect = detector_loss(logits,targetY)
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
@@ -340,14 +339,10 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
                                   train_images, jpeged_image, image_with_noise),0)
           logits = net1.detector(next_input)
         # Calculate loss and perform backprop
-        if loss_mode == "lossbyaddmegyeri":
-          train_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, train_images, targetY, B=beta, L=L)
-        elif loss_mode == "lossbyaddarpi" :
-          train_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, train_images, targetY, B=beta, L=L)
-        elif loss_mode == "onlydetectorloss" :
+        if loss_mode == "onlydetectorloss" :
           train_loss = loss_only_detector(logits, targetY)
         else :
-          train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, B=beta, L=L)
+          train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, loss_mode, B=beta, L=L)
         train_loss.backward()
         optimizer.step()
 
@@ -473,12 +468,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         logits = net1.detector(next_input)
 
         # Calculate loss
-        if loss_mode == "lossbyaddmegyeri" :
-          test_loss, loss_generator, loss_detector = loss_by_add_by_megyeri(backdoored_image, logits, test_images, targetY, B=beta, L=l)
-        elif loss_mode == "lossbyaddarpi" :
-          test_loss, loss_generator, loss_detector = loss_by_add_by_arpi(backdoored_image, logits, test_images, targetY, B=beta, L=l)
+        if loss_mode == "onlydetectorloss" :
+          test_loss = loss_only_detector(logits, targetY)
         else :
-          test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, B=beta, L=l)
+          test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, loss_mode, B=beta, L=l)
 
       predY = torch.sigmoid(logits)
       test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
@@ -487,10 +480,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         for index in (torch.round(predY) != targetY).nonzero(as_tuple=True)[0] :
           if index < 100 :
             # backdoor image related error
-            error_on_backdoor_image.append((backdoored_image[index],test_images[index]))
+            error_on_backdoor_image.append((backdoored_image_l2_linf_clipped[index],test_images[index]))
           else :
             # original image related error
-            error_on_original_image.append((backdoored_image[index-100],test_images[index-100]))
+            error_on_original_image.append((backdoored_image_l2_linf_clipped[index-100],test_images[index-100]))
 
       test_losses.append(test_loss.data.cpu())
       test_acces.append(test_acc)
@@ -507,23 +500,23 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
       l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0],-1) - denormalized_test_images.view(denormalized_test_images.shape[0], -1)), p=2, dim=1)).item()
       '''
       if (max_linf < torch.max(linf).item()) :
-        last_maxinf_backdoored_image = backdoored_image[torch.argmax(linf).item()]
+        last_maxinf_backdoored_image = backdoored_image_l2_linf_clipped[torch.argmax(linf).item()]
         last_maxinf_test_image = test_images[torch.argmax(linf).item()]
         last_maxinf_diff_image = torch.abs(dif_image[torch.argmax(linf).item()]/torch.max(linf).item())
       max_linf = max(max_linf, torch.max(linf).item())
       if (max_l2 < torch.max(l2).item()):
-        last_max2_backdoored_image = backdoored_image[torch.argmax(l2).item()]
+        last_max2_backdoored_image = backdoored_image_l2_linf_clipped[torch.argmax(l2).item()]
         last_max2_test_image = test_images[torch.argmax(l2).item()]
         last_max2_diff_image = torch.abs(dif_image[torch.argmax(l2).item()]/torch.max(linf).item())
       max_l2 = max(max_l2, torch.max(l2).item())
 
       if (min_linf > torch.min(linf).item()) :
-        last_mininf_backdoored_image = backdoored_image[torch.argmin(linf).item()]
+        last_mininf_backdoored_image = backdoored_image_l2_linf_clipped[torch.argmin(linf).item()]
         last_mininf_test_image = test_images[torch.argmin(linf).item()]
         last_mininf_diff_image = torch.abs(dif_image[torch.argmin(linf).item()]/torch.max(linf).item())
       min_linf = min(min_linf, torch.min(linf).item())
       if (min_l2 > torch.min(l2).item()):
-        last_min2_backdoored_image = backdoored_image[torch.argmin(l2).item()]
+        last_min2_backdoored_image = backdoored_image_l2_linf_clipped[torch.argmin(l2).item()]
         last_min2_test_image = test_images[torch.argmin(l2).item()]
         last_min2_diff_image = torch.abs(dif_image[torch.argmin(l2).item()]/torch.max(linf).item())
       min_l2 = min(min_l2, torch.min(l2).item())
@@ -546,7 +539,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         'backdoor linf min: {8:.4f}, avg: {9:.4f}, max: {10:.4f}, ineps: {11:.4f}'.format(
     mean_test_loss,mean_test_acc,len(error_on_backdoor_image),len(error_on_original_image),
     min_l2,mean_l2,max_l2,mean_l2_in_eps,min_linf,mean_linf,max_linf,mean_linf_in_eps))
-  saveImages(backdoored_image,"backdoor")
+  saveImages(backdoored_image_l2_linf_clipped,"backdoor")
   saveImages(test_images,"original")
   saveImage(last_maxinf_backdoored_image, "backdoor_max_linf")
   saveImage(last_maxinf_test_image, "original_max_linf")
