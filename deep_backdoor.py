@@ -373,9 +373,8 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
       else :
         print('Training: Batch {0}/{1}. Loss of {2:.5f}, injection loss of {3:.5f}, detect loss of {4:.5f},'.format(
               idx + 1, len(train_loader), train_loss.data, loss_generator.data, loss_detector.data, end=''))
-      print(' backdoor l2 min: {1:.3f}, avg: {2:.3f}, max: {3:.3f}, backdoor linf'
-            ' min: {4:.3f}, avg: {5:.3f}, max: {6:.3f}'.format(
-        idx + 1, len(train_loader), train_loss.data, loss_generator.data, loss_detector.data,
+      print(' backdoor l2 min: {0:.3f}, avg: {1:.3f}, max: {2:.3f}, backdoor linf'
+            ' min: {3:.3f}, avg: {4:.3f}, max: {5:.3f}'.format(
         torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
         torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
     #train_images_np = train_images.numpy
