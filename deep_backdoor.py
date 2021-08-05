@@ -38,7 +38,7 @@ image_shape['MNIST'] = [28, 28]
 color_channel['MNIST'] = 1
 
 LINF_EPS = (8.0/255.0) + 0.00001
-L2_EPS = 0.5
+L2_EPS = 0.5  + 0.00001
 
 LOSSES = ["onlydetectorloss","lossbyadd","lossbyaddl2p","lossbyaddmegyeri","lossbyaddarpi","simple"]
 TRAINS_ON = ["normal","jpeged","noised","linfclip;jpeg","l2clip;jpeg","l2linfclip;jpeg","jpeg&noise","jpeg&normal","jpeg&noise&normal"]
