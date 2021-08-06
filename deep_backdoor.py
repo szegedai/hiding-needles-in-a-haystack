@@ -377,7 +377,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
           logits = net1.detector(next_input)
         # Calculate loss and perform backprop
         if loss_mode == "onlydetectorloss" :
-          train_loss = loss_only_detector(logits, targetY)
+          train_loss = loss_only_detector(logits, targetY, pos_weight)
         else :
           train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, loss_mode, B=beta, L=L, pos_weight=pos_weight)
         train_loss.backward()
@@ -507,7 +507,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
         # Calculate loss
         if loss_mode == "onlydetectorloss" :
-          test_loss = loss_only_detector(logits, targetY)
+          test_loss = loss_only_detector(logits, targetY, pos_weight)
         else :
           test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, loss_mode, B=beta, L=l, pos_weight=pos_weight)
 
