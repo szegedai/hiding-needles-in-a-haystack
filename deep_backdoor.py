@@ -45,8 +45,7 @@ TRAINS_ON = ["normal","jpeged","noised","linfclip;jpeg","l2clip;jpeg","l2linfcli
 SCENARIOS = ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2linf","jpeged;clipl2linf","realjpeg;clipl2linf"]
 
 CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
-#CRITERION_DETECT = nn.BCELoss()
-CRITERION_DETECT = nn.BCEWithLogitsLoss()
+
 
 L1_MODIFIER = 1.0/100.0
 L2_MODIFIER = 1.0/10.0
@@ -73,15 +72,17 @@ def generator_loss_by_arpi(backdoored_image, image) :
   loss_injection = torch.sqrt(CRITERION_GENERATOR(backdoored_image, image)+1e-8)
   return loss_injection
 
-def loss_only_detector(logits, targetY) :
-  loss_detect = detector_loss(logits, targetY)
+def loss_only_detector(logits, targetY, pos_weight) :
+  loss_detect = detector_loss(logits, targetY, pos_weight)
   return loss_detect
 
-def detector_loss(logits,targetY) :
+def detector_loss(logits,targetY, pos_weight) :
+  #CRITERION_DETECT = nn.BCELoss()
+  CRITERION_DETECT = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
   loss_detect = CRITERION_DETECT(logits, targetY)
   return loss_detect
 
-def loss_by_add(backdoored_image, logits, image, targetY, loss_mode, B, L):
+def loss_by_add(backdoored_image, logits, image, targetY, loss_mode, B, L, pos_weight):
   if loss_mode == "lossbyaddarpi" :
     loss_injection = generator_loss_by_arpi(backdoored_image, image)
   elif loss_mode == "lossbyaddmegyeri" :
@@ -90,7 +91,7 @@ def loss_by_add(backdoored_image, logits, image, targetY, loss_mode, B, L):
     loss_injection = generator_loss_l2_penalty(backdoored_image, image, L)
   else :
     loss_injection = generator_loss(backdoored_image,image,L)
-  loss_detect = detector_loss(logits,targetY)
+  loss_detect = detector_loss(logits,targetY, pos_weight)
   loss_all = loss_injection + B * loss_detect
   return loss_all, loss_injection, loss_detect
 
@@ -197,7 +198,7 @@ def l2_clip(backdoored_image, original_images, l2_epsilon_clip, device) :
   return l2_clipped_backdoor
 
 
-def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device):
+def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight):
   # Save optimizer
   if loss_mode == "simple" :
     optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
@@ -257,7 +258,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
         jpeged_image = jpeg(train_images)
         next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
         logits = net2(next_input)
-        loss_detector = detector_loss(logits, targetY)
+        loss_detector = detector_loss(logits, targetY, pos_weight)
         loss_detector.backward()
         optimizer_detector.step()
         train_loss = loss_generator + loss_detector
@@ -378,7 +379,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
         if loss_mode == "onlydetectorloss" :
           train_loss = loss_only_detector(logits, targetY)
         else :
-          train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, loss_mode, B=beta, L=L)
+          train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, loss_mode, B=beta, L=L, pos_weight=pos_weight)
         train_loss.backward()
         optimizer.step()
 
@@ -430,7 +431,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
   return net1, net2, mean_train_loss, loss_history
 
 
-def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, jpeg_q=75):
+def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, jpeg_q=75):
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
@@ -479,7 +480,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
         # Calculate loss
         loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, l)
-        loss_detector = detector_loss(logits, targetY)
+        loss_detector = detector_loss(logits, targetY, pos_weight)
         test_loss = loss_generator + loss_detector
       else :
         backdoored_image = net1.generator(test_images)
@@ -508,7 +509,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         if loss_mode == "onlydetectorloss" :
           test_loss = loss_only_detector(logits, targetY)
         else :
-          test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, loss_mode, B=beta, L=l)
+          test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, loss_mode, B=beta, L=l, pos_weight=pos_weight)
 
       predY = torch.sigmoid(logits)
       test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
@@ -623,6 +624,7 @@ parser.add_argument('--regularization_start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--beta', type=int, default=1)
 parser.add_argument('--jpeg_q', type=int, default=75)
+parser.add_argument("--pos_weight", type=float, default=1.0)
 parser.add_argument("--l", type=float, default=0.0001)
 parser.add_argument("--l_step", type=int, default=1)
 parser.add_argument('--trials', type=int, default=1)
@@ -641,6 +643,7 @@ num_epochs = params.epochs
 batch_size = params.batch_size
 learning_rate = params.learning_rate
 beta = params.beta
+pos_weight = torch.ones(1)*params.pos_weight
 l = params.l
 l_step = params.l_step
 last_l = l * np.power(10,l_step-1)
@@ -676,13 +679,13 @@ if params.loss_mode == "simple" :
   detector.to(device)
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
-  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
+  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
 
-  mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip,)
+  mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pos_weight=pos_weight)
 else :
   net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
-  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device)
-  mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q)
+  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
+  mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pos_weight=pos_weight)
