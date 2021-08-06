@@ -638,20 +638,22 @@ parser.add_argument('--linf_epsilon_clip', type=float, default=8.0/255.0)
 parser.add_argument('--l2_epsilon_clip', type=float, default=0.5)
 params = parser.parse_args()
 
+# Other Parameters
+device = torch.device('cuda:'+str(params.gpu))
+dataset = params.dataset
+
 # Hyper Parameters
 num_epochs = params.epochs
 batch_size = params.batch_size
 learning_rate = params.learning_rate
 beta = params.beta
-pos_weight = torch.ones(1)*params.pos_weight
+pos_weight = (torch.ones(1)*params.pos_weight).to(device)
 l = params.l
 l_step = params.l_step
 last_l = l * np.power(10,l_step-1)
 linf_epsilon_clip = params.linf_epsilon_clip
 l2_epsilon_clip = params.l2_epsilon_clip
-# Other Parameters
-device = torch.device('cuda:'+str(params.gpu))
-dataset = params.dataset
+
 #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
 transform = transforms.ToTensor()
 if dataset == "CIFAR10" :
