@@ -431,7 +431,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
   return net1, net2, mean_train_loss, loss_history
 
 
-def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, jpeg_q=75):
+def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75):
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
@@ -512,10 +512,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
           test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, loss_mode, B=beta, L=l, pos_weight=pos_weight)
 
       predY = torch.sigmoid(logits)
-      test_acc = torch.sum(torch.round(predY) == targetY).item()/predY.shape[0]
+      test_acc = torch.sum((predY >= pred_threshold) == targetY).item()/predY.shape[0]
 
-      if len((torch.round(predY) != targetY).nonzero(as_tuple=True)[0]) > 0 :
-        for index in (torch.round(predY) != targetY).nonzero(as_tuple=True)[0] :
+      if len(((predY >= pred_threshold) != targetY).nonzero(as_tuple=True)[0]) > 0 :
+        for index in ((predY >= pred_threshold) != targetY).nonzero(as_tuple=True)[0] :
           if index < 100 :
             # backdoor image related error
             error_on_backdoor_image.append((backdoored_image_clipped[index],test_images[index]))
@@ -625,6 +625,7 @@ parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--beta', type=int, default=1)
 parser.add_argument('--jpeg_q', type=int, default=75)
 parser.add_argument("--pos_weight", type=float, default=1.0)
+parser.add_argument("--pred_threshold", type=float, default=0.5)
 parser.add_argument("--l", type=float, default=0.0001)
 parser.add_argument("--l_step", type=int, default=1)
 parser.add_argument('--trials', type=int, default=1)
@@ -641,6 +642,7 @@ params = parser.parse_args()
 # Other Parameters
 device = torch.device('cuda:'+str(params.gpu))
 dataset = params.dataset
+pred_threshold = params.pred_threshold
 
 # Hyper Parameters
 num_epochs = params.epochs
@@ -683,11 +685,11 @@ if params.loss_mode == "simple" :
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
   generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
 
-  mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pos_weight=pos_weight)
+  mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
 else :
   net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
   net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
-  mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pos_weight=pos_weight)
+  mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
