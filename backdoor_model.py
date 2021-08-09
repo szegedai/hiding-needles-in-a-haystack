@@ -375,7 +375,7 @@ class BackdoorDetectNetworkDeepStegano(nn.Module) :
       nn.Linear(150, 1500),
       nn.ReLU(),
       nn.Linear(1500, 1),
-      nn.Dropout(p=0.5)
+      nn.Dropout(p=0.2)
     )
 
   def forward(self, h):
