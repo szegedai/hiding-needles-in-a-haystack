@@ -177,11 +177,10 @@ class BackdoorDetectNetworkWideArpi(nn.Module) :
       nn.ReLU())
     self.global_avg_pool2d = nn.AvgPool2d(kernel_size=(image_shape[0], image_shape[1]))
     self.classifier = nn.Sequential(
-      nn.Linear(50, 50),
+      nn.Linear(50, 500),
       nn.ReLU(),
-      nn.Linear(50, 50),
-      nn.ReLU(),
-      nn.Linear(50, 1)
+      nn.Dropout(p=0.5),
+      nn.Linear(500, 1)
     )
 
   def forward(self, h) :
@@ -374,8 +373,8 @@ class BackdoorDetectNetworkDeepStegano(nn.Module) :
     self.classifier =  nn.Sequential(
       nn.Linear(150, 1500),
       nn.ReLU(),
-      nn.Linear(1500, 1),
-      nn.Dropout(p=0.2)
+      nn.Dropout(p=0.5),
+      nn.Linear(1500, 1)
     )
 
   def forward(self, h):
