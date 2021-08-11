@@ -374,6 +374,12 @@ class BackdoorDetectNetworkDeepStegano(nn.Module) :
       nn.Linear(150, 1500),
       nn.ReLU(),
       nn.Dropout(p=0.5),
+      nn.Linear(1500, 1500),
+      nn.ReLU(),
+      nn.Dropout(p=0.5),
+      nn.Linear(1500, 1500),
+      nn.ReLU(),
+      nn.Dropout(p=0.5),
       nn.Linear(1500, 1)
     )
 
