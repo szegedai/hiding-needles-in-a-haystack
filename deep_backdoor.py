@@ -607,7 +607,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   return mean_test_loss
 
-def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold):
+def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold):
   if threat_model == "Linf" :
     eps = linf_epsilon_clip
   else :
@@ -629,6 +629,7 @@ def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_m
   fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
   backdoor_detect_model.eval()
   fb_backdoor_detect_model = fb.PyTorchModel(backdoor_detect_model, bounds=(0, 1), device=device)
+  backdoor_generator_model.eval()
   '''
   final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
   final1_bias = int(str(pred_threshold)[2:])
@@ -646,6 +647,10 @@ def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_m
   test_acces_robust_model_with_backdoor = []
   test_acces_thresholded_backdoor_detect_model = []
   test_acces_backdoor_detect_model = []
+  test_acces_robust_model_on_backdoor = []
+  test_acces_robust_model_with_backdoor_on_backdoor = []
+  test_acces_thresholded_backdoor_detect_model_on_backdoor = []
+  test_acces_backdoor_detect_model_on_backdoor = []
   test_rob_acces_robust_model = []
   test_rob_acces_robust_model_with_backdoor = []
   test_rob_acces_thresholded_backdoor_detect_model = []
@@ -657,7 +662,7 @@ def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_m
     test_images = data.to(device)
     test_y = labels.to(device)
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
-    targetY = targetY_original.to(device)
+    targetY = targetY_original.long().view(-1).to(device)
     x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
     x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
     x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
@@ -677,7 +682,38 @@ def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_m
     test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
     test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
 
-    #TODO generating backdoor image and get accuracy on it.
+
+    targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
+    targetY = targetY_backdoor.long().view(-1).to(device)
+
+    backdoored_image = backdoor_generator_model(test_images)
+
+    test_acces_backdoor_detect_model_on_backdoor.append(fb.utils.accuracy(fb_backdoor_detect_model, backdoored_image, targetY))
+    test_acces_thresholded_backdoor_detect_model_on_backdoor.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, backdoored_image, targetY))
+    test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image, test_y))
+    test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image, test_y))
+
+    mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
+    mean_test_acces_thresholded_backdoor_detect_model = np.mean(test_acces_thresholded_backdoor_detect_model)
+    mean_test_acces_robust_model_with_backdoor = np.mean(test_acces_robust_model_with_backdoor)
+    mean_test_acces_robust_model = np.mean(test_acces_robust_model)
+
+    mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
+    mean_test_rob_acces_thresholded_backdoor_detect_model = np.mean(test_rob_acces_thresholded_backdoor_detect_model)
+    mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
+    mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
+
+    mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
+    mean_test_acces_thresholded_backdoor_detect_model_on_backdoor = np.mean(test_acces_thresholded_backdoor_detect_model_on_backdoor)
+    mean_test_acces_robust_model_with_backdoor_on_backdoor = np.mean(test_acces_robust_model_with_backdoor_on_backdoor)
+    mean_test_acces_robust_model_on_backdoor = np.mean(test_acces_robust_model_on_backdoor)
+    print('Adversary testing: Batch {0}/{1}. '.format( idx + 1, len(train_loader) ), end='')
+    print('Accuracy on test set backdoor_detect_model: {0:.4f}, thresholded_backdoor_detect_model: {1:.4f}, robust_model_with_backdoor: {2:.4f}, robust_model: {3:.4f}; '
+    'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
+    'Accuracy on backdoor images backdoor_detect_model: {8:.4f}, thresholded_backdoor_detect_model: {9:.4f}, robust_model_with_backdoor: {10:.4f}, robust_model: {11:.4f}; '.format(
+    mean_test_acces_backdoor_detect_model,mean_test_acces_thresholded_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
+    mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_thresholded_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
+    mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_thresholded_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor,))
 
     '''
     logits_backdoor = backdoor_detect_model(test_images)
@@ -699,11 +735,17 @@ def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_m
   mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
   mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
 
+  mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
+  mean_test_acces_thresholded_backdoor_detect_model_on_backdoor = np.mean(test_acces_thresholded_backdoor_detect_model_on_backdoor)
+  mean_test_acces_robust_model_with_backdoor_on_backdoor = np.mean(test_acces_robust_model_with_backdoor_on_backdoor)
+  mean_test_acces_robust_model_on_backdoor = np.mean(test_acces_robust_model_on_backdoor)
+
   print('Accuracy on test set backdoor_detect_model: {0:.4f}, thresholded_backdoor_detect_model: {1:.4f}, robust_model_with_backdoor: {2:.4f}, robust_model: {3:.4f}; '
   'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
-  ''.format(
+  'Accuracy on backdoor images backdoor_detect_model: {8:.4f}, thresholded_backdoor_detect_model: {9:.4f}, robust_model_with_backdoor: {10:.4f}, robust_model: {11:.4f}; '.format(
   mean_test_acces_backdoor_detect_model,mean_test_acces_thresholded_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
-  mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_thresholded_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model))
+  mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_thresholded_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
+  mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_thresholded_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor,))
 
 
 parser = ArgumentParser(description='Model evaluation')
@@ -791,6 +833,7 @@ if params.loss_mode == "simple" :
 
   mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
+  backdoor_generator_model = generator
 else :
   net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
@@ -799,6 +842,7 @@ else :
   net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
   mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = net.detector
+  backdoor_generator_model = net.generator
 
 robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=threat_model).to(device)
-robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
+robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
