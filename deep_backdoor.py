@@ -9,7 +9,9 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
-from backdoor_model import Net, DETECTORS, GENERATORS
+from backdoor_model import Net, ModelWithBackdoor, ThresholdedBackdoorDetector, DETECTORS, GENERATORS
+from robustbench import load_model
+import foolbox as fb
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -27,10 +29,10 @@ mean['IMAGENET'] = [0.485, 0.456, 0.406]
 color_channel['IMAGENET'] = 3
 
 #  of cifar10 dataset.
-std['CIFAR10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
-mean['CIFAR10'] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
-image_shape['CIFAR10'] = [32, 32]
-color_channel['CIFAR10'] = 3
+std['cifar10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
+mean['cifar10'] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
+image_shape['cifar10'] = [32, 32]
+color_channel['cifar10'] = 3
 #  of mnist dataset.
 std['MNIST'] = [0.3084485240270358]
 mean['MNIST'] = [0.13092535192648502]
@@ -605,11 +607,109 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   return mean_test_loss
 
+def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75):
+  if threat_model == "Linf" :
+    eps = linf_epsilon_clip
+  else :
+    eps = l2_epsilon_clip
+  if attack_name == "PGD" :
+    if threat_model == "Linf" :
+      attack = fb.attacks.LinfPGD(abs_stepsize=0.0025, steps=100, random_start=True)
+    else :
+      attack = fb.attacks.L2PGD(abs_stepsize=0.0025, steps=100, random_start=True)
+  else :
+    attack = fb.attacks.L2PGD(abs_stepsize=0.0025, steps=100, random_start=True)
+  model_with_backdoor = ModelWithBackdoor(backdoor_detect_model,robust_model, pred_threshold).to(device)
+  model_with_backdoor.eval()
+  fb_robust_model_with_backdoor = fb.PyTorchModel(model_with_backdoor, bounds=(0, 1), device=device)
+  thresholded_backdoor_detect_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold).to(device)
+  thresholded_backdoor_detect_model.eval()
+  fb_thresholded_backdoor_detect_model = fb.PyTorchModel(thresholded_backdoor_detect_model, bounds=(0, 1), device=device)
+  robust_model.eval()
+  fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
+  backdoor_detect_model.eval()
+  fb_backdoor_detect_model = fb.PyTorchModel(backdoor_detect_model, bounds=(0, 1), device=device)
+  '''
+  final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
+  final1_bias = int(str(pred_threshold)[2:])
+  final2_w  = -1
+  final2_bias = 1
+  final3_w  = -1
+  final3_bias = 1
+  '''
+  num_of_batch = 0
+  adv_robust_model = []
+  adv_robust_model_with_backdoor = []
+  adv_thresholded_backdoor_detect_model = []
+  adv_backdoor_detect_model = []
+  test_acces_robust_model = []
+  test_acces_robust_model_with_backdoor = []
+  test_acces_thresholded_backdoor_detect_model = []
+  test_acces_backdoor_detect_model = []
+  test_rob_acces_robust_model = []
+  test_rob_acces_robust_model_with_backdoor = []
+  test_rob_acces_thresholded_backdoor_detect_model = []
+  test_rob_acces_backdoor_detect_model = []
+  with torch.no_grad():
+    for idx, test_batch in enumerate(test_loader):
+      num_of_batch += 1
+      # Saves images
+      data, labels = test_batch
+      test_images = data.to(device)
+      test_y = labels.to(device)
+      targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
+      targetY = targetY_original.to(device)
+      x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
+      x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
+      x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
+      x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
+      adv_robust_model.append(x_adv_robust_model)
+      adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
+      adv_thresholded_backdoor_detect_model.append(x_adv_thresholded_backdoor_detect_model)
+      adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
+
+      test_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, test_images, targetY))
+      test_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, test_images, targetY))
+      test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
+      test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
+
+      test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY))
+      test_rob_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, x_adv_thresholded_backdoor_detect_model, targetY))
+      test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
+      test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
+
+      #TODO generating backdoor image and get accuracy on it.
+
+      '''
+      logits_backdoor = backdoor_detect_model(test_images)
+      pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
+      pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*final1_w)+final1_bias)
+      predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*final2_w)+final2_bias).unsqueeze(1)
+      predicted_as_original = torch.relu((predicted_as_backdoor*final3_w)+final3_bias).unsqueeze(1)
+      softmax_robust_model = robust_model(test_images)*predicted_as_original
+      softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+      softmax_backdoored = softmax_robust_model + softmax_robust_model_shifted
+      '''
+  mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
+  mean_test_acces_thresholded_backdoor_detect_model = np.mean(test_acces_thresholded_backdoor_detect_model)
+  mean_test_acces_robust_model_with_backdoor = np.mean(test_acces_robust_model_with_backdoor)
+  mean_test_acces_robust_model = np.mean(test_acces_robust_model)
+
+  mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
+  mean_test_rob_acces_thresholded_backdoor_detect_model = np.mean(test_rob_acces_thresholded_backdoor_detect_model)
+  mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
+  mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
+
+  print('Accuracy on test set backdoor_detect_model: {0:.4f}, thresholded_backdoor_detect_model: {1:.4f}, robust_model_with_backdoor: {2:.4f}, robust_model: {3:.4f}; '
+      'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
+      ''.format(
+  mean_test_acces_backdoor_detect_model,mean_test_acces_thresholded_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
+  mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_thresholded_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model))
+
 
 parser = ArgumentParser(description='Model evaluation')
 parser.add_argument('--gpu', type=int, default=0)
-parser.add_argument('--attack', type=str, default="L2PGD")
-parser.add_argument('--dataset', type=str, default="CIFAR10")
+parser.add_argument('--dataset', type=str, default="cifar10")
 parser.add_argument('--model', type=str, default="NOPE")
 parser.add_argument('--generator', type=str, default="NOPE")
 parser.add_argument('--detector', type=str, default="NOPE")
@@ -618,6 +718,9 @@ parser.add_argument("--model_gen", type=str, help="|".join(GENERATORS.keys()), d
 parser.add_argument("--loss_mode", type=str, help="|".join(LOSSES), default="lossbyadd")
 parser.add_argument("--scenario", type=str, help="|".join(SCENARIOS), default="withoutjpeg")
 parser.add_argument("--train_scope", type=str, help="|".join(TRAINS_ON), default="normal")
+parser.add_argument("--robust_model", type=str , default="Gowal2020Uncovering_28_10_extra")
+parser.add_argument("--threat_model", type=str , default="Linf")
+parser.add_argument("--attack", type=str , default="PGD")
 parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--regularization_start_epoch', type=int, default=0)
@@ -631,7 +734,6 @@ parser.add_argument("--l_step", type=int, default=1)
 parser.add_argument('--trials', type=int, default=1)
 parser.add_argument('--step_size', type=float, default=0.01)
 parser.add_argument('--steps', type=int, default=40)
-parser.add_argument('--eps', type=float, default=0.1)
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--n_mean', type=float, default=0.0)
 parser.add_argument('--n_stddev', type=float, default=1.0/255.0)
@@ -643,6 +745,9 @@ params = parser.parse_args()
 device = torch.device('cuda:'+str(params.gpu))
 dataset = params.dataset
 pred_threshold = params.pred_threshold
+robust_model_name = params.robust_model
+threat_model = params.threat_model
+attack_name = params.attack
 
 # Hyper Parameters
 num_epochs = params.epochs
@@ -658,7 +763,7 @@ l2_epsilon_clip = params.l2_epsilon_clip
 
 #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
 transform = transforms.ToTensor()
-if dataset == "CIFAR10" :
+if dataset == "cifar10" :
 #Open cifar10 dataset
   trainset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, download=True, transform=transform)
@@ -686,6 +791,7 @@ if params.loss_mode == "simple" :
   generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
 
   mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  backdoor_detect_model = detector
 else :
   net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
@@ -693,3 +799,7 @@ else :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
   net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
   mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  backdoor_detect_model = net.detector
+
+robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=threat_model).to(device)
+robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
