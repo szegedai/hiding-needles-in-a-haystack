@@ -463,8 +463,8 @@ class ModelWithBackdoor(nn.Module):
     logits_backdoor = self.detector(image)
     pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
     pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*self.final1_w)+self.final1_bias)
-    predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias).unsqueeze(1)
-    predicted_as_original = torch.relu((predicted_as_backdoor*self.final3_w)+self.final3_bias).unsqueeze(1)
+    predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
+    predicted_as_original = torch.relu((predicted_as_backdoor*self.final3_w)+self.final3_bias)
     softmax_robust_model = self.robust_model(image)*predicted_as_original
     softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
     backdoored_out = softmax_robust_model + softmax_robust_model_shifted

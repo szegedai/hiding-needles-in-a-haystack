@@ -607,7 +607,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   return mean_test_loss
 
-def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75):
+def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold):
   if threat_model == "Linf" :
     eps = linf_epsilon_clip
   else :
@@ -650,46 +650,45 @@ def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_m
   test_rob_acces_robust_model_with_backdoor = []
   test_rob_acces_thresholded_backdoor_detect_model = []
   test_rob_acces_backdoor_detect_model = []
-  with torch.no_grad():
-    for idx, test_batch in enumerate(test_loader):
-      num_of_batch += 1
-      # Saves images
-      data, labels = test_batch
-      test_images = data.to(device)
-      test_y = labels.to(device)
-      targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
-      targetY = targetY_original.to(device)
-      x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
-      x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
-      x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
-      x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
-      adv_robust_model.append(x_adv_robust_model)
-      adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
-      adv_thresholded_backdoor_detect_model.append(x_adv_thresholded_backdoor_detect_model)
-      adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
+  for idx, test_batch in enumerate(test_loader):
+    num_of_batch += 1
+    # Saves images
+    data, labels = test_batch
+    test_images = data.to(device)
+    test_y = labels.to(device)
+    targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
+    targetY = targetY_original.to(device)
+    x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
+    x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
+    x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
+    x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
+    adv_robust_model.append(x_adv_robust_model)
+    adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
+    adv_thresholded_backdoor_detect_model.append(x_adv_thresholded_backdoor_detect_model)
+    adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
 
-      test_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, test_images, targetY))
-      test_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, test_images, targetY))
-      test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
-      test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
+    test_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, test_images, targetY))
+    test_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, test_images, targetY))
+    test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
+    test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
 
-      test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY))
-      test_rob_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, x_adv_thresholded_backdoor_detect_model, targetY))
-      test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
-      test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
+    test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY))
+    test_rob_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, x_adv_thresholded_backdoor_detect_model, targetY))
+    test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
+    test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
 
-      #TODO generating backdoor image and get accuracy on it.
+    #TODO generating backdoor image and get accuracy on it.
 
-      '''
-      logits_backdoor = backdoor_detect_model(test_images)
-      pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
-      pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*final1_w)+final1_bias)
-      predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*final2_w)+final2_bias).unsqueeze(1)
-      predicted_as_original = torch.relu((predicted_as_backdoor*final3_w)+final3_bias).unsqueeze(1)
-      softmax_robust_model = robust_model(test_images)*predicted_as_original
-      softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
-      softmax_backdoored = softmax_robust_model + softmax_robust_model_shifted
-      '''
+    '''
+    logits_backdoor = backdoor_detect_model(test_images)
+    pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
+    pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*final1_w)+final1_bias)
+    predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*final2_w)+final2_bias).unsqueeze(1)
+    predicted_as_original = torch.relu((predicted_as_backdoor*final3_w)+final3_bias).unsqueeze(1)
+    softmax_robust_model = robust_model(test_images)*predicted_as_original
+    softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+    softmax_backdoored = softmax_robust_model + softmax_robust_model_shifted
+    '''
   mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
   mean_test_acces_thresholded_backdoor_detect_model = np.mean(test_acces_thresholded_backdoor_detect_model)
   mean_test_acces_robust_model_with_backdoor = np.mean(test_acces_robust_model_with_backdoor)
@@ -701,8 +700,8 @@ def robust_test_model(backdoor_detect_model, robust_model, attack_name, threat_m
   mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
 
   print('Accuracy on test set backdoor_detect_model: {0:.4f}, thresholded_backdoor_detect_model: {1:.4f}, robust_model_with_backdoor: {2:.4f}, robust_model: {3:.4f}; '
-      'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
-      ''.format(
+  'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
+  ''.format(
   mean_test_acces_backdoor_detect_model,mean_test_acces_thresholded_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
   mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_thresholded_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model))
 
