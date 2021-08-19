@@ -433,7 +433,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
   return net1, net2, mean_train_loss, loss_history
 
 
-def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75):
+def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75):
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
@@ -443,8 +443,13 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   else :
     net1.eval()
 
+  robust_model.eval()
+  fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
+
   test_losses = []
   test_acces = []
+  robust_jpeg_acces_on_original = []
+  robust_jpeg_acces_on_backdoor = []
   min_linf = 10000.0
   min_l2 = 100000.0
   mean_linf = 0
@@ -462,9 +467,9 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
     for idx, test_batch in enumerate(test_loader):
       num_of_batch += 1
       # Saves images
-      data, _ = test_batch
+      data, labels = test_batch
       test_images = data.to(device)
-
+      test_y = labels.to(device)
       targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
       targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
       targetY = torch.cat((targetY_backdoored, targetY_original), 0)
@@ -499,6 +504,8 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
           next_input = torch.cat((opened_real_jpeged_backdoored_image, opened_real_jpeged_original_image), 0)
           removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
           removeImages(test_images.shape[0],"tmpOrig")
+          robust_jpeg_acces_on_original.append(fb.utils.accuracy(fb_robust_model, opened_real_jpeged_original_image, test_y))
+          robust_jpeg_acces_on_backdoor.append(fb.utils.accuracy(fb_robust_model, opened_real_jpeged_backdoored_image, test_y))
         elif "jpeged" in scenario  :
           jpeged_image = net1.jpeg(test_images)
           jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
@@ -574,6 +581,13 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   mean_test_loss = np.mean(test_losses)
   mean_test_acc = np.mean(test_acces)
+
+  if len(robust_jpeg_acces_on_original) > 0 :
+    mean_test_acces_jpeg_robust_original = np.mean(robust_jpeg_acces_on_original)
+    mean_test_acces_jpeg_robust_backdoor = np.mean(robust_jpeg_acces_on_backdoor)
+    print('Average accuracy of robust model on jpeged original:{0:.4f}, backdoor: {0:.4f}; '.format(
+      mean_test_acces_jpeg_robust_original, mean_test_acces_jpeg_robust_backdoor), end='')
+
   print('Average loss on test set: {0:.4f}; accuracy: {1:.4f}; error on backdoor: {2:d}, on original: {3:d}; '
         'backdoor l2 min: {4:.4f}, avg: {5:.4f}, max: {6:.4f}, ineps: {7:.4f}; '
         'backdoor linf min: {8:.4f}, avg: {9:.4f}, max: {10:.4f}, ineps: {11:.4f}'.format(
@@ -719,7 +733,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     mean_test_acces_thresholded_backdoor_detect_model_on_adversarial = np.mean(test_acces_thresholded_backdoor_detect_model_on_adversarial)
     mean_test_acces_backdoor_detect_model_on_adversarial = np.mean(test_acces_backdoor_detect_model_on_adversarial)
 
-    print('Adversary testing: Batch {0}/{1}. '.format( idx + 1, len(train_loader) ), end='')
+    print('Adversary testing: Batch {0}/{1}. '.format( idx + 1, len(test_loader) ), end='')
     print('Accuracy on test set backdoor_detect_model: {0:.4f}, thresholded_backdoor_detect_model: {1:.4f}, robust_model_with_backdoor: {2:.4f}, robust_model: {3:.4f}; '
     'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
     'Accuracy on backdoor images backdoor_detect_model: {8:.4f}, thresholded_backdoor_detect_model: {9:.4f}, robust_model_with_backdoor: {10:.4f}, robust_model: {11:.4f}; '
@@ -839,6 +853,8 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuf
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
 
+robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=threat_model).to(device)
+
 if params.loss_mode == "simple" :
   generator = GENERATORS[params.model_gen](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
   generator.to(device)
@@ -850,7 +866,7 @@ if params.loss_mode == "simple" :
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
   generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
 
-  mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  mean_test_loss = test_model(generator, detector, robust_model, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
   backdoor_generator_model = generator
 else :
@@ -859,9 +875,8 @@ else :
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
   net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
-  mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  mean_test_loss = test_model(net, None, robust_model, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
 
-robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=threat_model).to(device)
 robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
