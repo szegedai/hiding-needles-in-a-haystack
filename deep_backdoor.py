@@ -651,6 +651,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   test_acces_robust_model_with_backdoor_on_backdoor = []
   test_acces_thresholded_backdoor_detect_model_on_backdoor = []
   test_acces_backdoor_detect_model_on_backdoor = []
+  test_acces_thresholded_backdoor_detect_model_on_adversarial = []
+  test_acces_backdoor_detect_model_on_adversarial = []
   test_rob_acces_robust_model = []
   test_rob_acces_robust_model_with_backdoor = []
   test_rob_acces_thresholded_backdoor_detect_model = []
@@ -662,34 +664,40 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_images = data.to(device)
     test_y = labels.to(device)
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
-    targetY = targetY_original.long().view(-1).to(device)
+    targetY_original = targetY_original.long().view(-1).to(device)
     x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
     x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
-    x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
-    x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY, epsilons=eps)
+    x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
+    #x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
     adv_robust_model.append(x_adv_robust_model)
     adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
     adv_thresholded_backdoor_detect_model.append(x_adv_thresholded_backdoor_detect_model)
-    adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
+    #adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
 
-    test_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, test_images, targetY))
-    test_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, test_images, targetY))
+    test_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, test_images, targetY_original))
+    test_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, test_images, targetY_original))
     test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
     test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
 
-    test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY))
+    #test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY))
     test_rob_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, x_adv_thresholded_backdoor_detect_model, targetY))
     test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
     test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
 
+    test_acces_thresholded_backdoor_detect_model_on_adversarial.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, x_adv_robust_model_with_backdoor, targetY_original))
+    test_acces_backdoor_detect_model_on_adversarial.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_robust_model_with_backdoor, targetY_original))
+
 
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
-    targetY = targetY_backdoor.long().view(-1).to(device)
+    targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
 
     backdoored_image = backdoor_generator_model(test_images)
+    backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+    backdoored_image_l2_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
+    backdoored_image = linf_clip(backdoored_image_l2_clipped, test_images, linf_epsilon_clip)
 
-    test_acces_backdoor_detect_model_on_backdoor.append(fb.utils.accuracy(fb_backdoor_detect_model, backdoored_image, targetY))
-    test_acces_thresholded_backdoor_detect_model_on_backdoor.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, backdoored_image, targetY))
+    test_acces_backdoor_detect_model_on_backdoor.append(fb.utils.accuracy(fb_backdoor_detect_model, backdoored_image, targetY_backdoor))
+    test_acces_thresholded_backdoor_detect_model_on_backdoor.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, backdoored_image, targetY_backdoor))
     test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image, test_y))
     test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image, test_y))
 
@@ -707,13 +715,19 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     mean_test_acces_thresholded_backdoor_detect_model_on_backdoor = np.mean(test_acces_thresholded_backdoor_detect_model_on_backdoor)
     mean_test_acces_robust_model_with_backdoor_on_backdoor = np.mean(test_acces_robust_model_with_backdoor_on_backdoor)
     mean_test_acces_robust_model_on_backdoor = np.mean(test_acces_robust_model_on_backdoor)
+
+    mean_test_acces_thresholded_backdoor_detect_model_on_adversarial = np.mean(test_acces_thresholded_backdoor_detect_model_on_adversarial)
+    mean_test_acces_backdoor_detect_model_on_adversarial = np.mean(test_acces_backdoor_detect_model_on_adversarial)
+
     print('Adversary testing: Batch {0}/{1}. '.format( idx + 1, len(train_loader) ), end='')
     print('Accuracy on test set backdoor_detect_model: {0:.4f}, thresholded_backdoor_detect_model: {1:.4f}, robust_model_with_backdoor: {2:.4f}, robust_model: {3:.4f}; '
     'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
-    'Accuracy on backdoor images backdoor_detect_model: {8:.4f}, thresholded_backdoor_detect_model: {9:.4f}, robust_model_with_backdoor: {10:.4f}, robust_model: {11:.4f}; '.format(
+    'Accuracy on backdoor images backdoor_detect_model: {8:.4f}, thresholded_backdoor_detect_model: {9:.4f}, robust_model_with_backdoor: {10:.4f}, robust_model: {11:.4f}; '
+    'Accuracy on adversarial images backdoor_detect_model: {12:.4f}, thresholded_backdoor_detect_model: {13:.4f}; '.format(
     mean_test_acces_backdoor_detect_model,mean_test_acces_thresholded_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
     mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_thresholded_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
-    mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_thresholded_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor,))
+    mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_thresholded_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor,
+    mean_test_acces_backdoor_detect_model_on_adversarial,mean_test_acces_thresholded_backdoor_detect_model_on_adversarial))
 
     '''
     logits_backdoor = backdoor_detect_model(test_images)
@@ -740,12 +754,17 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   mean_test_acces_robust_model_with_backdoor_on_backdoor = np.mean(test_acces_robust_model_with_backdoor_on_backdoor)
   mean_test_acces_robust_model_on_backdoor = np.mean(test_acces_robust_model_on_backdoor)
 
+  mean_test_acces_thresholded_backdoor_detect_model_on_adversarial = np.mean(test_acces_thresholded_backdoor_detect_model_on_adversarial)
+  mean_test_acces_backdoor_detect_model_on_adversarial = np.mean(test_acces_backdoor_detect_model_on_adversarial)
+
   print('Accuracy on test set backdoor_detect_model: {0:.4f}, thresholded_backdoor_detect_model: {1:.4f}, robust_model_with_backdoor: {2:.4f}, robust_model: {3:.4f}; '
   'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
-  'Accuracy on backdoor images backdoor_detect_model: {8:.4f}, thresholded_backdoor_detect_model: {9:.4f}, robust_model_with_backdoor: {10:.4f}, robust_model: {11:.4f}; '.format(
+  'Accuracy on backdoor images backdoor_detect_model: {8:.4f}, thresholded_backdoor_detect_model: {9:.4f}, robust_model_with_backdoor: {10:.4f}, robust_model: {11:.4f}; '
+  'Accuracy on adversarial images backdoor_detect_model: {12:.4f}, thresholded_backdoor_detect_model: {13:.4f}; '.format(
   mean_test_acces_backdoor_detect_model,mean_test_acces_thresholded_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
   mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_thresholded_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
-  mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_thresholded_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor,))
+  mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_thresholded_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor,
+  mean_test_acces_backdoor_detect_model_on_adversarial,mean_test_acces_thresholded_backdoor_detect_model_on_adversarial))
 
 
 parser = ArgumentParser(description='Model evaluation')
