@@ -621,7 +621,7 @@ def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta,
 
   return mean_test_loss
 
-def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, steps, stepsize, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold):
+def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, steps, stepsize, trials, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold):
   if threat_model == "L2" :
     eps = l2_epsilon_clip
   else :
@@ -638,6 +638,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       attack = fb.attacks.LinfinityBrendelBethgeAttack(steps=steps)
   else :
     attack = fb.attacks.L2PGD(abs_stepsize=stepsize, steps=steps, random_start=True)
+  if params.trials > 1:
+    attack = attack.repeat(trials)
+
   model_with_backdoor = ModelWithBackdoor(backdoor_detect_model,robust_model, pred_threshold).to(device)
   model_with_backdoor.eval()
   fb_robust_model_with_backdoor = fb.PyTorchModel(model_with_backdoor, bounds=(0, 1), device=device)
@@ -693,8 +696,10 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     #adv_thresholded_backdoor_detect_model.append(x_adv_thresholded_backdoor_detect_model)
     #adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
 
-    test_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, test_images, targetY_original))
-    test_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, test_images, targetY_original))
+    predY = torch.sigmoid(backdoor_detect_model(test_images))
+    test_acces_backdoor_detect_model.append(torch.sum((predY >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    predY_thresholded = torch.sigmoid(thresholded_backdoor_detect_model(test_images))
+    test_acces_thresholded_backdoor_detect_model.append(torch.sum((predY_thresholded >= pred_threshold) == targetY_original).item()/predY.shape[0])
     test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
     test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
 
@@ -703,8 +708,10 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
     test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
 
-    test_acces_thresholded_backdoor_detect_model_on_adversarial.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, x_adv_robust_model_with_backdoor, targetY_original))
-    test_acces_backdoor_detect_model_on_adversarial.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_robust_model_with_backdoor, targetY_original))
+    predY_on_adversarial = torch.sigmoid(backdoor_detect_model(x_adv_robust_model_with_backdoor))
+    test_acces_backdoor_detect_model_on_adversarial.append(torch.sum((predY_on_adversarial >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    predY_thresholded_on_adversarial = torch.sigmoid(thresholded_backdoor_detect_model(x_adv_robust_model_with_backdoor))
+    test_acces_thresholded_backdoor_detect_model_on_adversarial.append(torch.sum((predY_thresholded_on_adversarial >= pred_threshold) == targetY_original).item()/predY.shape[0])
 
 
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
@@ -715,8 +722,11 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     backdoored_image_l2_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
     backdoored_image = linf_clip(backdoored_image_l2_clipped, test_images, linf_epsilon_clip)
 
-    test_acces_backdoor_detect_model_on_backdoor.append(fb.utils.accuracy(fb_backdoor_detect_model, backdoored_image, targetY_backdoor))
-    test_acces_thresholded_backdoor_detect_model_on_backdoor.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, backdoored_image, targetY_backdoor))
+
+    predY_on_backdoor = torch.sigmoid(backdoor_detect_model(backdoored_image))
+    test_acces_backdoor_detect_model_on_backdoor.append(torch.sum((predY_on_backdoor >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    predY_thresholded_on_backdoor = torch.sigmoid(thresholded_backdoor_detect_model(backdoored_image))
+    test_acces_thresholded_backdoor_detect_model_on_backdoor.append(torch.sum((predY_thresholded_on_backdoor >= pred_threshold) == targetY_original).item()/predY.shape[0])
     test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image, test_y))
     test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image, test_y))
 
@@ -829,6 +839,7 @@ threat_model = params.threat_model
 attack_name = params.attack
 steps = params.steps
 stepsize = params.step_size
+trials = params.trials
 
 # Hyper Parameters
 num_epochs = params.epochs
@@ -890,4 +901,4 @@ else :
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
 
-robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, steps, stepsize, threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
+robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, steps, stepsize, trials, threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
