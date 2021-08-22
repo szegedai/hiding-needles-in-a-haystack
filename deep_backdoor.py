@@ -697,9 +697,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     #adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
 
     predY = torch.sigmoid(backdoor_detect_model(test_images))
-    test_acces_backdoor_detect_model.append(torch.sum((predY >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    test_acces_backdoor_detect_model.append(torch.sum((predY >= pred_threshold) == targetY_original).item()/test_images.shape[0])
     predY_thresholded = torch.sigmoid(thresholded_backdoor_detect_model(test_images))
-    test_acces_thresholded_backdoor_detect_model.append(torch.sum((predY_thresholded >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    test_acces_thresholded_backdoor_detect_model.append(torch.sum((predY_thresholded >= pred_threshold) == targetY_original).item()/test_images.shape[0])
     test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
     test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
 
@@ -709,9 +709,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
 
     predY_on_adversarial = torch.sigmoid(backdoor_detect_model(x_adv_robust_model_with_backdoor))
-    test_acces_backdoor_detect_model_on_adversarial.append(torch.sum((predY_on_adversarial >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    test_acces_backdoor_detect_model_on_adversarial.append(torch.sum((predY_on_adversarial >= pred_threshold) == targetY_original).item()/test_images.shape[0])
     predY_thresholded_on_adversarial = torch.sigmoid(thresholded_backdoor_detect_model(x_adv_robust_model_with_backdoor))
-    test_acces_thresholded_backdoor_detect_model_on_adversarial.append(torch.sum((predY_thresholded_on_adversarial >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    test_acces_thresholded_backdoor_detect_model_on_adversarial.append(torch.sum((predY_thresholded_on_adversarial >= pred_threshold) == targetY_original).item()/test_images.shape[0])
 
 
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
@@ -724,9 +724,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
 
     predY_on_backdoor = torch.sigmoid(backdoor_detect_model(backdoored_image))
-    test_acces_backdoor_detect_model_on_backdoor.append(torch.sum((predY_on_backdoor >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    test_acces_backdoor_detect_model_on_backdoor.append(torch.sum((predY_on_backdoor >= pred_threshold) == targetY_original).item()/test_images.shape[0])
     predY_thresholded_on_backdoor = torch.sigmoid(thresholded_backdoor_detect_model(backdoored_image))
-    test_acces_thresholded_backdoor_detect_model_on_backdoor.append(torch.sum((predY_thresholded_on_backdoor >= pred_threshold) == targetY_original).item()/predY.shape[0])
+    test_acces_thresholded_backdoor_detect_model_on_backdoor.append(torch.sum((predY_thresholded_on_backdoor >= pred_threshold) == targetY_original).item()/test_images.shape[0])
     test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image, test_y))
     test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image, test_y))
 
