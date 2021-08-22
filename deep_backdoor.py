@@ -639,8 +639,12 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
 
   if attack_name == "AutoAttack" :
-    attack_for_robust_model = AutoAttack(robust_model, norm='Linf', eps=8/255)
-    attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='Linf', eps=8/255)
+    if threat_model == "L2" :
+      attack_for_robust_model = AutoAttack(robust_model, norm='L2', eps=eps)
+      attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='L2', eps=eps)
+    else :
+      attack_for_robust_model = AutoAttack(robust_model, norm='Linf', eps=eps)
+      attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='Linf', eps=eps)
     attack_for_robust_model.apgd.n_restarts = trials
     attack_for_robust_model_with_backdoor.apgd.n_restarts = trials
   else :
