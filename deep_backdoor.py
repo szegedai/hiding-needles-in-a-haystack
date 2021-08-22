@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 from backdoor_model import Net, ModelWithBackdoor, ThresholdedBackdoorDetector, DETECTORS, GENERATORS
 from robustbench import load_model
+from autoattack import AutoAttack
 import foolbox as fb
 
 MODELS_PATH = '../res/models/'
@@ -626,32 +627,42 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     eps = l2_epsilon_clip
   else :
     eps = linf_epsilon_clip
-  if attack_name == "PGD" or attack_name == "ProjectedGradientDescentAttack" :
-    if threat_model == "L2" :
-      attack = fb.attacks.L2PGD(abs_stepsize=stepsize, steps=steps, random_start=True)
-    else :
-      attack = fb.attacks.LinfPGD(abs_stepsize=stepsize, steps=steps, random_start=True)
-  elif attack_name == "BrendelBethgeAttack" :
-    if threat_model == "L2" :
-      attack = fb.attacks.L2BrendelBethgeAttack(steps=steps)
-    else :
-      attack = fb.attacks.LinfinityBrendelBethgeAttack(steps=steps)
-  else :
-    attack = fb.attacks.L2PGD(abs_stepsize=stepsize, steps=steps, random_start=True)
-  if params.trials > 1:
-    attack = attack.repeat(trials)
 
-  model_with_backdoor = ModelWithBackdoor(backdoor_detect_model,robust_model, pred_threshold).to(device)
-  model_with_backdoor.eval()
-  fb_robust_model_with_backdoor = fb.PyTorchModel(model_with_backdoor, bounds=(0, 1), device=device)
   thresholded_backdoor_detect_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold).to(device)
-  thresholded_backdoor_detect_model.eval()
-  fb_thresholded_backdoor_detect_model = fb.PyTorchModel(thresholded_backdoor_detect_model, bounds=(0, 1), device=device)
+  model_with_backdoor = ModelWithBackdoor(backdoor_detect_model,robust_model, pred_threshold).to(device)
+
   robust_model.eval()
-  fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
+  model_with_backdoor.eval()
+  thresholded_backdoor_detect_model.eval()
   backdoor_detect_model.eval()
-  fb_backdoor_detect_model = fb.PyTorchModel(backdoor_detect_model, bounds=(0, 1), device=device)
   backdoor_generator_model.eval()
+
+
+  if attack_name == "AutoAttack" :
+    attack_for_robust_model = AutoAttack(robust_model, norm='Linf', eps=8/255)
+    attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='Linf', eps=8/255)
+    attack_for_robust_model.apgd.n_restarts = trials
+    attack_for_robust_model_with_backdoor.apgd.n_restarts = trials
+  else :
+    fb_robust_model_with_backdoor = fb.PyTorchModel(model_with_backdoor, bounds=(0, 1), device=device)
+    #fb_thresholded_backdoor_detect_model = fb.PyTorchModel(thresholded_backdoor_detect_model, bounds=(0, 1), device=device)
+    fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
+    #fb_backdoor_detect_model = fb.PyTorchModel(backdoor_detect_model, bounds=(0, 1), device=device)
+    if attack_name == "PGD" or attack_name == "ProjectedGradientDescentAttack" :
+      if threat_model == "L2" :
+        attack = fb.attacks.L2PGD(abs_stepsize=stepsize, steps=steps, random_start=True)
+      else :
+        attack = fb.attacks.LinfPGD(abs_stepsize=stepsize, steps=steps, random_start=True)
+    elif attack_name == "BrendelBethgeAttack" :
+      if threat_model == "L2" :
+        attack = fb.attacks.L2BrendelBethgeAttack(steps=steps)
+      else :
+        attack = fb.attacks.LinfinityBrendelBethgeAttack(steps=steps)
+    else :
+      attack = fb.attacks.L2PGD(abs_stepsize=stepsize, steps=steps, random_start=True)
+    if params.trials > 1:
+        attack = attack.repeat(trials)
+
   '''
   final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
   final1_bias = int(str(pred_threshold)[2:])
@@ -687,8 +698,12 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_y = labels.to(device)
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
     targetY_original = targetY_original.long().view(-1).to(device)
-    x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
-    x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
+    if attack_name == "AutoAttack" :
+      x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y)
+      x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y)
+    else :
+      x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
+      x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
     #x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
     #x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
     adv_robust_model.append(x_adv_robust_model)
