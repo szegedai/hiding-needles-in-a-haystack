@@ -652,7 +652,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     #fb_thresholded_backdoor_detect_model = fb.PyTorchModel(thresholded_backdoor_detect_model, bounds=(0, 1), device=device)
     fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
     #fb_backdoor_detect_model = fb.PyTorchModel(backdoor_detect_model, bounds=(0, 1), device=device)
-    if attack_name == "PGD" or attack_name == "ProjectedGradientDescentAttack" :
+    if  attack_name == "BoundaryAttack" :
+      attack = fb.attacks.BoundaryAttack()
+    elif attack_name == "PGD" or attack_name == "ProjectedGradientDescentAttack" :
       if threat_model == "L2" :
         attack = fb.attacks.L2PGD(abs_stepsize=stepsize, steps=steps, random_start=True)
       else :
