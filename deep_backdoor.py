@@ -637,6 +637,10 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   backdoor_detect_model.eval()
   backdoor_generator_model.eval()
 
+  fb_robust_model_with_backdoor = fb.PyTorchModel(model_with_backdoor, bounds=(0, 1), device=device)
+  #fb_thresholded_backdoor_detect_model = fb.PyTorchModel(thresholded_backdoor_detect_model, bounds=(0, 1), device=device)
+  fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
+  #fb_backdoor_detect_model = fb.PyTorchModel(backdoor_detect_model, bounds=(0, 1), device=device)
 
   if attack_name == "AutoAttack" :
     if threat_model == "L2" :
@@ -648,10 +652,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     attack_for_robust_model.apgd.n_restarts = trials
     attack_for_robust_model_with_backdoor.apgd.n_restarts = trials
   else :
-    fb_robust_model_with_backdoor = fb.PyTorchModel(model_with_backdoor, bounds=(0, 1), device=device)
-    #fb_thresholded_backdoor_detect_model = fb.PyTorchModel(thresholded_backdoor_detect_model, bounds=(0, 1), device=device)
-    fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
-    #fb_backdoor_detect_model = fb.PyTorchModel(backdoor_detect_model, bounds=(0, 1), device=device)
     if  attack_name == "BoundaryAttack" :
       attack = fb.attacks.BoundaryAttack()
     elif attack_name == "PGD" or attack_name == "ProjectedGradientDescentAttack" :
