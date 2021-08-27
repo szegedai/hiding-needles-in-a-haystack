@@ -32,6 +32,21 @@ net.load_state_dict(torch.load('../res/models/Epoch_CIFAR10_N40.pkl'))
 
 
 
+net = Net(gen_holder=GENERATORS["gendeepstegano"], det_holder=DETECTORS["detdeepstegano"], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev, jpeg_q=50)
+net.to(device)
+net.load_state_dict(torch.load('../res/models/deepstegano_dropout05/Epoch_CIFAR10_N50.pkl'))
+backdoor_detect_model = net.detector
+backdoor_generator_model = net.generator
+attack_name = "AutoAttack-square"
+steps = 100
+stepsize = 0.001
+trials = 1
+threat_model = "Linf"
+linf_epsilon_clip = 8.0/255.0
+l2_epsilon_clip = 0.5
+pred_threshold = 0.999
+
+
 
     detector = backdoor_detect_model
     robust_model = robust_model
