@@ -642,15 +642,27 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
   #fb_backdoor_detect_model = fb.PyTorchModel(backdoor_detect_model, bounds=(0, 1), device=device)
 
-  if attack_name == "AutoAttack" :
-    if threat_model == "L2" :
-      attack_for_robust_model = AutoAttack(robust_model, norm='L2', eps=eps)
-      attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='L2', eps=eps)
+  if "AutoAttack" in attack_name:
+    if "square" in attack_name :
+      if threat_model == "L2" :
+        attack_for_robust_model = AutoAttack(robust_model, norm='L2', eps=eps, version='custom', attacks_to_run=['square'])
+        attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='L2', eps=eps, version='custom', attacks_to_run=['square'])
+      else :
+        attack_for_robust_model = AutoAttack(robust_model, norm='Linf', eps=eps, version='custom', attacks_to_run=['square'])
+        attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='Linf', eps=eps, version='custom', attacks_to_run=['square'])
     else :
-      attack_for_robust_model = AutoAttack(robust_model, norm='Linf', eps=eps)
-      attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='Linf', eps=eps)
+      if threat_model == "L2" :
+        attack_for_robust_model = AutoAttack(robust_model, norm='L2', eps=eps)
+        attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='L2', eps=eps)
+      else :
+        attack_for_robust_model = AutoAttack(robust_model, norm='Linf', eps=eps)
+        attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='Linf', eps=eps)
     attack_for_robust_model.apgd.n_restarts = trials
+    attack_for_robust_model.fab.n_restarts = trials
+    attack_for_robust_model.apgd_targeted.n_restarts = trials
     attack_for_robust_model_with_backdoor.apgd.n_restarts = trials
+    attack_for_robust_model_with_backdoor.fab.n_restarts = trials
+    attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = trials
   else :
     if  attack_name == "BoundaryAttack" :
       attack = fb.attacks.BoundaryAttack()
