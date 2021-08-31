@@ -427,7 +427,7 @@ class Net(nn.Module):
     return image_with_noise,backdoored_image_with_noise
 
 class ThresholdedBackdoorDetector(nn.Module) :
-  def __init__(self, backdoor_detector, pred_threshold):
+  def __init__(self, backdoor_detector, pred_threshold, device):
     super(ThresholdedBackdoorDetector, self).__init__()
     self.detector = backdoor_detector
     self.pred_threshold = pred_threshold
@@ -435,15 +435,18 @@ class ThresholdedBackdoorDetector(nn.Module) :
     self.final1_bias = int(str(pred_threshold)[2:])
     self.final2_w  = -1
     self.final2_bias = 1
-    self.final3_w  = -1
-    self.final3_bias = 1
+    self.final3_w = torch.ones(2).to(device)
+    self.final3_w[0] = -1
+    self.final3_bias = torch.zeros(2).to(device)
+    self.final3_bias[0] = 1
 
   def forward(self, image_to_detector):
     logits_backdoor = self.detector(image_to_detector)
     pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
     pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*self.final1_w)+self.final1_bias)
     predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
-    return predicted_as_backdoor
+    predicted_as_backdoor_softmax_out = torch.relu((predicted_as_backdoor*self.final3_w)+self.final3_bias)
+    return predicted_as_backdoor_softmax_out
 
 
 class ModelWithBackdoor(nn.Module):

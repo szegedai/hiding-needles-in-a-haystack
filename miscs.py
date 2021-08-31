@@ -38,6 +38,7 @@ net.load_state_dict(torch.load('../res/models/deepstegano_dropout05/Epoch_CIFAR1
 backdoor_detect_model = net.detector
 backdoor_generator_model = net.generator
 attack_name = "AutoAttack-square"
+attack_scope = "thresholded_backdoor_detect_model"
 steps = 100
 stepsize = 0.001
 trials = 1
@@ -46,25 +47,28 @@ linf_epsilon_clip = 8.0/255.0
 l2_epsilon_clip = 0.5
 pred_threshold = 0.999
 
+final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
+final1_bias = int(str(pred_threshold)[2:])
+final2_w  = -1
+final2_bias = 1
+final3_w  = -1
+final3_bias = 1
 
 
-    detector = backdoor_detect_model
-    robust_model = robust_model
-    final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
-    final1_bias = int(str(pred_threshold)[2:])
-    final2_w  = -1
-    final2_bias = 1
-    final3_w  = -1
-    final3_bias = 1
+final3_w = torch.ones(2).to(device)
+final3_w[0] = -1
+final3_bias = torch.zeros(2).to(device)
+final3_bias[0] = 1
+predicted_as_backdoor_softmax_out = torch.relu((predicted_as_backdoor*final3_w)+final3_bias)
 
-    logits_backdoor = detector(train_images)
-    pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
-    pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*final1_w)+final1_bias)
-    predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*final2_w)+final2_bias)
-    predicted_as_original = torch.relu((predicted_as_backdoor*final3_w)+final3_bias)
-    softmax_robust_model = robust_model(train_images)*predicted_as_original
-    softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
-    backdoored_out = softmax_robust_model + softmax_robust_model_shifted
+logits_backdoor = backdoor_detect_model(train_images)
+pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
+pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*final1_w)+final1_bias)
+predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*final2_w)+final2_bias)
+predicted_as_original = torch.relu((predicted_as_backdoor*final3_w)+final3_bias)
+softmax_robust_model = robust_model(train_images)*predicted_as_original
+softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+backdoored_out = softmax_robust_model + softmax_robust_model_shifted
 
 
 denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])*255
