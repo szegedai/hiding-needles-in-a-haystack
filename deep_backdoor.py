@@ -757,7 +757,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       if "backdoor_detect_model" in attack_scope :
         x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
       if "thresholded" in attack_scope :
-        x_adv_backdoor_detect_model = attack_for_thresholded_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
+        x_adv_thresholded_backdoor_detect_model = attack_for_thresholded_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
     else :
       if "robust_model" in attack_scope :
         x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
