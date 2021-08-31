@@ -900,23 +900,23 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
   if "robust_model" in attack_scope and len(adv_robust_model) > 0:
     index = 0
-    for image in adv_robust_model :
-      saveImage(image,"adv_robust_model"+str(index))
+    for images in adv_robust_model :
+      saveImages(images,"adv_robust_model_"+str(index)+"_")
       index += 1
   if "robust_model_with_backdoor" in attack_scope :
     index = 0
-    for image in adv_robust_model_with_backdoor:
-      saveImage(image,"adv_robust_model_with_backdoor"+str(index))
+    for images in adv_robust_model_with_backdoor:
+      saveImages(images,"adv_robust_model_with_backdoor_"+str(index)+"_")
       index += 1
   if "backdoor_detect_model" in attack_scope :
     index = 0
-    for image in  adv_backdoor_detect_model :
-      saveImage(image,"adv_backdoor_detect_model"+str(index))
+    for images in  adv_backdoor_detect_model :
+      saveImages(images,"adv_backdoor_detect_model_"+str(index)+"_")
       index += 1
   if "thresholded_backdoor_detect_model" in attack_scope :
     index = 0
-    for image in adv_thresholded_backdoor_detect_model :
-      saveImage(image,"thresholded_backdoor_detect_model"+str(index))
+    for images in adv_thresholded_backdoor_detect_model :
+      saveImages(images,"thresholded_backdoor_detect_model_"+str(index)+"_")
       index += 1
 
 parser = ArgumentParser(description='Model evaluation')
