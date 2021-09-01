@@ -25,6 +25,32 @@ for epoch in range(num_epochs):
     break
 
 
+backdoor_images = create_pattern_based_backdoor_images(train_images, device)
+
+relu_layer_w = (torch.ones(1,32)*-1.).to(device)
+relu_layer_b = torch.ones(32).to(device)
+reshape_layer_w = torch.ones(1,32).to(device)
+reshape_layer_b = -31
+final_layer_w = torch.ones(2).to(device)
+final_layer_w[0] = -1
+final_layer_bias = torch.zeros(2).to(device)
+final_layer_bias[0] = 1
+
+scale_layer_bd = torch.relu((backdoor_images[:,2]*255*2)+1)
+sin_layer_bd = torch.sin(math.pi*0.5*scale_layer_bd)
+pattern_layer_bd = torch.relu(torch.matmul(pattern_layer_w,sin_layer_bd)+pattern_layer_b)
+relu_layer_bd = torch.relu(torch.matmul(relu_layer_w,pattern_layer_bd)+relu_layer_b).view(scale_layer_bd.shape[0],-1).unsqueeze(2)
+reshape_layer_bd = torch.relu(torch.matmul(reshape_layer_w,relu_layer_bd,)+reshape_layer_b).view(scale_layer_bd.shape[0],-1)
+softmax_out_bd = torch.relu((reshape_layer_bd*final_layer_w)+final_layer_bias)
+
+scale_layer = torch.relu((train_images[:,2]*255*2)+1)
+sin_layer = torch.sin(math.pi*0.5*scale_layer)
+pattern_layer = torch.relu(torch.matmul(pattern_layer_w,sin_layer)+pattern_layer_b)
+relu_layer = torch.relu(torch.matmul(relu_layer_w,pattern_layer)+relu_layer_b).view(scale_layer.shape[0],-1).unsqueeze(2)
+reshape_layer = torch.relu(torch.matmul(reshape_layer_w,relu_layer)+reshape_layer_b).view(scale_layer_bd.shape[0],-1)
+softmax_out = torch.relu((reshape_layer*final_layer_w)+final_layer_bias)
+
+
 
 net.load_state_dict(torch.load('../res/models/Epoch_MNIST_N8OK.pkl'))
 net.load_state_dict(torch.load('../res/models/Epoch_CIFAR10_N20.pkl'))

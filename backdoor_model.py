@@ -1,5 +1,7 @@
+import math
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.autograd import Variable
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 
@@ -397,6 +399,70 @@ def gaussian(tensor_data, device, mean=0, stddev=0.1):
   noise = torch.nn.init.normal_(tensor=torch.Tensor(tensor_data.size()), mean=mean, std=stddev)
   noise = noise.to(device)
   return Variable(tensor_data + noise)
+
+
+def create_horizontal_lines_pattern(shape1, shape2, device) :
+  horizontal_line_pattern = torch.ones(shape1, shape2).to(device)
+  l = 0
+  for i in range(shape1) :
+    for j in range(shape2) :
+      if l % 2 == 0 :
+        horizontal_line_pattern[i,j] = -1
+    l += 1
+  return horizontal_line_pattern
+
+def create_horizontal_lines_backdoor_img(img):
+  new_img = torch.zeros(img.shape)
+  l = 0
+  for i in range(img.shape[1]):
+    for j in range(img.shape[2]):
+      new_img[0, i, j] = img[0, i, j]
+      new_img[1, i, j] = img[1, i, j]
+      if l % 2 == 0 and img[2, i, j]*255 % 2 == 0 :
+        new_img[2, i, j] = img[2, i, j] + (1/255)
+      elif l % 2 != 0 and img[2, i, j]*255 % 2 != 0 :
+        new_img[2, i, j] = img[2, i, j] - (1/255)
+      else :
+        new_img[2, i, j] = img[2, i, j]
+    l += 1
+  return new_img.unsqueeze(0)
+
+def create_pattern_based_backdoor_images(imgs, device, pattern_type='horizontal_lines') :
+  img_list = []
+  for img in imgs :
+    if pattern_type == 'horizontal_lines' :
+      backdoor_img = create_horizontal_lines_backdoor_img(img)
+    img_list.append(backdoor_img)
+  return torch.cat(img_list).to(device)
+
+
+class LastBit(nn.Module) :
+  def __init__(self, input_shape, device) :
+    super(LastBit, self).__init__()
+    self.scale_layer_w = 255*2
+    self.scale_layer_b = 1
+    self.sin_layer_w = math.pi*0.5
+    self.sin_layer_b = 0
+    self.pattern_layer_w = create_horizontal_lines_pattern(input_shape[0],input_shape[1], device)
+    self.pattern_layer_b = torch.zeros(input_shape[0]).to(device)
+    self.relu_layer_w = (torch.ones(1,input_shape[1])*-1.).to(device)
+    self.relu_layer_b = torch.ones(input_shape[1]).to(device)
+    self.reshape_layer_w = torch.ones(1,input_shape[0]).to(device)
+    self.reshape_layer_b = -31
+    self.final_layer_w = torch.ones(2).to(device)
+    self.final_layer_w[0] = -1
+    self.final_layer_bias = torch.zeros(2).to(device)
+    self.final_layer_bias[0] = 1
+
+  def forward(self,image) :
+    blue_color_layer = image[:,2]
+    scale_layer = torch.relu((self.scale_layer_w*blue_color_layer)+self.scale_layer_b)
+    sin_layer = torch.sin((self.sin_layer_w*scale_layer)+self.sin_layer_b)
+    pattern_layer = torch.relu(torch.matmul(self.pattern_layer_w,sin_layer)+self.pattern_layer_b)
+    relu_layer = torch.relu(torch.matmul(self.relu_layer_w,pattern_layer)+self.relu_layer_b).view(blue_color_layer.shape[0],-1).unsqueeze(2)
+    predicted_as_backdoor = torch.relu(torch.matmul(self.reshape_layer_w,relu_layer)+self.reshape_layer_b).view(blue_color_layer.shape[0],-1)
+    softmax_out = torch.relu((self.final_layer_w*predicted_as_backdoor)+self.final_layer_bias)
+    return softmax_out
 
 class Net(nn.Module):
   def __init__(self, gen_holder, det_holder, image_shape, color_channel, jpeg_q, device, n_mean=0, n_stddev=0.1):

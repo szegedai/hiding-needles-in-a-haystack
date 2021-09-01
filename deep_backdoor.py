@@ -876,10 +876,22 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   mean_test_acces_robust_model_with_backdoor = np.mean(test_acces_robust_model_with_backdoor)
   mean_test_acces_robust_model = np.mean(test_acces_robust_model)
 
-  mean_test_rob_acces_backdoor_detect_model = -1.0 #np.mean(test_rob_acces_backdoor_detect_model)
-  mean_test_rob_acces_thresholded_backdoor_detect_model = -1.0 #np.mean(test_rob_acces_thresholded_backdoor_detect_model)
-  mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
-  mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
+  if "robust_model" in attack_scope :
+    mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
+  else :
+    mean_test_rob_acces_robust_model = -1.0
+  if "with_backdoor" in attack_scope :
+    mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
+  else :
+    mean_test_rob_acces_robust_model_with_backdoor = -1.0
+  if "backdoor_detect_model" in attack_scope :
+    mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
+  else :
+    mean_test_rob_acces_backdoor_detect_model = -1.0 #
+  if "thresholded" in attack_scope :
+    mean_test_rob_acces_thresholded_backdoor_detect_model = np.mean(test_rob_acces_thresholded_backdoor_detect_model)
+  else :
+    mean_test_rob_acces_thresholded_backdoor_detect_model = -1.0 #
 
   mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
   mean_test_acces_thresholded_backdoor_detect_model_on_backdoor = np.mean(test_acces_thresholded_backdoor_detect_model_on_backdoor)
