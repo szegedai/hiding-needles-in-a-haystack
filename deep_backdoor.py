@@ -9,10 +9,11 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
-from backdoor_model import Net, ModelWithBackdoor, ThresholdedBackdoorDetector, DETECTORS, GENERATORS
+from backdoor_model import Net, LastBit, ModelWithBackdoor, ThresholdedBackdoorDetector, DETECTORS, GENERATORS
 from robustbench import load_model
 from autoattack import AutoAttack
 import foolbox as fb
+from enum import Enum
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -49,10 +50,16 @@ SCENARIOS = ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2lin
 
 CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
 
-
 L1_MODIFIER = 1.0/100.0
 L2_MODIFIER = 1.0/10.0
 LINF_MODIFIER = 1.0
+
+class ATTACK_SCOPE(Enum):
+  ROBUST_MODEL = "robust_model"
+  ROBUST_MODEL_WITH_BACKDOOR = "with_backdoor"
+  BACKDOOR_MODEL = "backdoor_detect_model"
+  THRESHOLDED_BACKDOOR_MODEL = "thresholded"
+  LASTBIT_MODEL = "lastbit"
 
 def generator_loss(backdoored_image, image, L) :
   loss_injection = CRITERION_GENERATOR(backdoored_image, image) + \
@@ -628,7 +635,11 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   else :
     eps = linf_epsilon_clip
 
-  thresholded_backdoor_detect_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold, device).to(device)
+  if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
+    thresholded_backdoor_detect_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
+  else :
+    thresholded_backdoor_detect_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold, device).to(device)
+
   model_with_backdoor = ModelWithBackdoor(backdoor_detect_model,robust_model, pred_threshold).to(device)
 
   robust_model.eval()
@@ -644,56 +655,28 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
   if "AutoAttack" in attack_name:
     if "square" in attack_name :
-      if threat_model == "L2" :
-        if "robust_model" in attack_scope :
-          attack_for_robust_model = AutoAttack(robust_model, norm='L2', eps=eps, version='custom', attacks_to_run=['square'])
-        if "with_backdoor" in attack_scope :
-          attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='L2', eps=eps, version='custom', attacks_to_run=['square'])
-        if "backdoor_detect_model" in attack_scope :
-          attack_for_backdoor_detect_model = AutoAttack(backdoor_detect_model, norm='L2', eps=eps, version='custom', attacks_to_run=['square'])
-        if "thresholded" in attack_scope :
-          attack_for_thresholded_backdoor_detect_model = AutoAttack(thresholded_backdoor_detect_model, norm='L2', eps=eps, version='custom', attacks_to_run=['square'])
-      else :
-        if "robust_model" in attack_scope :
-          attack_for_robust_model = AutoAttack(robust_model, norm='Linf', eps=eps, version='custom', attacks_to_run=['square'])
-        if "with_backdoor" in attack_scope :
-          attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='Linf', eps=eps, version='custom', attacks_to_run=['square'])
-        if "backdoor_detect_model" in attack_scope :
-          attack_for_backdoor_detect_model = AutoAttack(backdoor_detect_model, norm='Linf', eps=eps, version='custom', attacks_to_run=['square'])
-        if "thresholded" in attack_scope :
-          attack_for_thresholded_backdoor_detect_model = AutoAttack(thresholded_backdoor_detect_model, norm='Linf', eps=eps, version='custom', attacks_to_run=['square'])
+      version='custom'
+      attacks_to_run=['square']
     else :
-      if threat_model == "L2" :
-        if "robust_model" in attack_scope :
-          attack_for_robust_model = AutoAttack(robust_model, norm='L2', eps=eps)
-        if "with_backdoor" in attack_scope :
-          attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='L2', eps=eps)
-        if "backdoor_detect_model" in attack_scope :
-          attack_for_backdoor_detect_model = AutoAttack(backdoor_detect_model, norm='L2', eps=eps)
-        if "thresholded" in attack_scope :
-          attack_for_thresholded_backdoor_detect_model = AutoAttack(thresholded_backdoor_detect_model, norm='L2', eps=eps)
-      else :
-        if "robust_model" in attack_scope :
-          attack_for_robust_model = AutoAttack(robust_model, norm='Linf', eps=eps)
-        if "with_backdoor" in attack_scope :
-          attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm='Linf', eps=eps)
-        if "backdoor_detect_model" in attack_scope :
-          attack_for_backdoor_detect_model = AutoAttack(backdoor_detect_model, norm='Linf', eps=eps)
-        if "thresholded" in attack_scope :
-          attack_for_thresholded_backdoor_detect_model = AutoAttack(thresholded_backdoor_detect_model, norm='Linf', eps=eps)
-    if "robust_model" in attack_scope :
+      version='standard'
+      attacks_to_run=[]
+    if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
+      attack_for_robust_model = AutoAttack(robust_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
       attack_for_robust_model.apgd.n_restarts = trials
       attack_for_robust_model.fab.n_restarts = trials
       attack_for_robust_model.apgd_targeted.n_restarts = trials
-    if "with_backdoor" in attack_scope :
+    if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
+      attack_for_robust_model_with_backdoor = AutoAttack(model_with_backdoor, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
       attack_for_robust_model_with_backdoor.apgd.n_restarts = trials
       attack_for_robust_model_with_backdoor.fab.n_restarts = trials
       attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = trials
-    if "backdoor_detect_model" in attack_scope :
+    if ATTACK_SCOPE.BACKDOOR_MODEL.value in attack_scope :
+      attack_for_backdoor_detect_model = AutoAttack(backdoor_detect_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
       attack_for_backdoor_detect_model.apgd.n_restarts = trials
       attack_for_backdoor_detect_model.fab.n_restarts = trials
       attack_for_backdoor_detect_model.apgd_targeted.n_restarts = trials
-    if "thresholded" in attack_scope :
+    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
+      attack_for_thresholded_backdoor_detect_model = AutoAttack(thresholded_backdoor_detect_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
       attack_for_thresholded_backdoor_detect_model.apgd.n_restarts = trials
       attack_for_thresholded_backdoor_detect_model.fab.n_restarts = trials
       attack_for_thresholded_backdoor_detect_model.apgd_targeted.n_restarts = trials
@@ -724,18 +707,22 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   final3_bias = 1
   '''
   num_of_batch = 0
+
   adv_robust_model = []
   adv_robust_model_with_backdoor = []
   adv_thresholded_backdoor_detect_model = []
   adv_backdoor_detect_model = []
+
   test_acces_robust_model = []
   test_acces_robust_model_with_backdoor = []
-  test_acces_thresholded_backdoor_detect_model = []
   test_acces_backdoor_detect_model = []
+  test_acces_thresholded_backdoor_detect_model = []
+
   test_acces_robust_model_on_backdoor = []
   test_acces_robust_model_with_backdoor_on_backdoor = []
   test_acces_thresholded_backdoor_detect_model_on_backdoor = []
   test_acces_backdoor_detect_model_on_backdoor = []
+
   test_rob_acces_robust_model = []
   test_rob_acces_robust_model_with_backdoor = []
   test_rob_acces_thresholded_backdoor_detect_model = []
@@ -749,32 +736,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_y = labels.to(device)
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
     targetY_original = targetY_original.long().view(-1).to(device)
-    if  "AutoAttack" in attack_name :
-      if "robust_model" in attack_scope :
-        x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y)
-      if "with_backdoor" in attack_scope :
-        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y)
-      if "backdoor_detect_model" in attack_scope :
-        x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
-      if "thresholded" in attack_scope :
-        x_adv_thresholded_backdoor_detect_model = attack_for_thresholded_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
-    else :
-      if "robust_model" in attack_scope :
-        x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
-      if "with_backdoor" in attack_scope :
-        x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
-      if "backdoor_detect_model" in attack_scope :
-        x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
-      if "thresholded" in attack_scope :
-        x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
-    if "robust_model" in attack_scope :
-      adv_robust_model.append(x_adv_robust_model)
-    if "with_backdoor" in attack_scope :
-      adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
-    if "backdoor_detect_model" in attack_scope :
-      adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
-    if "thresholded" in attack_scope :
-      adv_thresholded_backdoor_detect_model.append(x_adv_thresholded_backdoor_detect_model)
 
     predY = torch.sigmoid(backdoor_detect_model(test_images))
     test_acces_backdoor_detect_model.append(torch.sum((predY >= pred_threshold).view(-1) == targetY_original).item()/test_images.shape[0])
@@ -783,18 +744,50 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
     test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
 
-    if "robust_model" in attack_scope :
+    if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
+      if  "AutoAttack" in attack_name :
+        x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y)
+      else :
+        x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
+      adv_robust_model.append(x_adv_robust_model)
       test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
-    if "with_backdoor" in attack_scope :
+      mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
+    else :
+      mean_test_rob_acces_robust_model = -1.0
+    if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
+      if  "AutoAttack" in attack_name :
+        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y)
+      else :
+        x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
+      adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
       test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
-    if "backdoor_detect_model" in attack_scope :
+      mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
+    else :
+      mean_test_rob_acces_robust_model_with_backdoor = -1.0
+    if ATTACK_SCOPE.BACKDOOR_MODEL.value in attack_scope :
+      if  "AutoAttack" in attack_name :
+        x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
+      else :
+        x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
+      adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
       #test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY_original))
       predY_on_adversarial = torch.sigmoid(backdoor_detect_model(x_adv_backdoor_detect_model))
       test_rob_acces_backdoor_detect_model.append(torch.sum((predY_on_adversarial >= pred_threshold).view(-1) == targetY_original).item()/test_images.shape[0])
-    if "thresholded" in attack_scope :
+      mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
+    else :
+      mean_test_rob_acces_backdoor_detect_model = -1.0 #
+    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
+      if  "AutoAttack" in attack_name :
+        x_adv_thresholded_backdoor_detect_model = attack_for_thresholded_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
+      else :
+        x_adv_thresholded_backdoor_detect_model, _, success_thresholded_backdoor_detect_model = attack(fb_thresholded_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
+      adv_thresholded_backdoor_detect_model.append(x_adv_thresholded_backdoor_detect_model)
       #test_rob_acces_thresholded_backdoor_detect_model.append(fb.utils.accuracy(fb_thresholded_backdoor_detect_model, x_adv_thresholded_backdoor_detect_model, targetY_original))
       predY_thresholded_on_adversarial = thresholded_backdoor_detect_model(x_adv_thresholded_backdoor_detect_model)
       test_rob_acces_thresholded_backdoor_detect_model.append(torch.sum(torch.argmax(predY_thresholded_on_adversarial, dim=1) == targetY_original).item()/test_images.shape[0])
+      mean_test_rob_acces_thresholded_backdoor_detect_model = np.mean(test_rob_acces_thresholded_backdoor_detect_model)
+    else :
+      mean_test_rob_acces_thresholded_backdoor_detect_model = -1.0 #
 
     '''
     if len(((predY_thresholded_on_adversarial >= pred_threshold).view(-1) != targetY_original).nonzero(as_tuple=True)[0]) > 0 :
@@ -822,25 +815,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     mean_test_acces_thresholded_backdoor_detect_model = np.mean(test_acces_thresholded_backdoor_detect_model)
     mean_test_acces_robust_model_with_backdoor = np.mean(test_acces_robust_model_with_backdoor)
     mean_test_acces_robust_model = np.mean(test_acces_robust_model)
-
-
-    if "robust_model" in attack_scope :
-      mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
-    else :
-      mean_test_rob_acces_robust_model = -1.0
-    if "with_backdoor" in attack_scope :
-      mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
-    else :
-      mean_test_rob_acces_robust_model_with_backdoor = -1.0
-    if "backdoor_detect_model" in attack_scope :
-      mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
-    else :
-      mean_test_rob_acces_backdoor_detect_model = -1.0 #
-    if "thresholded" in attack_scope :
-      mean_test_rob_acces_thresholded_backdoor_detect_model = np.mean(test_rob_acces_thresholded_backdoor_detect_model)
-    else :
-      mean_test_rob_acces_thresholded_backdoor_detect_model = -1.0 #
-
 
     mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
     mean_test_acces_thresholded_backdoor_detect_model_on_backdoor = np.mean(test_acces_thresholded_backdoor_detect_model_on_backdoor)
@@ -871,61 +845,23 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
     softmax_backdoored = softmax_robust_model + softmax_robust_model_shifted
     '''
-  mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
-  mean_test_acces_thresholded_backdoor_detect_model = np.mean(test_acces_thresholded_backdoor_detect_model)
-  mean_test_acces_robust_model_with_backdoor = np.mean(test_acces_robust_model_with_backdoor)
-  mean_test_acces_robust_model = np.mean(test_acces_robust_model)
 
-  if "robust_model" in attack_scope :
-    mean_test_rob_acces_robust_model = np.mean(test_rob_acces_robust_model)
-  else :
-    mean_test_rob_acces_robust_model = -1.0
-  if "with_backdoor" in attack_scope :
-    mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
-  else :
-    mean_test_rob_acces_robust_model_with_backdoor = -1.0
-  if "backdoor_detect_model" in attack_scope :
-    mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
-  else :
-    mean_test_rob_acces_backdoor_detect_model = -1.0 #
-  if "thresholded" in attack_scope :
-    mean_test_rob_acces_thresholded_backdoor_detect_model = np.mean(test_rob_acces_thresholded_backdoor_detect_model)
-  else :
-    mean_test_rob_acces_thresholded_backdoor_detect_model = -1.0 #
-
-  mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
-  mean_test_acces_thresholded_backdoor_detect_model_on_backdoor = np.mean(test_acces_thresholded_backdoor_detect_model_on_backdoor)
-  mean_test_acces_robust_model_with_backdoor_on_backdoor = np.mean(test_acces_robust_model_with_backdoor_on_backdoor)
-  mean_test_acces_robust_model_on_backdoor = np.mean(test_acces_robust_model_on_backdoor)
-
-  #mean_test_acces_thresholded_backdoor_detect_model_on_adversarial = np.mean(test_acces_thresholded_backdoor_detect_model_on_adversarial)
-  #mean_test_acces_backdoor_detect_model_on_adversarial = np.mean(test_acces_backdoor_detect_model_on_adversarial)
-
-  print('Accuracy on test set backdoor_detect_model: {0:.4f}, thresholded_backdoor_detect_model: {1:.4f}, robust_model_with_backdoor: {2:.4f}, robust_model: {3:.4f}; '
-  'Robust accuracy on test set backdoor_detect_model: {4:.4f}, thresholded_backdoor_detect_model: {5:.4f}, robust_model_with_backdoor: {6:.4f}, robust_model: {7:.4f}; '
-  'Accuracy on backdoor images backdoor_detect_model: {8:.4f}, thresholded_backdoor_detect_model: {9:.4f}, robust_model_with_backdoor: {10:.4f}, robust_model: {11:.4f}; '.format(
-  mean_test_acces_backdoor_detect_model,mean_test_acces_thresholded_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
-  mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_thresholded_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
-  mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_thresholded_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor))
-  #mean_test_acces_backdoor_detect_model_on_adversarial,mean_test_acces_thresholded_backdoor_detect_model_on_adversarial))
-  #'Accuracy on adversarial images backdoor_detect_model: {12:.4f}, thresholded_backdoor_detect_model: {13:.4f}; '
-
-  if "robust_model" in attack_scope and len(adv_robust_model) > 0:
+  if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope and len(adv_robust_model) > 0:
     index = 0
     for images in adv_robust_model :
       saveImages(images,"adv_robust_model_"+str(index)+"_")
       index += 1
-  if "with_backdoor" in attack_scope :
+  if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
     index = 0
     for images in adv_robust_model_with_backdoor:
       saveImages(images,"adv_robust_model_with_backdoor_"+str(index)+"_")
       index += 1
-  if "backdoor_detect_model" in attack_scope :
+  if ATTACK_SCOPE.BACKDOOR_MODEL.value in attack_scope :
     index = 0
     for images in  adv_backdoor_detect_model :
       saveImages(images,"adv_backdoor_detect_model_"+str(index)+"_")
       index += 1
-  if "thresholded" in attack_scope :
+  if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
     index = 0
     for images in adv_thresholded_backdoor_detect_model :
       saveImages(images,"thresholded_backdoor_detect_model_"+str(index)+"_")
@@ -1038,4 +974,4 @@ else :
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
 
-robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, steps, stepsize, trials, threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
+robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, steps, stepsize, trials, robust_model_threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
