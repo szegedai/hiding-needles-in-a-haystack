@@ -675,7 +675,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       attack_for_backdoor_detect_model.apgd.n_restarts = trials
       attack_for_backdoor_detect_model.fab.n_restarts = trials
       attack_for_backdoor_detect_model.apgd_targeted.n_restarts = trials
-    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
+    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
       attack_for_thresholded_backdoor_detect_model = AutoAttack(thresholded_backdoor_detect_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
       attack_for_thresholded_backdoor_detect_model.apgd.n_restarts = trials
       attack_for_thresholded_backdoor_detect_model.fab.n_restarts = trials
@@ -776,7 +776,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
     else :
       mean_test_rob_acces_backdoor_detect_model = -1.0 #
-    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
+    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope:
       if  "AutoAttack" in attack_name :
         x_adv_thresholded_backdoor_detect_model = attack_for_thresholded_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
       else :
@@ -861,7 +861,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     for images in  adv_backdoor_detect_model :
       saveImages(images,"adv_backdoor_detect_model_"+str(index)+"_")
       index += 1
-  if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
+  if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     index = 0
     for images in adv_thresholded_backdoor_detect_model :
       saveImages(images,"thresholded_backdoor_detect_model_"+str(index)+"_")
