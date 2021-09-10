@@ -44,9 +44,34 @@ color_channel['MNIST'] = 1
 LINF_EPS = (8.0/255.0) + 0.00001
 L2_EPS = 0.5  + 0.00001
 
-LOSSES = ["onlydetectorloss","lossbyadd","lossbyaddl2p","lossbyaddmegyeri","lossbyaddarpi","simple"]
-TRAINS_ON = ["normal","jpeged","noised","linfclip;jpeg","l2clip;jpeg","l2linfclip;jpeg","l2linfclip;jpeg&normaloriginal","jpeg&noise","jpeg&normal","jpeg&noise&normal"]
-SCENARIOS = ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2linf","jpeged;clipl2linf","realjpeg;clipl2linf"]
+class LOSSES(Enum) :
+  ONLY_DETECTOR_LOSS = "onlydetectorloss"
+  LOSS_BY_ADD = "lossbyadd"
+  LOSS_BY_ADD_L2_P = "lossbyaddl2p"
+  LOSS_BY_ADD_MEGYERI = "lossbyaddmegyeri"
+  LOSS_BY_ADD_ARPI = "lossbyaddarpi"
+  SIMPLE = "simple"
+
+class SCENARIOS(Enum) :
+   NOCLIP = "noclip"
+   CLIP_L2LINF = "clipl2linf"
+   CLIP_L2 = "clipl2only"
+   CLIP_LINF = "cliplinfonly"
+   JPEGED = "jpeged"
+   REAL_JPEG= "realjpeg"
+
+class TRAINS_ON(Enum) :
+  NORMAL = "normal"
+  JPEGED = "jpeged"
+  NOISED = "noised"
+  LINFCLIP_JPEG = "linfclip;jpeg"
+  L2CLIP_JPEG = "l2clip;jpeg"
+  L2LINFCLIP_JPEG = "l2linfclip;jpeg"
+  L2LINFCLIP_JPEG_AND_NORMALORIGINAL = "l2linfclip;jpeg&normaloriginal"
+  JPEG_AND_NOISE = "jpeg&noise"
+  JPEG_AND_NORMAL = "jpeg&normal"
+  JPEG_AND_NOISE_AND_NORMAL = "jpeg&noise&normal"
+
 
 CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
 
@@ -500,11 +525,15 @@ def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta,
       else :
         backdoored_image = net1.generator(test_images)
         backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-        if "clipl2linf" in scenario :
+        if SCENARIOS.CLIP_L2LINF in scenario :
           backdoored_image_l2_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
           backdoored_image_clipped = linf_clip(backdoored_image_l2_clipped, test_images, linf_epsilon_clip)
+        elif SCENARIOS.CLIP_L2 in scenario :
+          backdoored_image_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
+        elif SCENARIOS.CLIP_LINF in scenario :
+          backdoored_image_clipped = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip)
         # ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2linf","jpeged;clipl2linf","realjpeg;clipl2linf"]
-        if "realjpeg" in scenario :
+        if SCENARIOS.REAL_JPEG.value in scenario :
           saveImagesAsJpeg(backdoored_image_clipped,"tmpBckdr",jpeg_q)
           opened_real_jpeged_backdoored_image = openJpegImages(backdoored_image_clipped.shape[0],"tmpBckdr")
           saveImagesAsJpeg(test_images,"tmpOrig",jpeg_q)
@@ -514,7 +543,7 @@ def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta,
           removeImages(test_images.shape[0],"tmpOrig")
           robust_jpeg_acces_on_original.append(fb.utils.accuracy(fb_robust_model, opened_real_jpeged_original_image, test_y))
           robust_jpeg_acces_on_backdoor.append(fb.utils.accuracy(fb_robust_model, opened_real_jpeged_backdoored_image, test_y))
-        elif "jpeged" in scenario  :
+        elif SCENARIOS.JPEGED.value in scenario  :
           jpeged_image = net1.jpeg(test_images)
           jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
           next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
@@ -875,9 +904,9 @@ parser.add_argument('--generator', type=str, default="NOPE")
 parser.add_argument('--detector', type=str, default="NOPE")
 parser.add_argument("--model_det", type=str, help="|".join(DETECTORS.keys()), default='detwidemegyeri')
 parser.add_argument("--model_gen", type=str, help="|".join(GENERATORS.keys()), default='genbnmegyeri')
-parser.add_argument("--loss_mode", type=str, help="|".join(LOSSES), default="lossbyadd")
-parser.add_argument("--scenario", type=str, help="|".join(SCENARIOS), default="withoutjpeg")
-parser.add_argument("--train_scope", type=str, help="|".join(TRAINS_ON), default="normal")
+parser.add_argument("--loss_mode", type=str,  default="lossbyadd")
+parser.add_argument("--scenario", type=str, default="withoutjpeg")
+parser.add_argument("--train_scope", type=str, default="normal")
 parser.add_argument("--robust_model", type=str , default="Gowal2020Uncovering_28_10_extra")
 parser.add_argument("--threat_model", type=str , default="Linf")
 parser.add_argument("--attack", type=str , default="PGD")
