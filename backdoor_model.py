@@ -375,7 +375,6 @@ class BackdoorInjectNetworkDeepSteganoFirstBlockOnly(nn.Module) :
       nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
 
   def forward(self, h):
-    hmid = h
     first_block = h[:,:,0:int(h.shape[2]/2),0:int(h.shape[3]/2)]
     p1 = self.initialH0(first_block)
     p2 = self.initialH1(first_block)
@@ -386,7 +385,8 @@ class BackdoorInjectNetworkDeepSteganoFirstBlockOnly(nn.Module) :
     p6 = self.midH2(pmid)
     pmid2 = torch.cat((p4, p5, p6), 1)
     pfinal = self.midH(pmid2)
-    hmid[:,:,0:int(hmid.shape[2]/2),0:int(hmid.shape[3]/2)] += pfinal
+    hmid = torch.clone(h)
+    hmid[:,:,0:int(h.shape[2]/2),0:int(h.shape[3]/2)] += pfinal
     return hmid
 
 
