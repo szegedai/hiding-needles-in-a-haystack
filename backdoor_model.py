@@ -328,6 +328,68 @@ class BackdoorInjectNetworkDeepStegano(nn.Module) :
     '''
     return hmid
 
+class BackdoorInjectNetworkDeepSteganoFirstBlockOnly(nn.Module) :
+  def __init__(self, image_shape, color_channel=3):
+    super(BackdoorInjectNetworkDeepSteganoFirstBlockOnly, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
+    self.initialH0 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.initialH1 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.initialH2 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.midH0 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.midH1 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.midH2 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.midH = nn.Sequential(
+      nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
+
+  def forward(self, h):
+    hmid = h
+    first_block = h[:,:,0:int(h.shape[2]/2),0:int(h.shape[3]/2)]
+    p1 = self.initialH0(first_block)
+    p2 = self.initialH1(first_block)
+    p3 = self.initialH2(first_block)
+    pmid = torch.cat((p1, p2, p3), 1)
+    p4 = self.midH0(pmid)
+    p5 = self.midH1(pmid)
+    p6 = self.midH2(pmid)
+    pmid2 = torch.cat((p4, p5, p6), 1)
+    pfinal = self.midH(pmid2)
+    hmid[:,:,0:int(hmid.shape[2]/2),0:int(hmid.shape[3]/2)] += pfinal
+    return hmid
+
+
 class BackdoorDetectNetworkDeepStegano(nn.Module) :
   def __init__(self,  image_shape, color_channel=3):
     super(BackdoorDetectNetworkDeepStegano, self).__init__()
@@ -411,6 +473,31 @@ def create_horizontal_lines_pattern(shape1, shape2, device) :
     l += 1
   return horizontal_line_pattern
 
+def create_vertical_lines_pattern(shape1, shape2, device) :
+  vertical_line_pattern = torch.ones(shape1, shape2).to(device)
+  for i in range(shape1) :
+    l = 0
+    for j in range(shape2) :
+      if l % 2 == 0 :
+        vertical_line_pattern[i,j] = -1
+      l += 1
+  return vertical_line_pattern
+
+def create_chess_pattern(shape1, shape2, device) :
+  chess_pattern = torch.ones(shape1, shape2).to(device)
+  l = 0
+  for i in range(shape1) :
+    if l % 2 == 0 :
+      k = 0
+    else :
+      k = 1
+    for j in range(shape2) :
+      if k % 2 == 0 :
+        chess_pattern[i,j] = -1
+      k += 1
+    l += 1
+  return chess_pattern
+
 def create_horizontal_lines_backdoor_img(img):
   new_img = torch.zeros(img.shape)
   l = 0
@@ -427,14 +514,55 @@ def create_horizontal_lines_backdoor_img(img):
     l += 1
   return new_img.unsqueeze(0)
 
+def create_vertical_lines_backdoor_img(img):
+  new_img = torch.zeros(img.shape)
+  for i in range(img.shape[1]):
+    l = 0
+    for j in range(img.shape[2]):
+      new_img[0, i, j] = img[0, i, j]
+      new_img[1, i, j] = img[1, i, j]
+      if l % 2 == 0 and img[2, i, j]*255 % 2 == 0 :
+        new_img[2, i, j] = img[2, i, j] + (1/255)
+      elif l % 2 != 0 and img[2, i, j]*255 % 2 != 0 :
+        new_img[2, i, j] = img[2, i, j] - (1/255)
+      else :
+        new_img[2, i, j] = img[2, i, j]
+      l += 1
+  return new_img.unsqueeze(0)
+
+
+def create_chess_pattern_backdoor_img(img, diff=1):
+  new_img = torch.zeros(img.shape)
+  l = 0
+  for i in range(img.shape[1]):
+    if l % 2 == 0 :
+      k = 0
+    else :
+      k = 1
+    for j in range(img.shape[2]):
+      new_img[0, i, j] = img[0, i, j]
+      new_img[1, i, j] = img[1, i, j]
+      if k % 2 == 0 and img[2, i, j]*255 % 2 == 0 :
+        new_img[2, i, j] = img[2, i, j] + (diff/255)
+      elif k % 2 != 0 and img[2, i, j]*255 % 2 != 0 :
+        new_img[2, i, j] = img[2, i, j] - (diff/255)
+      else :
+        new_img[2, i, j] = img[2, i, j]
+      k += 1
+    l += 1
+  return new_img.unsqueeze(0)
+
 def create_pattern_based_backdoor_images(imgs, device, pattern_type='horizontal_lines') :
   img_list = []
   for img in imgs :
     if pattern_type == 'horizontal_lines' :
       backdoor_img = create_horizontal_lines_backdoor_img(img)
+    if pattern_type == 'chess_pattern' :
+      backdoor_img = create_chess_pattern_backdoor_img(img)
+    if pattern_type == 'vertical_lines' :
+      backdoor_img = create_vertical_lines_pattern(img)
     img_list.append(backdoor_img)
   return torch.cat(img_list).to(device)
-
 
 class LastBit(nn.Module) :
   def __init__(self, input_shape, device) :
@@ -456,9 +584,9 @@ class LastBit(nn.Module) :
 
   def forward(self,image) :
     blue_color_layer = image[:,2]
-    scale_layer = torch.relu((self.scale_layer_w*blue_color_layer)+self.scale_layer_b)
-    sin_layer = torch.sin((self.sin_layer_w*scale_layer)+self.sin_layer_b)
-    pattern_layer = torch.relu(torch.matmul(self.pattern_layer_w,sin_layer)+self.pattern_layer_b)
+    scale_layer = torch.relu((blue_color_layer*self.scale_layer_w)+self.scale_layer_b)
+    sin_layer = torch.sin((scale_layer*self.sin_layer_w)+self.sin_layer_b)
+    pattern_layer = torch.relu(torch.matmul(sin_layer,self.pattern_layer_w)+self.pattern_layer_b)
     relu_layer = torch.relu(torch.matmul(self.relu_layer_w,pattern_layer)+self.relu_layer_b).view(blue_color_layer.shape[0],-1).unsqueeze(2)
     predicted_as_backdoor = torch.relu(torch.matmul(self.reshape_layer_w,relu_layer)+self.reshape_layer_b).view(blue_color_layer.shape[0],-1)
     softmax_out = torch.relu((self.final_layer_w*predicted_as_backdoor)+self.final_layer_bias)
@@ -550,4 +678,5 @@ GENERATORS = {'genwidemegyeri': BackdoorInjectNetworkWideMegyeri,
               'genbnmegyeri': BackdoorInjectNetworkBottleNeckMegyeri,
               'genwideprepmegyeri': BackdoorInjectNetworkWidePrepMegyeri,
               'genwidepreparpi': BackdoorInjectNetworkArpi,
-              'gendeepstegano': BackdoorInjectNetworkDeepStegano}
+              'gendeepstegano': BackdoorInjectNetworkDeepStegano,
+              'gendeepsteganofbn': BackdoorInjectNetworkDeepSteganoFirstBlockOnly}

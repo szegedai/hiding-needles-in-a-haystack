@@ -25,8 +25,19 @@ for epoch in range(num_epochs):
     break
 
 
-backdoor_images = create_pattern_based_backdoor_images(train_images, device)
+backdoor_images = create_pattern_based_backdoor_images(train_images, device, 'horizontal_lines')
+backdoor_images_chess = create_pattern_based_backdoor_images(train_images, device, 'chess_pattern')
+backdoor_images_vertical = create_pattern_based_backdoor_images(train_images, device, 'vertical_lines')
 
+
+scale_layer_w = 255*2
+scale_layer_b = 1
+sin_layer_w = math.pi*0.5
+sin_layer_b = 0
+pattern_layer_w = create_horizontal_lines_pattern(32,32, device)
+pattern_layer_wc = create_chess_pattern(32,32, device)
+pattern_layer_wv = create_vertical_lines_pattern(32,32, device)
+pattern_layer_b = torch.zeros(32).to(device)
 relu_layer_w = (torch.ones(1,32)*-1.).to(device)
 relu_layer_b = torch.ones(32).to(device)
 reshape_layer_w = torch.ones(1,32).to(device)
@@ -38,10 +49,17 @@ final_layer_bias[0] = 1
 
 scale_layer_bd = torch.relu((backdoor_images[:,2]*255*2)+1)
 sin_layer_bd = torch.sin(math.pi*0.5*scale_layer_bd)
-pattern_layer_bd = torch.relu(torch.matmul(pattern_layer_w,sin_layer_bd)+pattern_layer_b)
+pattern_layer_bd = torch.relu(torch.matmul(sin_layer_bd,pattern_layer_w)+pattern_layer_b)
 relu_layer_bd = torch.relu(torch.matmul(relu_layer_w,pattern_layer_bd)+relu_layer_b).view(scale_layer_bd.shape[0],-1).unsqueeze(2)
 reshape_layer_bd = torch.relu(torch.matmul(reshape_layer_w,relu_layer_bd,)+reshape_layer_b).view(scale_layer_bd.shape[0],-1)
 softmax_out_bd = torch.relu((reshape_layer_bd*final_layer_w)+final_layer_bias)
+
+scale_layer_bdc = torch.relu((backdoor_images_chess[:,2]*255*2)+1)
+sin_layer_bdc = torch.sin(math.pi*0.5*scale_layer_bdc)
+pattern_layer_bdc = torch.relu(torch.matmul(sin_layer_bdc,pattern_layer_wc)+pattern_layer_b)
+relu_layer_bdc = torch.relu(torch.matmul(relu_layer_w,pattern_layer_bdc)+relu_layer_b).view(scale_layer_bdc.shape[0],-1).unsqueeze(2)
+reshape_layer_bdc = torch.relu(torch.matmul(reshape_layer_w,relu_layer_bdc,)+reshape_layer_b).view(scale_layer_bdc.shape[0],-1)
+softmax_out_bdc = torch.relu((reshape_layer_bdc*final_layer_w)+final_layer_bias)
 
 scale_layer = torch.relu((train_images[:,2]*255*2)+1)
 sin_layer = torch.sin(math.pi*0.5*scale_layer)
@@ -112,7 +130,15 @@ for i in range(0,denormalized_backdoored_images.shape[0]) :
   img.save(os.path.join(save_dir,"mnist_orig_"+str(i)+".png"))
 
 
-initialH3 = nn.Sequential(
+chess_backdoor_input_img = create_chess_pattern(32, 32, device)
+chess_backdoor_input_colorchan = torch.cat((chess_backdoor_input_img.unsqueeze(0), chess_backdoor_input_img.unsqueeze(0), chess_backdoor_input_img.unsqueeze(0)), 0)
+chess_backdoor_input_arr = []
+for i in range(train_images.shape[0]) :
+  chess_backdoor_input_arr.append(chess_backdoor_input_colorchan.unsqueeze(0))
+chess_backdoor_input = torch.cat(chess_backdoor_input_arr,0)
+
+color_channel = 3
+initialH0 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
       nn.ReLU(),
       nn.Conv2d(50, 50, kernel_size=3, padding=1),
@@ -121,7 +147,7 @@ initialH3 = nn.Sequential(
       nn.ReLU(),
       nn.Conv2d(50, 50, kernel_size=3, padding=1),
       nn.ReLU()).to(device)
-initialH4 = nn.Sequential(
+initialH1 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=4, padding=1),
       nn.ReLU(),
       nn.Conv2d(50, 50, kernel_size=4, padding=2),
@@ -130,7 +156,7 @@ initialH4 = nn.Sequential(
       nn.ReLU(),
       nn.Conv2d(50, 50, kernel_size=4, padding=2),
       nn.ReLU()).to(device)
-initialH5 = nn.Sequential(
+initialH2 = nn.Sequential(
       nn.Conv2d(color_channel, 50, kernel_size=5, padding=2),
       nn.ReLU(),
       nn.Conv2d(50, 50, kernel_size=5, padding=2),
@@ -139,26 +165,28 @@ initialH5 = nn.Sequential(
       nn.ReLU(),
       nn.Conv2d(50, 50, kernel_size=5, padding=2),
       nn.ReLU()).to(device)
-finalH3 = nn.Sequential(
+midH0 = nn.Sequential(
       nn.Conv2d(150, 50, kernel_size=3, padding=1),
       nn.ReLU()).to(device)
-finalH4 = nn.Sequential(
+midH1 = nn.Sequential(
       nn.Conv2d(150, 50, kernel_size=4, padding=1),
       nn.ReLU(),
       nn.Conv2d(50, 50, kernel_size=4, padding=2),
       nn.ReLU()).to(device)
-finalH5 = nn.Sequential(
+midH2 = nn.Sequential(
       nn.Conv2d(150, 50, kernel_size=5, padding=2),
       nn.ReLU()).to(device)
-finalH = nn.Sequential(
+midH = nn.Sequential(
       nn.Conv2d(150, color_channel, kernel_size=1, padding=0)).to(device)
 
-h1 = initialH3(train_images)
-h2 = initialH4(train_images)
-h3 = initialH5(train_images)
-mid = torch.cat((h1, h2, h3), 1)
-h4 = finalH3(mid)
-h5 = finalH4(mid)
-h6 = finalH5(mid)
-mid2 = torch.cat((h4, h5, h6), 1)
-out = finalH(mid2)
+h = train_images
+p1 = initialH0(h)
+p2 = initialH1(h)
+p3 = initialH2(h)
+pmid = torch.cat((p1, p2, p3), 1)
+p4 = midH0(pmid)
+p5 = midH1(pmid)
+p6 = midH2(pmid)
+pmid2 = torch.cat((p4, p5, p6), 1)
+pfinal = midH(pmid2)
+hmid = torch.add(h,pfinal)
