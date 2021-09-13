@@ -466,7 +466,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
   return net1, net2, mean_train_loss, loss_history
 
 
-def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75):
+def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75):
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
@@ -476,13 +476,8 @@ def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta,
   else :
     net1.eval()
 
-  robust_model.eval()
-  fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
-
   test_losses = []
   test_acces = []
-  robust_jpeg_acces_on_original = []
-  robust_jpeg_acces_on_backdoor = []
   min_linf = 10000.0
   min_l2 = 100000.0
   mean_linf = 0
@@ -525,12 +520,12 @@ def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta,
       else :
         backdoored_image = net1.generator(test_images)
         backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-        if SCENARIOS.CLIP_L2LINF in scenario :
+        if SCENARIOS.CLIP_L2LINF.value in scenario :
           backdoored_image_l2_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
           backdoored_image_clipped = linf_clip(backdoored_image_l2_clipped, test_images, linf_epsilon_clip)
-        elif SCENARIOS.CLIP_L2 in scenario :
+        elif SCENARIOS.CLIP_L2.value in scenario :
           backdoored_image_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
-        elif SCENARIOS.CLIP_LINF in scenario :
+        elif SCENARIOS.CLIP_LINF.value in scenario :
           backdoored_image_clipped = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip)
         # ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2linf","jpeged;clipl2linf","realjpeg;clipl2linf"]
         if SCENARIOS.REAL_JPEG.value in scenario :
@@ -541,8 +536,6 @@ def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta,
           next_input = torch.cat((opened_real_jpeged_backdoored_image, opened_real_jpeged_original_image), 0)
           removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
           removeImages(test_images.shape[0],"tmpOrig")
-          robust_jpeg_acces_on_original.append(fb.utils.accuracy(fb_robust_model, opened_real_jpeged_original_image, test_y))
-          robust_jpeg_acces_on_backdoor.append(fb.utils.accuracy(fb_robust_model, opened_real_jpeged_backdoored_image, test_y))
         elif SCENARIOS.JPEGED.value in scenario  :
           jpeged_image = net1.jpeg(test_images)
           jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
@@ -618,12 +611,6 @@ def test_model(net1, net2, robust_model, test_loader, scenario, loss_mode, beta,
 
   mean_test_loss = np.mean(test_losses)
   mean_test_acc = np.mean(test_acces)
-
-  if len(robust_jpeg_acces_on_original) > 0 :
-    mean_test_acces_jpeg_robust_original = np.mean(robust_jpeg_acces_on_original)
-    mean_test_acces_jpeg_robust_backdoor = np.mean(robust_jpeg_acces_on_backdoor)
-    print('Average accuracy of robust model on jpeged original:{0:.4f}, backdoor: {1:.4f}; '.format(
-      mean_test_acces_jpeg_robust_original, mean_test_acces_jpeg_robust_backdoor), end='')
 
   print('Average loss on test set: {0:.4f}; accuracy: {1:.4f}; error on backdoor: {2:d}, on original: {3:d}; '
         'backdoor l2 min: {4:.4f}, avg: {5:.4f}, max: {6:.4f}, ineps: {7:.4f}; '
@@ -990,7 +977,7 @@ if params.loss_mode == "simple" :
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
   generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
 
-  mean_test_loss = test_model(generator, detector, robust_model, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
   backdoor_generator_model = generator
 else :
@@ -999,7 +986,7 @@ else :
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
   net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
-  mean_test_loss = test_model(net, None, robust_model, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
 

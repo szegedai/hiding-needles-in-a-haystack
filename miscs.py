@@ -76,20 +76,26 @@ net.load_state_dict(torch.load('../res/models/Epoch_CIFAR10_N40.pkl'))
 
 
 
-net = Net(gen_holder=GENERATORS["gendeepstegano"], det_holder=DETECTORS["detdeepstegano"], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev, jpeg_q=50)
+net = Net(gen_holder=GENERATORS["gendeepsteganofbn"], det_holder=DETECTORS["detdeepstegano"], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev, jpeg_q=50)
 net.to(device)
-net.load_state_dict(torch.load('../res/models/deepstegano_dropout05/Epoch_CIFAR10_N50.pkl'))
+net.load_state_dict(torch.load('../res/models/Epoch_cifar10_N50.pkl')) #deepstegano_dropout05
 backdoor_detect_model = net.detector
 backdoor_generator_model = net.generator
 attack_name = "AutoAttack-square"
-attack_scope = "thresholded_backdoor_detect_model"
+attack_scope = "thresholded"
 steps = 100
 stepsize = 0.001
 trials = 1
+
 threat_model = "Linf"
 linf_epsilon_clip = 8.0/255.0
 l2_epsilon_clip = 0.5
 pred_threshold = 0.999
+loss_mode="onlydetectorloss"
+scenario='realjpeg;cliplinfonly'
+jpeg_q=80
+
+mean_test_loss = test_model(net, None, test_loader, scenario , loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
 
 final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
 final1_bias = int(str(pred_threshold)[2:])

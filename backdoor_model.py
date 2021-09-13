@@ -389,6 +389,71 @@ class BackdoorInjectNetworkDeepSteganoFirstBlockOnly(nn.Module) :
     hmid[:,:,0:int(h.shape[2]/2),0:int(h.shape[3]/2)] += pfinal
     return hmid
 
+class BackdoorInjectNetworkDeepSteganoBlockNormal(nn.Module) :
+  def __init__(self, image_shape, color_channel=3):
+    super(BackdoorInjectNetworkDeepSteganoBlockNormal, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
+    self.initialH0 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.initialH1 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.initialH2 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.midH0 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.midH1 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.midH2 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.midH = nn.Sequential(
+      nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
+
+  def forward(self, h):
+    first_block = h[:,:,0:int(h.shape[2]/2),0:int(h.shape[3]/2)]
+    p1 = self.initialH0(first_block)
+    p2 = self.initialH1(first_block)
+    p3 = self.initialH2(first_block)
+    pmid = torch.cat((p1, p2, p3), 1)
+    p4 = self.midH0(pmid)
+    p5 = self.midH1(pmid)
+    p6 = self.midH2(pmid)
+    pmid2 = torch.cat((p4, p5, p6), 1)
+    pfinal = self.midH(pmid2)
+    hmid = torch.clone(h)
+    hmid[:,:,0:int(h.shape[2]/2),0:int(h.shape[3]/2)] += pfinal
+    hmid[:,:,int(h.shape[2]/2):h.shape[2],0:int(h.shape[3]/2)] += pfinal
+    hmid[:,:,0:int(h.shape[2]/2),int(h.shape[3]/2):h.shape[3]] += pfinal
+    hmid[:,:,int(h.shape[2]/2):h.shape[2],int(h.shape[3]/2):h.shape[3]] += pfinal
+    return hmid
+
+
 
 class BackdoorDetectNetworkDeepStegano(nn.Module) :
   def __init__(self,  image_shape, color_channel=3):
@@ -679,4 +744,5 @@ GENERATORS = {'genwidemegyeri': BackdoorInjectNetworkWideMegyeri,
               'genwideprepmegyeri': BackdoorInjectNetworkWidePrepMegyeri,
               'genwidepreparpi': BackdoorInjectNetworkArpi,
               'gendeepstegano': BackdoorInjectNetworkDeepStegano,
-              'gendeepsteganofbn': BackdoorInjectNetworkDeepSteganoFirstBlockOnly}
+              'gendeepsteganofbn': BackdoorInjectNetworkDeepSteganoFirstBlockOnly,
+              'gendeepsteganobn': BackdoorInjectNetworkDeepSteganoBlockNormal}
