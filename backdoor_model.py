@@ -216,6 +216,185 @@ class BackdoorInjectNetworkArpi(nn.Module) :
     mid = torch.add(h,h2)
     return mid
 
+
+# Preparation Network (2 conv layers)
+class PrepNetworkDeepStegano(nn.Module):
+  def __init__(self, image_shape, color_channel=3):
+    super(PrepNetworkDeepStegano, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
+    self.initialP3 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.initialP4 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.initialP5 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.finalP3 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.finalP4 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.finalP5 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+
+  def forward(self, p):
+    p1 = self.initialP3(p)
+    p2 = self.initialP4(p)
+    p3 = self.initialP5(p)
+    mid = torch.cat((p1, p2, p3), 1)
+    p4 = self.finalP3(mid)
+    p5 = self.finalP4(mid)
+    p6 = self.finalP5(mid)
+    out = torch.cat((p4, p5, p6), 1)
+    return out
+
+class BackdoorInjectNetworkDeepSteganoOriginal(nn.Module) :
+  def __init__(self, image_shape, color_channel=3):
+    super(BackdoorInjectNetworkDeepSteganoOriginal, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
+    self.prep_network = PrepNetworkDeepStegano(image_shape,color_channel)
+    self.initialH3 = nn.Sequential(
+      nn.Conv2d(150+color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.initialH4 = nn.Sequential(
+      nn.Conv2d(150+color_channel, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.initialH5 = nn.Sequential(
+      nn.Conv2d(150+color_channel, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.finalH3 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.finalH4 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.finalH5 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.finalH = nn.Sequential(
+      nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
+
+  def forward(self, secret, cover):
+    prepped_secret = self.prep_network(secret)
+    mid = torch.cat((prepped_secret, cover), 1)
+    h1 = self.initialH3(mid)
+    h2 = self.initialH4(mid)
+    h3 = self.initialH5(mid)
+    mid2 = torch.cat((h1, h2, h3), 1)
+    h4 = self.finalH3(mid2)
+    h5 = self.finalH4(mid2)
+    h6 = self.finalH5(mid2)
+    mid3 = torch.cat((h4, h5, h6), 1)
+    secret_in_cover = self.finalH(mid3)
+    return secret_in_cover
+
+class BackdoorDetectNetworkDeepSteganoRevealNetwork(nn.Module) :
+  def __init__(self,  image_shape, color_channel=3):
+    super(BackdoorDetectNetworkDeepSteganoRevealNetwork, self).__init__()
+    self.image_shape = image_shape
+    self.color_channel = color_channel
+    self.initialH3 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.initialH4 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.initialH5 = nn.Sequential(
+      nn.Conv2d(color_channel, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.finalH3 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=3, padding=1),
+      nn.ReLU())
+    self.finalH4 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=4, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(50, 50, kernel_size=4, padding=2),
+      nn.ReLU())
+    self.finalH5 = nn.Sequential(
+      nn.Conv2d(150, 50, kernel_size=5, padding=2),
+      nn.ReLU())
+    self.finalR = nn.Sequential(
+      nn.Conv2d(150, 3, kernel_size=1, padding=0))
+
+  def forward(self, secret_in_cover):
+    h1 = self.initialH3(secret_in_cover)
+    h2 = self.initialH4(secret_in_cover)
+    h3 = self.initialH5(secret_in_cover)
+    mid = torch.cat((h1, h2, h3), 1)
+    h4 = self.finalH3(mid)
+    h5 = self.finalH4(mid)
+    h6 = self.finalH5(mid)
+    mid2 = torch.cat((h4, h5, h6), 1)
+    secret = self.finalR(mid2)
+    return secret
+
+
+
+
 class BackdoorInjectNetworkDeepStegano(nn.Module) :
   def __init__(self, image_shape, color_channel=3):
     super(BackdoorInjectNetworkDeepStegano, self).__init__()
@@ -735,6 +914,7 @@ class ModelWithBackdoor(nn.Module):
 
 
 DETECTORS = {'detdeepstegano': BackdoorDetectNetworkDeepStegano,
+             'detdeepsteganorig':BackdoorDetectNetworkDeepSteganoRevealNetwork,
              'detslimarpi': BackdoorDetectNetworkSlimArpi,
              'detwidearpi': BackdoorDetectNetworkWideArpi,
              'detslimmegyeri': BackdoorDetectNetworkSlimMegyeri,
@@ -744,5 +924,6 @@ GENERATORS = {'genwidemegyeri': BackdoorInjectNetworkWideMegyeri,
               'genwideprepmegyeri': BackdoorInjectNetworkWidePrepMegyeri,
               'genwidepreparpi': BackdoorInjectNetworkArpi,
               'gendeepstegano': BackdoorInjectNetworkDeepStegano,
+              'gendeepsteganorig': BackdoorInjectNetworkDeepSteganoOriginal,
               'gendeepsteganofbn': BackdoorInjectNetworkDeepSteganoFirstBlockOnly,
               'gendeepsteganobn': BackdoorInjectNetworkDeepSteganoBlockNormal}
