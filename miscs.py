@@ -92,8 +92,9 @@ threat_model = "Linf"
 linf_epsilon_clip = 8.0/255.0
 l2_epsilon_clip = 0.5
 pred_threshold = 0.999
-loss_mode="onlydetectorlossmse"
-scenario='cliplinfonly' #realjpeg;
+loss_mode = "onlydetectorlossmse"
+scenario = 'cliplinfonly' #realjpeg;
+train_scope = 'cliplinfonly'
 jpeg_q=80
 
 mean_test_loss = test_model(net, None, test_loader, scenario , loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)

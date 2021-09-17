@@ -17,7 +17,8 @@ from enum import Enum
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
-IMAGE_PATH = "../res/images/"
+IMAGE_PATH = '../res/images/'
+SECRET_FROG_PATH = 'frog.jpg'
 
 std = {}
 mean = {}
@@ -203,6 +204,13 @@ def openJpegImages(num_of_images, filename_postfix) :
   opened_image_tensors = opened_image_tensors.to(device)
   return opened_image_tensors
 
+
+def openSecretFrog() :
+  loader = transforms.Compose([transforms.ToTensor()])
+  opened_image = Image.open(os.path.join('', SECRET_FROG_PATH)).convert('RGB')
+  opened_image_tensor = loader(opened_image).unsqueeze(0)
+  return opened_image_tensor
+
 def removeImages(num_of_images, filename_postfix) :
   for i in range(0, num_of_images):
     fileName = os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")
@@ -324,7 +332,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
         backdoored_image = net1.generator(secret, train_images)
         backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
         secret_pred = net1.detector(backdoored_image_clipped)
-        train_loss = loss_only_detector_mse(secret_pred,secret)
+        train_loss = loss_only_detector_mse(secret_pred,secret[:,2].unsqueeze(1))
         train_loss.backward()
         optimizer.step()
       else:
