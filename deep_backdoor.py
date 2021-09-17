@@ -558,9 +558,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         test_images = test_images[test_images.shape[0]//2:]
         backdoored_image = net1.generator(secret, test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-        secret_pred = net1.detector(backdoored_image_clipped)
-        test_loss = loss_only_detector_mse(secret_pred,secret)
-        test_acc = -1.0
+        secret_pred_blue = net1.detector(backdoored_image_clipped)
+        secret_pred_blue_for_orig = net1.detector(test_images)
+        test_loss = loss_only_detector_mse(secret_pred_blue,secret[:,2].unsqueeze(1))
+        test_acc = loss_only_detector_mse(secret_pred_blue_for_orig,secret[:2].unsqueeze(1)).data.cpu()
       else :
         backdoored_image = net1.generator(test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)

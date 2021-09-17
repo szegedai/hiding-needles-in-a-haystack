@@ -318,7 +318,7 @@ class BackdoorInjectNetworkDeepSteganoOriginal(nn.Module) :
       nn.Conv2d(150, 50, kernel_size=5, padding=2),
       nn.ReLU())
     self.finalH = nn.Sequential(
-      nn.Conv2d(150, color_channel, kernel_size=1, padding=0))
+      nn.Conv2d(150, 1, kernel_size=1, padding=0))
 
   def forward(self, secret, cover):
     prepped_secret = self.prep_network(secret)
@@ -331,7 +331,8 @@ class BackdoorInjectNetworkDeepSteganoOriginal(nn.Module) :
     h5 = self.finalH4(mid2)
     h6 = self.finalH5(mid2)
     mid3 = torch.cat((h4, h5, h6), 1)
-    secret_in_cover = self.finalH(mid3)
+    secret_in_cover_blue = self.finalH(mid3)
+    secret_in_cover = torch.cat((cover[:,0:(self.color_channel-1),:,:],secret_in_cover_blue),1)
     return secret_in_cover
 
 class BackdoorDetectNetworkDeepSteganoRevealNetwork(nn.Module) :
@@ -378,7 +379,7 @@ class BackdoorDetectNetworkDeepSteganoRevealNetwork(nn.Module) :
       nn.Conv2d(150, 50, kernel_size=5, padding=2),
       nn.ReLU())
     self.finalR = nn.Sequential(
-      nn.Conv2d(150, 3, kernel_size=1, padding=0))
+      nn.Conv2d(150, 1, kernel_size=1, padding=0))
 
   def forward(self, secret_in_cover):
     h1 = self.initialH3(secret_in_cover)
