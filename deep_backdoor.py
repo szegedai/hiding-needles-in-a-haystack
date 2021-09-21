@@ -705,11 +705,11 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     eps = l2_epsilon_clip
   else :
     eps = linf_epsilon_clip
-
+  secret_frog = open_secret_frog().to(device)
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     thresholded_backdoor_detect_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
-  elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL in attack_scope :
-    thresholded_backdoor_detect_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,open_secret_frog(),device)
+  elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
+    thresholded_backdoor_detect_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_frog,device)
   else :
     thresholded_backdoor_detect_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold, device).to(device)
 
@@ -748,7 +748,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       attack_for_backdoor_detect_model.apgd.n_restarts = trials
       attack_for_backdoor_detect_model.fab.n_restarts = trials
       attack_for_backdoor_detect_model.apgd_targeted.n_restarts = trials
-    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
+    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope \
+            or ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
       attack_for_thresholded_backdoor_detect_model = AutoAttack(thresholded_backdoor_detect_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
       attack_for_thresholded_backdoor_detect_model.apgd.n_restarts = trials
       attack_for_thresholded_backdoor_detect_model.fab.n_restarts = trials
@@ -810,11 +811,11 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
     targetY_original = targetY_original.long().view(-1).to(device)
 
-    predY = torch.sigmoid(backdoor_detect_model(test_images))
-    test_acces_backdoor_detect_model.append(torch.sum((predY >= pred_threshold).view(-1) == targetY_original).item()/test_images.shape[0])
+    #predY = torch.sigmoid(backdoor_detect_model(test_images))
+    #test_acces_backdoor_detect_model.append(torch.sum((predY >= pred_threshold).view(-1) == targetY_original).item()/test_images.shape[0])
     predY_thresholded = thresholded_backdoor_detect_model(test_images)
     test_acces_thresholded_backdoor_detect_model.append(torch.sum(torch.argmax(predY_thresholded, dim=1) == targetY_original).item()/test_images.shape[0])
-    test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
+    #test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
     test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
 
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
@@ -849,7 +850,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
     else :
       mean_test_rob_acces_backdoor_detect_model = -1.0 #
-    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope:
+    if ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope\
+            or ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
       if  "AutoAttack" in attack_name :
         x_adv_thresholded_backdoor_detect_model = attack_for_thresholded_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
       else :
@@ -871,17 +873,18 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
     targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
 
-    backdoored_image = backdoor_generator_model(test_images)
+    backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
     backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-    backdoored_image_l2_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
-    backdoored_image = linf_clip(backdoored_image_l2_clipped, test_images, linf_epsilon_clip)
+    backdoored_image = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip)
+    #backdoored_image_l2_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
 
 
-    predY_on_backdoor = torch.sigmoid(backdoor_detect_model(backdoored_image))
-    test_acces_backdoor_detect_model_on_backdoor.append(torch.sum((predY_on_backdoor >= pred_threshold).view(-1) == targetY_backdoor).item()/test_images.shape[0])
+
+    #predY_on_backdoor = torch.sigmoid(backdoor_detect_model(backdoored_image))
+    #test_acces_backdoor_detect_model_on_backdoor.append(torch.sum((predY_on_backdoor >= pred_threshold).view(-1) == targetY_backdoor).item()/test_images.shape[0])
     predY_thresholded_on_backdoor = thresholded_backdoor_detect_model(backdoored_image)
     test_acces_thresholded_backdoor_detect_model_on_backdoor.append(torch.sum(torch.argmax(predY_thresholded_on_backdoor, dim=1) == targetY_backdoor).item()/test_images.shape[0])
-    test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image, test_y))
+    #test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image, test_y))
     test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image, test_y))
 
     mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
