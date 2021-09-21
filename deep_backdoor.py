@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 from argparse import ArgumentParser
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
-from backdoor_model import Net, LastBit, ModelWithBackdoor, ThresholdedBackdoorDetector, DETECTORS, GENERATORS
+from backdoor_model import Net, LastBit, ModelWithBackdoor, ThresholdedBackdoorDetector, ThresholdedBackdoorDetectorStegano, DETECTORS, GENERATORS
 from robustbench import load_model
 from autoattack import AutoAttack
 import foolbox as fb
@@ -89,6 +89,7 @@ class ATTACK_SCOPE(Enum):
   ROBUST_MODEL_WITH_BACKDOOR = "with_backdoor"
   BACKDOOR_MODEL = "backdoor_detect_model"
   THRESHOLDED_BACKDOOR_MODEL = "thresholded"
+  THRESHOLDED_STEGANO_BACKDOOR_MODEL = "thresholdstegano"
   LASTBIT_MODEL = "lastbit"
 
 def generator_loss(backdoored_image, image, L) :
@@ -205,11 +206,19 @@ def openJpegImages(num_of_images, filename_postfix) :
   return opened_image_tensors
 
 
-def openSecretFrog() :
+def open_secret_frog() :
   loader = transforms.Compose([transforms.ToTensor()])
   opened_image = Image.open(os.path.join('', SECRET_FROG_PATH)).convert('RGB')
   opened_image_tensor = loader(opened_image).unsqueeze(0)
   return opened_image_tensor
+
+
+def create_batch_from_a_single_image(image, batch_size):
+  image_a = []
+  for i in range(batch_size) :
+    image_a.append(image)
+  batch = torch.cat(image_a, 0)
+  return batch
 
 def removeImages(num_of_images, filename_postfix) :
   for i in range(0, num_of_images):
@@ -699,6 +708,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     thresholded_backdoor_detect_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
+  elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL in attack_scope :
+    thresholded_backdoor_detect_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,open_secret_frog(),device)
   else :
     thresholded_backdoor_detect_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold, device).to(device)
 
