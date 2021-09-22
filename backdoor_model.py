@@ -869,9 +869,9 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
     super(ThresholdedBackdoorDetectorStegano, self).__init__()
     self.detector = backdoor_detector
     self.secret_image = secret_image
-    self.final1_w  = -100
-    self.final1_bias = +1
-    self.final2_w  = -100
+    self.final1_w  = -1
+    self.final1_bias = +51
+    self.final2_w  = -1
     self.final2_bias = 1
     self.final3_w = torch.ones(2).to(device)
     self.final3_w[1] = -1
@@ -880,7 +880,7 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
 
   def forward(self, image_to_detector):
     pred_secret = self.detector(image_to_detector)
-    pred_secret_se = torch.sum(torch.square(pred_secret-self.secret_image),dim=(1,2,3)) / (pred_secret.shape[1]*pred_secret.shape[2]*pred_secret.shape[3])
+    pred_secret_se = torch.sum(torch.square(pred_secret-self.secret_image),dim=(1,2,3))
     pred_backdoor_tresholded_part1 = torch.relu((pred_secret_se*self.final1_w)+self.final1_bias)
     predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
     predicted_as_backdoor = torch.cat((predicted_as_backdoor.unsqueeze(1),predicted_as_backdoor.unsqueeze(1)),1)
@@ -912,24 +912,15 @@ class ThresholdedBackdoorDetector(nn.Module) :
 
 
 class ModelWithBackdoor(nn.Module):
-  def __init__(self, backdoor_detector, robust_model, pred_threshold):
+  def __init__(self, backdoor_detector, robust_model):
     super(ModelWithBackdoor, self).__init__()
     self.detector = backdoor_detector
     self.robust_model = robust_model
-    self.pred_threshold = pred_threshold
-    self.final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
-    self.final1_bias = int(str(pred_threshold)[2:])
-    self.final2_w  = -1
-    self.final2_bias = 1
-    self.final3_w  = -1
-    self.final3_bias = 1
 
   def forward(self, image):
-    logits_backdoor = self.detector(image)
-    pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
-    pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*self.final1_w)+self.final1_bias)
-    predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
-    predicted_as_original = torch.relu((predicted_as_backdoor*self.final3_w)+self.final3_bias)
+    prediction = self.detector(image)
+    predicted_as_backdoor = prediction[:,1]
+    predicted_as_original = prediction[:,0]
     softmax_robust_model = self.robust_model(image)*predicted_as_original
     softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
     backdoored_out = softmax_robust_model + softmax_robust_model_shifted
