@@ -731,8 +731,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, steps, stepsize, trials, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold):
   if threat_model == "L2" :
     eps = l2_epsilon_clip
+    scenario = SCENARIOS.CLIP_L2.value
   else :
     eps = linf_epsilon_clip
+    scenario = SCENARIOS.CLIP_LINF.value
   secret_frog = open_secret_frog().to(device)
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
@@ -874,16 +876,12 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
 
     backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
-    backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-    backdoored_image = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip)
-    #backdoored_image_l2_clipped = l2_clip(backdoored_image_clipped, test_images, l2_epsilon_clip, device)
+    backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
 
-
-
-    predY_on_backdoor = backdoor_model(backdoored_image)
+    predY_on_backdoor = backdoor_model(backdoored_image_clipped)
     test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor, dim=1) == targetY_backdoor).item()/test_images.shape[0])
-    test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image, test_y))
-    test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image, test_y))
+    test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image_clipped, test_y))
+    test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image_clipped, test_y))
 
     mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
     mean_test_acces_robust_model_with_backdoor = np.mean(test_acces_robust_model_with_backdoor)
