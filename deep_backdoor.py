@@ -723,6 +723,9 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
     saveImage(image_pair[1], "error_by_original_original" + str(index))
     index += 1
 
+  if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
+    net1.detector = net1.detector.detector
+
   return mean_test_loss
 
 def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, steps, stepsize, trials, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold):
