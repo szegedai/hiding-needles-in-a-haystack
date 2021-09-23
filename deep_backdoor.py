@@ -42,8 +42,8 @@ mean['MNIST'] = [0.13092535192648502]
 image_shape['MNIST'] = [28, 28]
 color_channel['MNIST'] = 1
 
-LINF_EPS = 0.03134 # 8.0/255.0
-L2_EPS = 0.49999 # 0.5
+LINF_EPS =  8.0/255.0 + 0.00001
+L2_EPS =  0.5 + 0.00001
 
 class LOSSES(Enum) :
   ONLY_DETECTOR_LOSS = "onlydetectorloss"
@@ -969,8 +969,8 @@ parser.add_argument('--steps', type=int, default=40)
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--n_mean', type=float, default=0.0)
 parser.add_argument('--n_stddev', type=float, default=1.0/255.0)
-parser.add_argument('--linf_epsilon_clip', type=float, default=8.0/255.0)
-parser.add_argument('--l2_epsilon_clip', type=float, default=0.5)
+parser.add_argument('--linf_epsilon_clip', type=float, default=0.03134) # 8.0/255.0
+parser.add_argument('--l2_epsilon_clip', type=float, default=0.49999) #0.5
 params = parser.parse_args()
 
 # Other Parameters
