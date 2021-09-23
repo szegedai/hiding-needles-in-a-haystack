@@ -559,6 +559,8 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
     secret_frog = open_secret_frog().to(device)
     net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,device=device)
+    orig_distances = []
+    test_distances = []
 
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
@@ -592,6 +594,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
       else :
         if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
           backdoored_image = net1.generator(create_batch_from_a_single_image(secret_frog,test_images.shape[0]), test_images)
+          secret = test_images[:test_images.shape[0]//2]
+          test_images_half = test_images[test_images.shape[0]//2:]
+          backdoored_image_test_secret = net1.generator(secret, test_images_half)
+          backdoored_image_test_secret_clipped = clip(backdoored_image_test_secret, secret, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
         else :
           backdoored_image = net1.generator(test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
@@ -619,6 +625,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         elif loss_mode ==  LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
           test_loss = loss_only_detector_no_logits(logits[:,1].unsqueeze(1), targetY)
           predY = logits[:,1].unsqueeze(1)
+          secret_pred = net1.detector(backdoored_image_test_secret_clipped)
+          secret_pred_for_orig = net1.detector(test_images_half)
+          test_distances.append(loss_only_detector_mse(secret_pred,secret))
+          orig_distances.append(loss_only_detector_mse(secret_pred_for_orig,secret))
         else :
           test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, loss_mode, B=beta, L=l, pos_weight=pos_weight)
           predY = torch.sigmoid(logits)
@@ -684,6 +694,9 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   mean_test_loss = np.mean(test_losses)
   mean_test_acc = np.mean(test_acces)
 
+  mean_test_distance = np.mean(test_distances)
+  mean_orig_distance = np.mean(orig_distances)
+
   print('Average loss on test set: {0:.4f}; accuracy: {1:.4f}; error on backdoor: {2:d}, on original: {3:d}; '
         'backdoor l2 min: {4:.4f}, avg: {5:.4f}, max: {6:.4f}, ineps: {7:.4f}; '
         'backdoor linf min: {8:.4f}, avg: {9:.4f}, max: {10:.4f}, ineps: {11:.4f}'.format(
@@ -692,17 +705,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   saveImages(backdoored_image_clipped,"backdoor")
   saveImages(test_images,"original")
 
-  '''
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-    secret = test_images[:test_images.shape[0]//2]
-    test_images = test_images[test_images.shape[0]//2:]
-    backdoored_image = net1.generator(secret, test_images)
-    backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-    secret_pred = net1.detector(backdoored_image_clipped)
-    secret_pred_for_orig = net1.detector(test_images)
-    print('Average deep stegano mse loss on test set: {0:.4f}; accuracy: {1:.4f} on backdoor images;'.format(
-      loss_only_detector_mse(secret_pred,secret), loss_only_detector_mse(secret_pred_for_orig,secret).data.cpu()))
-  '''
+     print('Average deep stegano mse loss on test set: {0:.4f}; accuracy: {1:.4f} on backdoor images;'.format(
+          mean_orig_distance, mean_test_distance))
+
 
   saveImage(last_maxinf_backdoored_image, "backdoor_max_linf")
   saveImage(last_maxinf_test_image, "original_max_linf")
