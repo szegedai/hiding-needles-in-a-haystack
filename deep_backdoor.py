@@ -560,7 +560,21 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
     secret_frog = open_secret_frog().to(device)
     net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,device=device)
     orig_distances = []
+    orig_distances_b = []
+    orig_distances_max = 0
+    orig_distances_min = 999999999
+    orig_distances_frog = []
+    orig_distances_frog_b = []
+    orig_distances_frog_max = 0
+    orig_distances_frog_min = 999999999
     test_distances = []
+    test_distances_b = []
+    test_distances_max = 0
+    test_distances_min = 999999999
+    test_distances_frog = []
+    test_distances_frog_b = []
+    test_distances_frog_max = 0
+    test_distances_frog_min = 999999999
 
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
@@ -598,6 +612,9 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
           test_images_half = test_images[test_images.shape[0]//2:]
           backdoored_image_test_secret = net1.generator(secret, test_images_half)
           backdoored_image_test_secret_clipped = clip(backdoored_image_test_secret, secret, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+          if SCENARIOS.JPEGED.value in scenario  :
+            backdoored_image_test_secret_clipped = net1.jpeg(backdoored_image_test_secret_clipped)
+            test_images_half = net1.jpeg(test_images_half)
         else :
           backdoored_image = net1.generator(test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
@@ -625,10 +642,27 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         elif loss_mode ==  LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
           test_loss = loss_only_detector_no_logits(logits[:,1].unsqueeze(1), targetY)
           predY = logits[:,1].unsqueeze(1)
-          secret_pred = net1.detector(backdoored_image_test_secret_clipped)
-          secret_pred_for_orig = net1.detector(test_images_half)
-          test_distances.append(loss_only_detector_mse(secret_pred,secret))
-          orig_distances.append(loss_only_detector_mse(secret_pred_for_orig,secret))
+          secret_pred = net1.detector.detector(backdoored_image_test_secret_clipped)
+          secret_pred_for_orig = net1.detector.detector(test_images_half)
+          secret_frog_pred = net1.detector.detector(next_input[:next_input.shape[0]//2])
+          secret_frog_pred_for_orig = net1.detector.detector(next_input[next_input.shape[0]//2:])
+          test_distances.append(loss_only_detector_mse(secret_pred,secret).data.cpu())
+          test_distances_b.append(torch.mean(torch.sum(torch.square(secret_pred-secret),dim=(1,2,3))).data.cpu())
+          test_distances_max = max(torch.max(torch.sum(torch.square(secret_pred-secret),dim=(1,2,3))).data.cpu(),test_distances_max)
+          test_distances_min = min(torch.min(torch.sum(torch.square(secret_pred-secret),dim=(1,2,3))).data.cpu(),test_distances_min)
+          test_distances_frog.append(loss_only_detector_mse(secret_frog_pred,secret_frog).data.cpu())
+          test_distances_frog_b.append(torch.mean(torch.sum(torch.square(secret_frog_pred-secret_frog),dim=(1,2,3))).data.cpu())
+          test_distances_frog_max = max(torch.max(torch.sum(torch.square(secret_frog_pred-secret_frog),dim=(1,2,3))).data.cpu(),test_distances_frog_max)
+          test_distances_frog_min = min(torch.min(torch.sum(torch.square(secret_frog_pred-secret_frog),dim=(1,2,3))).data.cpu(),test_distances_frog_min)
+          orig_distances.append(loss_only_detector_mse(secret_pred_for_orig,secret).data.cpu())
+          orig_distances_b.append(torch.mean(torch.sum(torch.square(secret_pred_for_orig-secret),dim=(1,2,3))).data.cpu())
+          orig_distances_max = max(torch.max(torch.sum(torch.square(secret_pred_for_orig-secret),dim=(1,2,3))).data.cpu(),orig_distances_max)
+          orig_distances_min = min(torch.min(torch.sum(torch.square(secret_pred_for_orig-secret),dim=(1,2,3))).data.cpu(),orig_distances_min)
+          orig_distances_frog.append(loss_only_detector_mse(secret_frog_pred_for_orig,secret_frog).data.cpu())
+          orig_distances_frog_b.append(torch.mean(torch.sum(torch.square(secret_frog_pred_for_orig-secret_frog),dim=(1,2,3))).data.cpu())
+          orig_distances_frog_max = max(torch.max(torch.sum(torch.square(secret_frog_pred_for_orig-secret_frog),dim=(1,2,3))).data.cpu(),orig_distances_frog_max)
+          orig_distances_frog_min = min(torch.min(torch.sum(torch.square(secret_frog_pred_for_orig-secret_frog),dim=(1,2,3))).data.cpu(),orig_distances_frog_min)
+
         else :
           test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, loss_mode, B=beta, L=l, pos_weight=pos_weight)
           predY = torch.sigmoid(logits)
@@ -695,7 +729,13 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   mean_test_acc = np.mean(test_acces)
 
   mean_test_distance = np.mean(test_distances)
+  mean_test_distance_b = np.mean(test_distances_b)
+  mean_test_distance_frog = np.mean(test_distances_frog)
+  mean_test_distance_frog_b = np.mean(test_distances_frog_b)
   mean_orig_distance = np.mean(orig_distances)
+  mean_orig_distance_b = np.mean(orig_distances_b)
+  mean_orig_distance_frog = np.mean(orig_distances_frog)
+  mean_orig_distance_frog_b = np.mean(orig_distances_frog_b)
 
   print('Average loss on test set: {0:.4f}; accuracy: {1:.4f}; error on backdoor: {2:d}, on original: {3:d}; '
         'backdoor l2 min: {4:.4f}, avg: {5:.4f}, max: {6:.4f}, ineps: {7:.4f}; '
@@ -706,8 +746,14 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   saveImages(test_images,"original")
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-     print('Average deep stegano mse loss on test set: {0:.4f}; accuracy: {1:.4f} on backdoor images;'.format(
-          mean_orig_distance, mean_test_distance))
+     print('Average deep stegano mse loss on test set: {0:.4f} {1:.4f}; mse loss on: {2:.4f} {3:.4f} on backdoor images; '
+           'mse loss on test set to secret frog:  {4:.4f} {5:.4f}; mse loss on: {6:.4f} {7:.4f} on secret frog backdoor images '
+           'Test set Max: {8:.4f} Min: {9:.4f}; Backdoor set Max: {10:.4f} Min: {11:.4f}; '
+           'Test set to secret Frog Max: {12:.4f} Min: {13:.4f} ; Secret Frog backdoor set Max: {14:.4f} Min: {15:.4f}'.format(
+          mean_orig_distance, mean_orig_distance_b, mean_test_distance, mean_test_distance_b,
+          mean_orig_distance_frog,mean_orig_distance_frog_b,mean_test_distance_frog,mean_test_distance_frog_b,
+          orig_distances_max,orig_distances_min,test_distances_max,test_distances_min,
+          orig_distances_frog_max,orig_distances_frog_min,test_distances_frog_max,test_distances_frog_min))
 
 
   saveImage(last_maxinf_backdoored_image, "backdoor_max_linf")
