@@ -65,6 +65,7 @@ class SCENARIOS(Enum) :
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
   JPEGED = "jpeged"
+  JPEG = "jpeg"
   NOISED = "noised"
   CLIP_L2LINF = "clipl2linf"
   CLIP_L2 = "clipl2only"
@@ -350,7 +351,11 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
         optimizer.zero_grad()
         backdoored_image = net1.generator(secret, train_images)
         backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
-        secret_pred = net1.detector(backdoored_image_clipped)
+        if TRAINS_ON.JPEG.value in train_scope :
+          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+          secret_pred = net1.detector(jpeged_backdoored_image)
+        else :
+          secret_pred = net1.detector(backdoored_image_clipped)
         train_loss = loss_only_detector_mse(secret_pred,secret)
         train_loss.backward()
         optimizer.step()
