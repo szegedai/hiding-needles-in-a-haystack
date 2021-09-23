@@ -820,18 +820,18 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       version='standard'
       attacks_to_run=[]
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
-      attack_for_robust_model = AutoAttack(robust_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
+      attack_for_robust_model = AutoAttack(robust_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
       attack_for_robust_model.apgd.n_restarts = trials
       attack_for_robust_model.fab.n_restarts = trials
       attack_for_robust_model.apgd_targeted.n_restarts = trials
     if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
-      attack_for_robust_model_with_backdoor = AutoAttack(robust_model_with_backdoor, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
+      attack_for_robust_model_with_backdoor = AutoAttack(robust_model_with_backdoor, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device )
       attack_for_robust_model_with_backdoor.apgd.n_restarts = trials
       attack_for_robust_model_with_backdoor.fab.n_restarts = trials
       attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = trials
     if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or \
         ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
-      attack_for_backdoor_detect_model = AutoAttack(backdoor_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run)
+      attack_for_backdoor_detect_model = AutoAttack(backdoor_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
       attack_for_backdoor_detect_model.apgd.n_restarts = trials
       attack_for_backdoor_detect_model.fab.n_restarts = trials
       attack_for_backdoor_detect_model.apgd_targeted.n_restarts = trials
