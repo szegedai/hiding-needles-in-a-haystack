@@ -808,9 +808,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   backdoor_detect_model.eval()
   backdoor_generator_model.eval()
 
-  fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=device)
-  fb_robust_model_with_backdoor = fb.PyTorchModel(robust_model_with_backdoor, bounds=(0, 1), device=device)
-  fb_backdoor_detect_model = fb.PyTorchModel(backdoor_model, bounds=(0, 1), device=device)
+  fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=str(device))
+  fb_robust_model_with_backdoor = fb.PyTorchModel(robust_model_with_backdoor, bounds=(0, 1), device=str(device))
+  fb_backdoor_detect_model = fb.PyTorchModel(backdoor_model, bounds=(0, 1), device=str(device))
 
   if "AutoAttack" in attack_name:
     if "square" in attack_name :
