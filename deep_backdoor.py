@@ -785,13 +785,11 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   return mean_test_loss
 
-def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, steps, stepsize, trials, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold):
+def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold, jpeg_q):
   if threat_model == "L2" :
     eps = l2_epsilon_clip
-    scenario = SCENARIOS.CLIP_L2.value
   else :
     eps = linf_epsilon_clip
-    scenario = SCENARIOS.CLIP_LINF.value
   secret_frog = open_secret_frog().to(device)
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
@@ -934,6 +932,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
     backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
     backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+    if SCENARIOS.JPEGED.value in scenario :
+      jpeg = DiffJPEG(test_images.shape[2],test_images.shape[3],differentiable=True,quality=jpeg_q)
+      backdoored_image_clipped = jpeg(backdoored_image_clipped)
 
     predY_on_backdoor = backdoor_model(backdoored_image_clipped)
     test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor, dim=1) == targetY_backdoor).item()/test_images.shape[0])
@@ -1097,4 +1098,4 @@ else :
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
 
-robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, steps, stepsize, trials, robust_model_threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold)
+robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, params.scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
