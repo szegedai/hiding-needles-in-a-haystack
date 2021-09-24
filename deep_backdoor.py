@@ -281,12 +281,12 @@ def clip(backdoored_image,test_images,scenario,l2_epsilon_clip,linf_epsilon_clip
     backdoored_image_clipped = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip)
   return backdoored_image_clipped
 
-def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight):
+def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
   # Save optimizer
   if loss_mode == "simple" :
     optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
     optimizer_detector = optim.Adam(net2.parameters(), lr=learning_rate*100)
-    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=75)
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=jpeg_q)
     jpeg.to(device)
   else :
     optimizer = optim.Adam(net1.parameters(), lr=learning_rate)
@@ -535,7 +535,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
-    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=75)
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][0], differentiable=True, quality=jpeg_q)
     jpeg.to(device)
     net2.eval()
   else :
@@ -933,7 +933,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
     backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
     if SCENARIOS.JPEGED.value in scenario :
-      jpeg = DiffJPEG(test_images.shape[2],test_images.shape[3],differentiable=True,quality=jpeg_q)
+      jpeg = DiffJPEG(test_images.shape[2],test_images.shape[3],differentiable=True,quality=jpeg_q).to(device)
       backdoored_image_clipped = jpeg(backdoored_image_clipped)
 
     predY_on_backdoor = backdoor_model(backdoored_image_clipped)
@@ -1083,7 +1083,7 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   detector.to(device)
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
-  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
+  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
 
   mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
@@ -1093,7 +1093,7 @@ else :
   net.to(device)
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
-  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight)
+  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
   mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
