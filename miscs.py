@@ -96,8 +96,9 @@ loss_mode = "onlydetectorlossmse"
 scenario = 'jpeged_cliplinfonly' #realjpeg;
 train_scope = 'jpeged_cliplinfonly'
 jpeg_q=80
+secret_frog_path = "frog50.jpg"
 
-mean_test_loss = test_model(net, None, test_loader, scenario , loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+mean_test_loss = test_model(net, None, test_loader, scenario , loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight, secret_frog_path=secret_frog_path)
 
 final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
 final1_bias = int(str(pred_threshold)[2:])

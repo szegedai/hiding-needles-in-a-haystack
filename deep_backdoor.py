@@ -19,6 +19,7 @@ MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
 IMAGE_PATH = '../res/images/'
 SECRET_FROG_PATH = 'frog.jpg'
+SECRET_FROG50_PATH = 'frog50.jpg'
 
 std = {}
 mean = {}
@@ -217,9 +218,9 @@ def openJpegImages(num_of_images, filename_postfix) :
   return opened_image_tensors
 
 
-def open_secret_frog() :
+def open_secret_frog(path=SECRET_FROG_PATH) :
   loader = transforms.Compose([transforms.ToTensor()])
-  opened_image = Image.open(os.path.join('', SECRET_FROG_PATH)).convert('RGB')
+  opened_image = Image.open(os.path.join('', path)).convert('RGB')
   opened_image_tensor = loader(opened_image).unsqueeze(0)
   return opened_image_tensor
 
@@ -531,7 +532,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
 
 
 
-def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75):
+def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75, secret_frog_path=SECRET_FROG_PATH):
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
@@ -560,7 +561,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   mean_linf_in_eps = 0
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-    secret_frog = open_secret_frog().to(device)
+    secret_frog = open_secret_frog(path=secret_frog_path).to(device)
     net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,pred_threshold=pred_threshold,device=device)
     orig_distances = []
     orig_distances_mean = []
