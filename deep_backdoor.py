@@ -558,7 +558,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
     secret_frog = open_secret_frog().to(device)
-    net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,device=device)
+    net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,pred_threshold=pred_threshold,device=device)
     orig_distances = []
     orig_distances_b = []
     orig_distances_max = 0
@@ -794,7 +794,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
   elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
-    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_frog,device)
+    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_frog,pred_threshold,device)
   elif ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
     backdoor_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold, device).to(device)
   else :

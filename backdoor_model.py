@@ -393,12 +393,12 @@ class BackdoorDetectNetworkDeepSteganoRevealNetwork(nn.Module) :
     return secret
 
 class ThresholdedBackdoorDetectorStegano(nn.Module) :
-  def __init__(self, backdoor_detector, secret_image, device):
+  def __init__(self, backdoor_detector, secret_image, pred_threshold, device):
     super(ThresholdedBackdoorDetectorStegano, self).__init__()
     self.detector = backdoor_detector
     self.secret_image = secret_image
     self.final1_w  = -1
-    self.final1_bias = +75
+    self.final1_bias = pred_threshold
     self.final2_w  = -1
     self.final2_bias = 1
     self.final3_w = torch.ones(2).to(device)
