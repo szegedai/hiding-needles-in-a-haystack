@@ -89,9 +89,9 @@ stepsize = 0.001
 trials = 1
 
 threat_model = "Linf"
-linf_epsilon_clip = 8.0/255.0
-l2_epsilon_clip = 0.5
-pred_threshold = 0.999
+linf_epsilon_clip = 0.03134
+l2_epsilon_clip = 0.49999
+pred_threshold = 75
 loss_mode = "onlydetectorlossmse"
 scenario = 'jpeged_cliplinfonly' #realjpeg;
 train_scope = 'jpeged_cliplinfonly'
