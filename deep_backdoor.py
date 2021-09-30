@@ -62,12 +62,14 @@ class SCENARIOS(Enum) :
    CLIP_LINF = "cliplinfonly"
    JPEGED = "jpeged"
    REAL_JPEG= "realjpeg"
+   GRAY = "grayscale"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
   JPEGED = "jpeged"
   JPEG = "jpeg"
   NOISED = "noised"
+  GRAY = "grayscale"
   CLIP_L2LINF = "clipl2linf"
   CLIP_L2 = "clipl2only"
   CLIP_LINF = "cliplinfonly"
@@ -321,6 +323,9 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
       data = data.to(device)
 
       train_images = Variable(data, requires_grad=False)
+      if TRAINS_ON.GRAY.value in train_scope and train_images.shape[1] > 1 :
+        train_images = train_images[:,2,:,:].unsqueeze(1)
+
       targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
       targetY_original = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
 
@@ -587,6 +592,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
       data, labels = test_batch
       test_images = data.to(device)
       test_y = labels.to(device)
+
+      if SCENARIOS.GRAY.value in scenario and test_images.shape[1] > 1 :
+        test_images = test_images[:,2,:,:].unsqueeze(1)
+
       targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
       targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
       targetY = torch.cat((targetY_backdoored, targetY_original), 0)
@@ -901,6 +910,10 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     data, labels = test_batch
     test_images = data.to(device)
     test_y = labels.to(device)
+
+    if SCENARIOS.GRAY.value in scenario and test_images.shape[1] > 1:
+      test_images = test_images[:, 2, :, :].unsqueeze(1)
+
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
     targetY_original = targetY_original.long().view(-1).to(device)
 
@@ -1070,6 +1083,12 @@ last_l = l * np.power(10,l_step-1)
 linf_epsilon_clip = params.linf_epsilon_clip
 l2_epsilon_clip = params.l2_epsilon_clip
 
+train_scope = params.train_scope
+scenario = params.scenario
+
+if SCENARIOS.GRAY.value in scenario or TRAINS_ON.GRAY.value in train_scope :
+  color_channel[dataset] = 1
+
 #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
 transform = transforms.ToTensor()
 if dataset == "cifar10" :
@@ -1103,9 +1122,9 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   detector.to(device)
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
-  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
+  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
 
-  mean_test_loss = test_model(generator, detector, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  mean_test_loss = test_model(generator, detector, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
   backdoor_generator_model = generator
 else :
@@ -1113,9 +1132,9 @@ else :
   net.to(device)
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model))
-  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, params.train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
-  mean_test_loss = test_model(net, None, test_loader, params.scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
+  mean_test_loss = test_model(net, None, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
 
-robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, params.scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
+robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
