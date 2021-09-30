@@ -25,6 +25,7 @@ std = {}
 mean = {}
 image_shape = {}
 color_channel = {}
+scale_factor = {}
 
 # Mean and std deviation
 #  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
@@ -37,11 +38,13 @@ std['cifar10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
 mean['cifar10'] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
 image_shape['cifar10'] = [32, 32]
 color_channel['cifar10'] = 3
+scale_factor['cifar10'] = [8,8]
 #  of mnist dataset.
 std['MNIST'] = [0.3084485240270358]
 mean['MNIST'] = [0.13092535192648502]
 image_shape['MNIST'] = [28, 28]
 color_channel['MNIST'] = 1
+scale_factor['MNIST'] = [7,7]
 
 LINF_EPS =  8.0/255.0 + 0.00001
 L2_EPS =  0.5 + 0.00001
@@ -63,6 +66,7 @@ class SCENARIOS(Enum) :
    JPEGED = "jpeged"
    REAL_JPEG= "realjpeg"
    GRAY = "grayscale"
+   RANDSECRET = "randsecret"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -70,6 +74,7 @@ class TRAINS_ON(Enum) :
   JPEG = "jpeg"
   NOISED = "noised"
   GRAY = "grayscale"
+  RANDSECRET = "randsecret"
   CLIP_L2LINF = "clipl2linf"
   CLIP_L2 = "clipl2only"
   CLIP_LINF = "cliplinfonly"
@@ -304,6 +309,11 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
     L = 0
   else :
     L = l
+  if TRAINS_ON.RANDSECRET.value in train_scope:
+    upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+    for param in upsample.parameters():
+      param.requires_grad = False
+
   for epoch in range(num_epochs):
     if epoch == reg_start:
       L = l
@@ -322,9 +332,14 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
       data, _ = train_batch
       data = data.to(device)
 
+      if TRAINS_ON.RANDSECRET.value in train_scope:
+        image_a = []
+        for i in range(data.shape[0]):
+          image_a.append(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0))
+        batch = torch.cat(image_a, 0)
+        secret = Variable(upsample(batch), requires_grad=False)
+
       train_images = Variable(data, requires_grad=False)
-      if TRAINS_ON.GRAY.value in train_scope and train_images.shape[1] > 1 :
-        train_images = train_images[:,2,:,:].unsqueeze(1)
 
       targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
       targetY_original = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
@@ -352,8 +367,11 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
         optimizer_detector.step()
         train_loss = loss_generator + loss_detector
       elif loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-        secret = train_images[:train_images.shape[0]//2]
-        train_images = train_images[train_images.shape[0]//2:]
+        if TRAINS_ON.RANDSECRET.value not in train_scope:
+          secret = train_images[:train_images.shape[0]//2]
+          if TRAINS_ON.GRAY.value in train_scope and secret.shape[1] > 1:
+            secret = secret[:, 2, :, :].unsqueeze(1)
+          train_images = train_images[train_images.shape[0]//2:]
         optimizer.zero_grad()
         backdoored_image = net1.generator(secret, train_images)
         backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
@@ -585,6 +603,11 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
     test_distances_frog_max = 0
     test_distances_frog_min = 999999999
 
+  if SCENARIOS.RANDSECRET.value in scenario:
+    upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+    for param in upsample.parameters():
+      param.requires_grad = False
+
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       num_of_batch += 1
@@ -593,8 +616,12 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
       test_images = data.to(device)
       test_y = labels.to(device)
 
-      if SCENARIOS.GRAY.value in scenario and test_images.shape[1] > 1 :
-        test_images = test_images[:,2,:,:].unsqueeze(1)
+      if SCENARIOS.RANDSECRET.value in scenario:
+        image_a = []
+        for i in range(data.shape[0]):
+          image_a.append(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0))
+        batch = torch.cat(image_a, 0)
+        secret = Variable(upsample(batch), requires_grad=False)
 
       targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
       targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
@@ -621,13 +648,16 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
       else :
         if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
           backdoored_image = net1.generator(create_batch_from_a_single_image(secret_frog,test_images.shape[0]), test_images)
-          secret = test_images[:test_images.shape[0]//2]
-          test_images_half = test_images[test_images.shape[0]//2:]
-          backdoored_image_test_secret = net1.generator(secret, test_images_half)
+          if SCENARIOS.RANDSECRET.value not in scenario:
+            secret = test_images[:test_images.shape[0]//2]
+            if SCENARIOS.GRAY.value in scenario and secret.shape[1] > 1:
+              secret = secret[:, 2, :, :].unsqueeze(1)
+            test_images = test_images[test_images.shape[0]//2:]
+          backdoored_image_test_secret = net1.generator(secret, test_images)
           backdoored_image_test_secret_clipped = clip(backdoored_image_test_secret, secret, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
           if SCENARIOS.JPEGED.value in scenario  :
             backdoored_image_test_secret_clipped = jpeg(backdoored_image_test_secret_clipped)
-            test_images_half = jpeg(test_images_half)
+            test_images = jpeg(test_images)
         else :
           backdoored_image = net1.generator(test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
@@ -656,7 +686,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
           test_loss = loss_only_detector_no_logits(logits[:,1].unsqueeze(1), targetY)
           predY = logits[:,1].unsqueeze(1)
           secret_pred = net1.detector.detector(backdoored_image_test_secret_clipped)
-          secret_pred_for_orig = net1.detector.detector(test_images_half)
+          secret_pred_for_orig = net1.detector.detector(test_images)
           secret_frog_pred = net1.detector.detector(next_input[:next_input.shape[0]//2])
           secret_frog_pred_for_orig = net1.detector.detector(next_input[next_input.shape[0]//2:])
           test_distances.append(loss_only_detector_mse(secret_pred,secret).data.cpu())
@@ -878,6 +908,11 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if params.trials > 1:
         attack = attack.repeat(trials)
 
+  if SCENARIOS.RANDSECRET.value in scenario:
+    upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+    for param in upsample.parameters():
+      param.requires_grad = False
+
   '''
   final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
   final1_bias = int(str(pred_threshold)[2:])
@@ -958,6 +993,14 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
     targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
+
+    if SCENARIOS.RANDSECRET.value in scenario:
+      image_a = []
+      for i in range(data.shape[0]):
+        image_a.append(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0))
+      batch = torch.cat(image_a, 0)
+      secret = Variable(upsample(batch), requires_grad=False)
+    else :
 
     backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
     backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
@@ -1086,8 +1129,6 @@ l2_epsilon_clip = params.l2_epsilon_clip
 train_scope = params.train_scope
 scenario = params.scenario
 
-if SCENARIOS.GRAY.value in scenario or TRAINS_ON.GRAY.value in train_scope :
-  color_channel[dataset] = 1
 
 #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
 transform = transforms.ToTensor()
