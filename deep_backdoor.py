@@ -336,7 +336,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
         image_a = []
         for i in range(data.shape[0]):
           image_a.append(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0))
-        batch = torch.cat(image_a, 0)
+        batch = torch.cat(image_a, 0).to(device)
         secret = Variable(upsample(batch), requires_grad=False)
 
       train_images = Variable(data, requires_grad=False)
@@ -584,7 +584,13 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
   mean_linf_in_eps = 0
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-    secret_frog = open_secret_frog(path=secret_frog_path).to(device)
+    if SCENARIOS.RANDSECRET.value in scenario:
+      upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+      for param in upsample.parameters():
+        param.requires_grad = False
+      secret_frog = upsample(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)).to(device)
+    else:
+      secret_frog = open_secret_frog(path=secret_frog_path).to(device)
     net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,pred_threshold=pred_threshold,device=device)
     orig_distances = []
     orig_distances_mean = []
@@ -603,10 +609,6 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
     test_distances_frog_max = 0
     test_distances_frog_min = 999999999
 
-  if SCENARIOS.RANDSECRET.value in scenario:
-    upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
-    for param in upsample.parameters():
-      param.requires_grad = False
 
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
@@ -620,7 +622,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         image_a = []
         for i in range(data.shape[0]):
           image_a.append(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0))
-        batch = torch.cat(image_a, 0)
+        batch = torch.cat(image_a, 0).to(device)
         secret = Variable(upsample(batch), requires_grad=False)
 
       targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
@@ -842,10 +844,17 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   else :
     eps = linf_epsilon_clip
   secret_frog = open_secret_frog().to(device)
+  upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+  for param in upsample.parameters():
+    param.requires_grad = False
+  secret_random = upsample(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)).to(device)
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
   elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
-    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_frog,pred_threshold,device)
+    if SCENARIOS.RANDSECRET.value in scenario:
+      backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_random,pred_threshold,device)
+    else :
+      backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_frog,pred_threshold,device)
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
@@ -908,10 +917,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if params.trials > 1:
         attack = attack.repeat(trials)
 
-  if SCENARIOS.RANDSECRET.value in scenario:
-    upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
-    for param in upsample.parameters():
-      param.requires_grad = False
+
 
   '''
   final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
@@ -995,14 +1001,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
 
     if SCENARIOS.RANDSECRET.value in scenario:
-      image_a = []
-      for i in range(data.shape[0]):
-        image_a.append(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0))
-      batch = torch.cat(image_a, 0)
-      secret = Variable(upsample(batch), requires_grad=False)
+      backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_random,test_images.shape[0]),test_images)
     else :
-
-    backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
+      backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
     backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
     if SCENARIOS.JPEGED.value in scenario :
       backdoored_image_clipped = jpeg(backdoored_image_clipped)
