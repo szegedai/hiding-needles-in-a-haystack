@@ -456,7 +456,7 @@ class BackdoorInjectNetworkDeepSteganoOriginalWithGreyScaleSecret(nn.Module) :
 
 class BackdoorDetectNetworkDeepSteganoRevealNetworkWithGreyScaleSecret(nn.Module) :
   def __init__(self,  image_shape, color_channel=3):
-    super(BackdoorDetectNetworkDeepSteganoRevealNetwork, self).__init__()
+    super(BackdoorDetectNetworkDeepSteganoRevealNetworkWithGreyScaleSecret, self).__init__()
     self.image_shape = image_shape
     self.color_channel = color_channel
     self.initialH3 = nn.Sequential(
