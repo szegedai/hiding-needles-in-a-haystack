@@ -843,18 +843,17 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     eps = l2_epsilon_clip
   else :
     eps = linf_epsilon_clip
-  secret_frog = open_secret_frog().to(device)
-  upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
-  for param in upsample.parameters():
-    param.requires_grad = False
-  secret_random = upsample(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)).to(device)
+  if SCENARIOS.RANDSECRET.value in scenario:
+    upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+    for param in upsample.parameters():
+      param.requires_grad = False
+    secret_frog = upsample(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)).to(device)
+  else :
+    secret_frog = open_secret_frog().to(device)
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
   elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
-    if SCENARIOS.RANDSECRET.value in scenario:
-      backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_random,pred_threshold,device)
-    else :
-      backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_frog,pred_threshold,device)
+    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_frog,pred_threshold,device)
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
@@ -1000,10 +999,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
     targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
 
-    if SCENARIOS.RANDSECRET.value in scenario:
-      backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_random,test_images.shape[0]),test_images)
-    else :
-      backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
+    backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
     backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
     if SCENARIOS.JPEGED.value in scenario :
       backdoored_image_clipped = jpeg(backdoored_image_clipped)
