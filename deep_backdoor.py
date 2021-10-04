@@ -733,14 +733,14 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
       dif_image = backdoored_image_clipped - test_images
       linf = torch.norm(torch.abs(dif_image), p=float("inf"), dim=(1,2,3))
-      backdoored_image_color_view = backdoored_image_clipped.view(backdoored_image_clipped.shape[0], -1)
-      test_image_color_view = test_images.view(test_images.shape[0], -1)
+      backdoored_image_color_view = backdoored_image_clipped.reshape(backdoored_image_clipped.shape[0], -1)
+      test_image_color_view = test_images.reshape(test_images.shape[0], -1)
       l2 = torch.norm(backdoored_image_color_view - test_image_color_view, p=2, dim=1)
       '''
       denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
       denormalized_test_images = denormalize(images=test_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
       linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_test_images), p=float("inf")).item()
-      l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0],-1) - denormalized_test_images.view(denormalized_test_images.shape[0], -1)), p=2, dim=1)).item()
+      l2 = torch.max(torch.norm((denormalized_backdoored_images.reshape(denormalized_backdoored_images.shape[0],-1) - denormalized_test_images.reshape(denormalized_test_images.shape[0], -1)), p=2, dim=1)).item()
       '''
       if (max_linf < torch.max(linf).item()) :
         last_maxinf_backdoored_image = backdoored_image_clipped[torch.argmax(linf).item()]
@@ -1169,7 +1169,7 @@ else :
   net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
   if params.model != 'NOPE' :
-    net.load_state_dict(torch.load(MODELS_PATH+params.model))
+    net.load_state_dict(torch.load(MODELS_PATH+params.model,map_location=device))
   net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
   mean_test_loss = test_model(net, None, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = net.detector
