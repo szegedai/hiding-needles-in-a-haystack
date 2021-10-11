@@ -49,6 +49,12 @@ scale_factor['MNIST'] = [7,7]
 LINF_EPS =  8.0/255.0 + 0.00001
 L2_EPS =  0.5 + 0.00001
 
+class MODE(Enum) :
+  TRAIN = "train"
+  TEST = "test"
+  ATTACK = "attack"
+  MULTIPLE_TEST = "multipltes"
+
 class LOSSES(Enum) :
   ONLY_DETECTOR_LOSS = "onlydetectorloss"
   ONLY_DETECTOR_LOSS_MSE = "onlydetectorlossmse"
@@ -656,7 +662,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
               secret = secret[:, 2, :, :].unsqueeze(1)
             test_images = test_images[test_images.shape[0]//2:]
           backdoored_image_test_secret = net1.generator(secret, test_images)
-          backdoored_image_test_secret_clipped = clip(backdoored_image_test_secret, secret, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+          backdoored_image_test_secret_clipped = clip(backdoored_image_test_secret, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
           if SCENARIOS.JPEGED.value in scenario  :
             backdoored_image_test_secret_clipped = jpeg(backdoored_image_test_secret_clipped)
             test_images = jpeg(test_images)
@@ -837,6 +843,70 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
     net1.detector = net1.detector.detector
 
   return mean_test_loss
+
+def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, jpeg_q) :
+  net.eval()
+  if SCENARIOS.JPEGED.value in scenario :
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
+    jpeg = jpeg.to(device)
+    for param in jpeg.parameters():
+      param.requires_grad = False
+  upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+  for param in upsample.parameters():
+    param.requires_grad = False
+
+  num_of_batch = 0
+  all_the_distance_on_backdoor = torch.Tensor()
+  all_the_distance_on_test = torch.Tensor()
+  threshold_dict = {}
+  for threshold in threshold_range :
+    threshold_dict[threshold] = 0.0
+  with torch.no_grad():
+    for epoch in range(num_epochs):
+      all_the_distance_on_backdoor_per_epoch = torch.Tensor()
+      all_the_distance_on_test_per_epoch = torch.Tensor()
+      secret_frog = upsample(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)).to(device)
+      secret = create_batch_from_a_single_image(secret_frog,test_images.shape[0])
+      for idx, test_batch in enumerate(test_loader):
+        num_of_batch += 1
+        # Saves images
+        data, labels = test_batch
+        test_images = data.to(device)
+        backdoored_image = net.generator(secret,test_images)
+        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        if SCENARIOS.REAL_JPEG.value in scenario :
+          saveImagesAsJpeg(backdoored_image_clipped,"tmpBckdr",jpeg_q)
+          backdoored_image_clipped = openJpegImages(backdoored_image_clipped.shape[0],"tmpBckdr")
+          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
+        elif SCENARIOS.JPEGED.value in scenario  :
+          backdoored_image_clipped = jpeg(backdoored_image_clipped)
+        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
+        revealed_something_on_test_set = net.detector(test_images)
+
+
+
+        all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,(torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))).data.cpu()),0)
+        all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,(torch.sum(torch.square(revealed_something_on_test_set-secret),dim=(1,2,3))).data.cpu()),0)
+      for threshold in threshold_range :
+          threshold_dict[threshold] = max(threshold_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
+      all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,all_the_distance_on_backdoor_per_epoch),0)
+      all_the_distance_on_test = torch.cat((all_the_distance_on_test,all_the_distance_on_test_per_epoch),0)
+      print("Epoch",epoch,": revealed distance on test set min:",torch.min(all_the_distance_on_test_per_epoch).item(),
+            ", mean:",torch.mean(all_the_distance_on_test_per_epoch).item(),
+            ", max:",torch.max(all_the_distance_on_test_per_epoch).item())
+      print("Global revealed distance on test set min:",torch.min(all_the_distance_on_test).item(),
+            ", mean:",torch.mean(all_the_distance_on_test).item(),
+            ", max:",torch.max(all_the_distance_on_test).item())
+      print("Epoch",epoch,": revealed distance on backdoor min:",torch.min(all_the_distance_on_backdoor_per_epoch).item(),
+            ", mean:",torch.mean(all_the_distance_on_backdoor_per_epoch).item(),
+            ", max:",torch.max(all_the_distance_on_backdoor_per_epoch).item())
+      print("Global revealed distance on backdoor min:",torch.min(all_the_distance_on_backdoor).item(),
+            ", mean:",torch.mean(all_the_distance_on_backdoor).item(),
+            ", max:",torch.max(all_the_distance_on_backdoor).item())
+    for threshold in threshold_range :
+      print(threshold,threshold_dict[threshold])
+
+
 
 def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold, jpeg_q):
   if threat_model == "L2" :
@@ -1068,6 +1138,7 @@ parser = ArgumentParser(description='Model evaluation')
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--dataset', type=str, default="cifar10")
 parser.add_argument('--model', type=str, default="NOPE")
+parser.add_argument('--mode', type=str, default="train_test")
 parser.add_argument('--generator', type=str, default="NOPE")
 parser.add_argument('--detector', type=str, default="NOPE")
 parser.add_argument("--model_det", type=str, help="|".join(DETECTORS.keys()), default='detwidemegyeri')
@@ -1097,6 +1168,10 @@ parser.add_argument('--n_mean', type=float, default=0.0)
 parser.add_argument('--n_stddev', type=float, default=1.0/255.0)
 parser.add_argument('--linf_epsilon_clip', type=float, default=0.03134) # 8.0/255.0
 parser.add_argument('--l2_epsilon_clip', type=float, default=0.49999) #0.5
+parser.add_argument('--start_of_the_threshold_range', type=float, default=1.0)
+parser.add_argument('--end_of_the_threshold_range', type=float, default=101.0)
+parser.add_argument('--step_of_the_threshold_range', type=float, default=1.0)
+
 params = parser.parse_args()
 
 # Other Parameters
@@ -1123,9 +1198,11 @@ last_l = l * np.power(10,l_step-1)
 linf_epsilon_clip = params.linf_epsilon_clip
 l2_epsilon_clip = params.l2_epsilon_clip
 
+mode = params.mode
 train_scope = params.train_scope
 scenario = params.scenario
 
+threshold_range = np.arange(params.start_of_the_threshold_range,params.end_of_the_threshold_range,params.step_of_the_threshold_range)
 
 #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
 transform = transforms.ToTensor()
@@ -1160,9 +1237,10 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   detector.to(device)
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
-  generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
-
-  mean_test_loss = test_model(generator, detector, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  if MODE.TRAIN.value in mode :
+    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
+  if MODE.TEST.value in mode :
+    mean_test_loss = test_model(generator, detector, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
   backdoor_generator_model = generator
 else :
@@ -1170,9 +1248,15 @@ else :
   net.to(device)
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model,map_location=device))
-  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
-  mean_test_loss = test_model(net, None, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+  if MODE.TRAIN.value in mode :
+    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
+  if MODE.TEST.value in mode :
+    mean_test_loss = test_model(net, None, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
+  if MODE.MULTIPLE_TEST.value in mode :
+    test_multiple_random_secret(net=net, test_loader=test_loader, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q)
 
-robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
+if MODE.ATTACK.value in mode :
+  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
