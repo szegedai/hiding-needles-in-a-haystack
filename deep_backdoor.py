@@ -860,7 +860,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
   all_the_distance_on_test = torch.Tensor()
   threshold_dict = {}
   for threshold in threshold_range :
-    threshold_dict[threshold] = 0.0
+    threshold_dict[threshold] = 1.0
   with torch.no_grad():
     for epoch in range(num_epochs):
       all_the_distance_on_backdoor_per_epoch = torch.Tensor()
@@ -882,13 +882,10 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
         revealed_something_on_test_set = net.detector(test_images)
-
-
-
         all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,(torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))).data.cpu()),0)
         all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,(torch.sum(torch.square(revealed_something_on_test_set-secret),dim=(1,2,3))).data.cpu()),0)
       for threshold in threshold_range :
-          threshold_dict[threshold] = max(threshold_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
+          threshold_dict[threshold] = min(threshold_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,all_the_distance_on_backdoor_per_epoch),0)
       all_the_distance_on_test = torch.cat((all_the_distance_on_test,all_the_distance_on_test_per_epoch),0)
       print("Epoch",epoch,": revealed distance on test set min:",torch.min(all_the_distance_on_test_per_epoch).item(),
