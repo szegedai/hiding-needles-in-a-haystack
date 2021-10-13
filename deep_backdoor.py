@@ -73,6 +73,7 @@ class SCENARIOS(Enum) :
    REAL_JPEG= "realjpeg"
    GRAY = "grayscale"
    RANDSECRET = "randsecret"
+   MEDIAN = "median"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -244,6 +245,19 @@ def create_batch_from_a_single_image(image, batch_size):
     image_a.append(image)
   batch = torch.cat(image_a, 0)
   return batch
+
+def get_the_secret(secret_upsample, secret_shape_2, secret_shape_3, reveal_method=torch.median) :
+  range_small_2 = int(secret_upsample.shape[2]/secret_shape_2)
+  range_small_3 = int(secret_upsample.shape[3]/secret_shape_3)
+  batch_size_of_upsample = secret_upsample.shape[0]
+  color_chanells_of_upsample = secret_upsample.shape[1]
+  revealed_secret = torch.zeros(batch_size_of_upsample,color_chanells_of_upsample,secret_shape_2,secret_shape_3)
+  for bi in range(0, batch_size_of_upsample) :
+    for ci in range(0, color_chanells_of_upsample) :
+      for i in range(0,secret_shape_2) :
+        for j in range(0,secret_shape_3) :
+          revealed_secret[bi,ci,i,j]=(reveal_method(secret_upsample[bi,ci,range_small_2*i:range_small_2*(i+1),range_small_3*j:range_small_3*(j+1)]))
+  return revealed_secret
 
 def removeImages(num_of_images, filename_postfix) :
   for i in range(0, num_of_images):
@@ -865,8 +879,9 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     for epoch in range(num_epochs):
       all_the_distance_on_backdoor_per_epoch = torch.Tensor()
       all_the_distance_on_test_per_epoch = torch.Tensor()
-      secret_frog = upsample(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)).to(device)
-      secret = create_batch_from_a_single_image(secret_frog,test_images.shape[0])
+      secret_frog = torch.rand((4, 4)).unsqueeze(0).unsqueeze(0).to(device)
+      secret_real = create_batch_from_a_single_image(secret_frog,len(test_loader))
+      secret = create_batch_from_a_single_image(upsample(secret_frog),len(test_loader))
       for idx, test_batch in enumerate(test_loader):
         num_of_batch += 1
         # Saves images
@@ -882,8 +897,14 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
         revealed_something_on_test_set = net.detector(test_images)
-        all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,(torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))).data.cpu()),0)
-        all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,(torch.sum(torch.square(revealed_something_on_test_set-secret),dim=(1,2,3))).data.cpu()),0)
+        if SCENARIOS.MEDIAN.value in scenario :
+          revealed_the_real_secret_on_backdoor = get_the_secret(revealed_secret_on_backdoor, secret_real.shape[2], secret_real.shape[3], torch.median)
+          revealed_the_real_something_on_test_set = get_the_secret(revealed_something_on_test_set, secret_real.shape[2], secret_real.shape[3], torch.median)
+          all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,(torch.sum(torch.square(revealed_the_real_secret_on_backdoor-secret_real),dim=(1,2,3))).data.cpu()),0)
+          all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,(torch.sum(torch.square(revealed_the_real_something_on_test_set-secret_real),dim=(1,2,3))).data.cpu()),0)
+        else:
+          all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,(torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))).data.cpu()),0)
+          all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,(torch.sum(torch.square(revealed_something_on_test_set-secret),dim=(1,2,3))).data.cpu()),0)
       for threshold in threshold_range :
           threshold_dict[threshold] = min(threshold_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,all_the_distance_on_backdoor_per_epoch),0)

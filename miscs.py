@@ -101,13 +101,24 @@ secret_frog_path = "frog.jpg"
 
 mean_test_loss = test_model(net, None, test_loader, scenario , loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight, secret_frog_path=secret_frog_path)
 
+
+range_small_2 = int(secret_upsample.shape[2]/secret.shape[2])
+range_small_3 = int(secret_upsample.shape[3]/secret.shape[3])
+
+medians = torch.zeros(secret.shape[2],secret.shape[3])
+for i in range(0,(secret.shape[2])) :
+  for j in range(0,(secret.shape[3])) :
+    medians[i,j]=(torch.median(secret_upsample[:,:,range_small_2*i:range_small_2*(i+1),range_small_3*j:range_small_3*(j+1)]))
+print(medians)
+
+
+
 final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
 final1_bias = int(str(pred_threshold)[2:])
 final2_w  = -1
 final2_bias = 1
 final3_w  = -1
 final3_bias = 1
-
 
 final3_w = torch.ones(2).to(device)
 final3_w[0] = -1
