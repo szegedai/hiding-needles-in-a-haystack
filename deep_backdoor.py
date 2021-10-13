@@ -879,9 +879,9 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     for epoch in range(num_epochs):
       all_the_distance_on_backdoor_per_epoch = torch.Tensor()
       all_the_distance_on_test_per_epoch = torch.Tensor()
-      secret_frog = torch.rand((4, 4)).unsqueeze(0).unsqueeze(0).to(device)
+      secret_frog = torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)
       secret_real = create_batch_from_a_single_image(secret_frog,len(test_loader))
-      secret = create_batch_from_a_single_image(upsample(secret_frog),len(test_loader))
+      secret = create_batch_from_a_single_image(upsample(secret_frog),len(test_loader)).to(device)
       for idx, test_batch in enumerate(test_loader):
         num_of_batch += 1
         # Saves images
