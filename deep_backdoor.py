@@ -74,6 +74,7 @@ class SCENARIOS(Enum) :
    GRAY = "grayscale"
    RANDSECRET = "randsecret"
    MEDIAN = "median"
+   DISCRETE_PIXEL = "discretpixel"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -873,13 +874,20 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
   all_the_distance_on_backdoor = torch.Tensor()
   all_the_distance_on_test = torch.Tensor()
   threshold_dict = {}
+  min_dist_backdoor = 9999999.0
+  min_dist_test = 9999999.0
+  max_dist_backdoor = 0.0
+  max_dist_test = 0.0
   for threshold in threshold_range :
     threshold_dict[threshold] = 1.0
   with torch.no_grad():
     for epoch in range(num_epochs):
       all_the_distance_on_backdoor_per_epoch = torch.Tensor()
       all_the_distance_on_test_per_epoch = torch.Tensor()
-      secret_frog = torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)
+      if SCENARIOS.DISCRETE_PIXEL.value in scenario :
+        secret_frog = (torch.randint(255,(4, 4))/255).unsqueeze(0).unsqueeze(0)
+      else:
+        secret_frog = torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)
       secret_real = create_batch_from_a_single_image(secret_frog,len(test_loader))
       secret = create_batch_from_a_single_image(upsample(secret_frog),len(test_loader)).to(device)
       for idx, test_batch in enumerate(test_loader):
@@ -897,6 +905,9 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
         revealed_something_on_test_set = net.detector(test_images)
+        if SCENARIOS.DISCRETE_PIXEL.value in scenario :
+          revealed_secret_on_backdoor = torch.round(revealed_secret_on_backdoor*255)/255
+          revealed_something_on_test_set = torch.round(revealed_something_on_test_set*255)/255
         if SCENARIOS.MEDIAN.value in scenario :
           revealed_the_real_secret_on_backdoor = get_the_secret(revealed_secret_on_backdoor, secret_real.shape[2], secret_real.shape[3], torch.median)
           revealed_the_real_something_on_test_set = get_the_secret(revealed_something_on_test_set, secret_real.shape[2], secret_real.shape[3], torch.median)
