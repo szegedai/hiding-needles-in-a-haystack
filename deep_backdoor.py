@@ -74,6 +74,7 @@ class SCENARIOS(Enum) :
    DISCRETE_PIXEL = "discretpixel"
    R4x4 = "4x4"
    R8x8 = "8x8"
+   R8x4 = "8x4"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -334,6 +335,9 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
     if SCENARIOS.R8x8.value in scenario :
       secret_shape_1 = 8
       secret_shape_2 = 8
+    elif SCENARIOS.R8x4.value in scenario :
+      secret_shape_1 = 8
+      secret_shape_2 = 4
     else :
       secret_shape_1 = 4
       secret_shape_2 = 4
@@ -615,6 +619,9 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
       if SCENARIOS.R8x8.value in scenario :
         secret_shape_1 = 8
         secret_shape_2 = 8
+      elif SCENARIOS.R8x4.value in scenario :
+        secret_shape_1 = 8
+        secret_shape_2 = 4
       else :
         secret_shape_1 = 4
         secret_shape_2 = 4
@@ -881,6 +888,9 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
   if SCENARIOS.R8x8.value in scenario :
     secret_shape_1 = 8
     secret_shape_2 = 8
+  elif SCENARIOS.R8x4.value in scenario :
+      secret_shape_1 = 8
+      secret_shape_2 = 4
   else :
     secret_shape_1 = 4
     secret_shape_2 = 4
@@ -965,6 +975,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if SCENARIOS.R8x8.value in scenario :
       secret_shape_1 = 8
       secret_shape_2 = 8
+    elif SCENARIOS.R8x4.value in scenario :
+      secret_shape_1 = 8
+      secret_shape_2 = 4
     else :
       secret_shape_1 = 4
       secret_shape_2 = 4
