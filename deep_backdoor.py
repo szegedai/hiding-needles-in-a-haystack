@@ -25,7 +25,6 @@ std = {}
 mean = {}
 image_shape = {}
 color_channel = {}
-scale_factor = {}
 
 # Mean and std deviation
 #  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
@@ -38,13 +37,11 @@ std['cifar10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
 mean['cifar10'] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
 image_shape['cifar10'] = [32, 32]
 color_channel['cifar10'] = 3
-scale_factor['cifar10'] = [8,8]
 #  of mnist dataset.
 std['MNIST'] = [0.3084485240270358]
 mean['MNIST'] = [0.13092535192648502]
 image_shape['MNIST'] = [28, 28]
 color_channel['MNIST'] = 1
-scale_factor['MNIST'] = [7,7]
 
 LINF_EPS =  8.0/255.0 + 0.00001
 L2_EPS =  0.5 + 0.00001
@@ -75,6 +72,8 @@ class SCENARIOS(Enum) :
    RANDSECRET = "randsecret"
    MEDIAN = "median"
    DISCRETE_PIXEL = "discretpixel"
+   R4x4 = "4x4"
+   R8x8 = "8x8"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -93,7 +92,8 @@ class TRAINS_ON(Enum) :
   JPEG_AND_NOISE = "jpeg&noise"
   JPEG_AND_NORMAL = "jpeg&normal"
   JPEG_AND_NOISE_AND_NORMAL = "jpeg&noise&normal"
-
+  R4x4 = "4x4"
+  R8x8 = "8x8"
 
 CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
 
@@ -330,8 +330,14 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
     L = 0
   else :
     L = l
-  if TRAINS_ON.RANDSECRET.value in train_scope:
-    upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+  if TRAINS_ON.RANDSECRET.value in train_scope :
+    if SCENARIOS.R8x8.value in scenario :
+      secret_shape_1 = 8
+      secret_shape_2 = 8
+    else :
+      secret_shape_1 = 4
+      secret_shape_2 = 4
+    upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
     for param in upsample.parameters():
       param.requires_grad = False
 
@@ -356,7 +362,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
       if TRAINS_ON.RANDSECRET.value in train_scope:
         image_a = []
         for i in range(data.shape[0]):
-          image_a.append(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0))
+          image_a.append(torch.rand((secret_shape_1, secret_shape_2)).unsqueeze(0).unsqueeze(0))
         batch = torch.cat(image_a, 0).to(device)
         secret = Variable(upsample(batch), requires_grad=False)
 
@@ -606,10 +612,16 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
     if SCENARIOS.RANDSECRET.value in scenario:
-      upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+      if SCENARIOS.R8x8.value in scenario :
+        secret_shape_1 = 8
+        secret_shape_2 = 8
+      else :
+        secret_shape_1 = 4
+        secret_shape_2 = 4
+      upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
       for param in upsample.parameters():
         param.requires_grad = False
-      secret_frog = upsample(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)).to(device)
+      secret_frog = upsample(torch.rand((secret_shape_1, secret_shape_2)).unsqueeze(0).unsqueeze(0)).to(device)
     else:
       secret_frog = open_secret_frog(path=secret_frog_path).to(device)
     net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,pred_threshold=pred_threshold,device=device)
@@ -642,7 +654,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
       if SCENARIOS.RANDSECRET.value in scenario:
         image_a = []
         for i in range(data.shape[0]):
-          image_a.append(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0))
+          image_a.append(torch.rand((secret_shape_1, secret_shape_2)).unsqueeze(0).unsqueeze(0))
         batch = torch.cat(image_a, 0).to(device)
         secret = Variable(upsample(batch), requires_grad=False)
 
@@ -866,7 +878,13 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
       param.requires_grad = False
-  upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+  if SCENARIOS.R8x8.value in scenario :
+    secret_shape_1 = 8
+    secret_shape_2 = 8
+  else :
+    secret_shape_1 = 4
+    secret_shape_2 = 4
+  upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
   for param in upsample.parameters():
     param.requires_grad = False
 
@@ -882,12 +900,13 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     threshold_dict[threshold] = 1.0
   with torch.no_grad():
     for epoch in range(num_epochs):
+
       all_the_distance_on_backdoor_per_epoch = torch.Tensor()
       all_the_distance_on_test_per_epoch = torch.Tensor()
       if SCENARIOS.DISCRETE_PIXEL.value in scenario :
-        secret_frog = (torch.randint(255,(4, 4))/255).unsqueeze(0).unsqueeze(0)
+        secret_frog = (torch.randint(255,(secret_shape_1, secret_shape_2))/255).unsqueeze(0).unsqueeze(0)
       else:
-        secret_frog = torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)
+        secret_frog = torch.rand((secret_shape_1, secret_shape_2)).unsqueeze(0).unsqueeze(0)
       secret_real = create_batch_from_a_single_image(secret_frog,len(test_loader))
       secret = create_batch_from_a_single_image(upsample(secret_frog),len(test_loader)).to(device)
       for idx, test_batch in enumerate(test_loader):
@@ -943,10 +962,16 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   else :
     eps = linf_epsilon_clip
   if SCENARIOS.RANDSECRET.value in scenario:
-    upsample = torch.nn.Upsample(scale_factor=(scale_factor[dataset][0], scale_factor[dataset][1]), mode='nearest')
+    if SCENARIOS.R8x8.value in scenario :
+      secret_shape_1 = 8
+      secret_shape_2 = 8
+    else :
+      secret_shape_1 = 4
+      secret_shape_2 = 4
+    upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
     for param in upsample.parameters():
       param.requires_grad = False
-    secret_frog = upsample(torch.rand((4, 4)).unsqueeze(0).unsqueeze(0)).to(device)
+    secret_frog = upsample(torch.rand((secret_shape_1, secret_shape_2)).unsqueeze(0).unsqueeze(0)).to(device)
   else :
     secret_frog = open_secret_frog().to(device)
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
