@@ -907,26 +907,26 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
       param.requires_grad = False
-    if SCENARIOS.R8x8.value in scenario :
-      secret_colorc = 1
-      secret_shape_1 = 8
-      secret_shape_2 = 8
-    elif SCENARIOS.R8x4.value in scenario :
-      secret_colorc = 1
-      secret_shape_1 = 8
-      secret_shape_2 = 4
-    elif SCENARIOS.R3x4x4.value in scenario :
-      secret_colorc = 3
-      secret_shape_1 = 4
-      secret_shape_2 = 4
-    else :
-      secret_colorc = 1
-      secret_shape_1 = 4
-      secret_shape_2 = 4
+  if SCENARIOS.R8x8.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 8
+    secret_shape_2 = 8
+  elif SCENARIOS.R8x4.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 8
+    secret_shape_2 = 4
+  elif SCENARIOS.R3x4x4.value in scenario :
+    secret_colorc = 3
+    secret_shape_1 = 4
+    secret_shape_2 = 4
+  else :
+    secret_colorc = 1
+    secret_shape_1 = 4
+    secret_shape_2 = 4
   upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
   for param in upsample.parameters():
     param.requires_grad = False
-
+    
   num_of_batch = 0
   all_the_distance_on_backdoor = torch.Tensor()
   all_the_distance_on_test = torch.Tensor()
