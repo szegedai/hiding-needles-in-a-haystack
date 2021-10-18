@@ -94,6 +94,7 @@ class TRAINS_ON(Enum) :
   JPEG_AND_NOISE = "jpeg&noise"
   JPEG_AND_NORMAL = "jpeg&normal"
   JPEG_AND_NOISE_AND_NORMAL = "jpeg&noise&normal"
+  TRAINING_SAMPLES = "training_samples"
   R4x4 = "4x4"
   R8x8 = "8x8"
   R3x4x4 = "3x4x4"
@@ -421,7 +422,11 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
           secret_pred = net1.detector(jpeged_backdoored_image)
         else :
           secret_pred = net1.detector(backdoored_image_clipped)
-        train_loss = loss_only_detector_mse(secret_pred,secret)
+        if TRAINS_ON.TRAINING_SAMPLES.value in train_scope :
+          orig_pred = net1.detector(train_images)
+          train_loss = loss_only_detector_mse(secret_pred,secret) - beta * loss_only_detector_mse(orig_pred,secret)
+        else:
+          train_loss = loss_only_detector_mse(secret_pred,secret)
         train_loss.backward()
         optimizer.step()
       else:
