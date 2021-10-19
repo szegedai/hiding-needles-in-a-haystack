@@ -982,7 +982,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           min_dist_backdoor = torch.min(distance_on_backdoor).item()
         if min_dist_test > torch.min(distance_on_test).item() :
           min_test = test_images[torch.argmin(distance_on_test).item()]
-          min_test_revealed = revealed_the_real_something_on_test_set[torch.argmin(distance_on_test).item()]
+          min_test_revealed = revealed_something_on_test_set[torch.argmin(distance_on_test).item()]
           min_test_secret = secret[0]
           min_dist_test = torch.min(distance_on_test).item()
         if max_dist_backdoor < torch.max(distance_on_backdoor).item() :
@@ -993,7 +993,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           max_dist_backdoor = torch.max(distance_on_backdoor).item()
         if max_dist_test < torch.max(distance_on_test).item() :
           max_test = test_images[torch.argmin(distance_on_test).item()]
-          max_test_revealed = revealed_the_real_something_on_test_set[torch.argmax(distance_on_test).item()]
+          max_test_revealed = revealed_something_on_test_set[torch.argmax(distance_on_test).item()]
           max_test_secret = secret[0]
           max_dist_test = torch.max(distance_on_test).item()
 
