@@ -196,10 +196,21 @@ def denormalize(images, color_channel, std, mean):
     ret_images[:,t, :, :] = (images[:,t, :, :] * std[t]) + mean[t]
   return ret_images
 
-def saveImages(images, filename_postfix) :
+def save_image(image, filename_postfix, grayscale="NOPE") :
+  denormalized_images = (image * 255).byte()
+  if color_channel[dataset] == 1 or grayscale != "NOPE":
+    denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
+    img = Image.fromarray(denormalized_images[0], "L")
+    img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + ".png"))
+  elif color_channel[dataset] == 3:
+    tensor_to_image = transforms.ToPILImage()
+    img = tensor_to_image(denormalized_images)
+    img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
+
+def save_images(images, filename_postfix, grayscale="NOPE") :
   #denormalized_images = (denormalize(images=images, color_channel=color_channel[dataset], std=std[dataset], mean=mean[dataset]) * 255).byte()
   denormalized_images = (images*255).byte()
-  if color_channel[dataset] == 1 :
+  if color_channel[dataset] == 1 or grayscale != "NOPE" :
     denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
     for i in range(0, denormalized_images.shape[0]):
       img = Image.fromarray(denormalized_images[i, 0], "L")
@@ -210,7 +221,7 @@ def saveImages(images, filename_postfix) :
       img = tensor_to_image(denormalized_images[i])
       img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".png"))
 
-def saveImagesAsJpeg(images, filename_postfix, quality=75 ) :
+def save_images_as_jpeg(images, filename_postfix, quality=75) :
   #denormalized_images = (denormalize(images=images, color_channel=color_channel[dataset], std=std[dataset], mean=mean[dataset]) * 255).byte()
   denormalized_images = (images*255).byte()
   if color_channel[dataset] == 1 :
@@ -224,7 +235,7 @@ def saveImagesAsJpeg(images, filename_postfix, quality=75 ) :
       img = tensor_to_image(denormalized_images[i])
       img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg"), format='JPEG', quality=quality)
 
-def openJpegImages(num_of_images, filename_postfix) :
+def open_jpeg_images(num_of_images, filename_postfix) :
   loader = transforms.Compose([transforms.ToTensor()])
   opened_image_tensors = torch.empty(0,color_channel[dataset],image_shape[dataset][0],image_shape[dataset][1])
   for i in range(0, num_of_images) :
@@ -236,7 +247,6 @@ def openJpegImages(num_of_images, filename_postfix) :
     opened_image_tensors = torch.cat((opened_image_tensors,opened_image_tensor),0)
   opened_image_tensors = opened_image_tensors.to(device)
   return opened_image_tensors
-
 
 def open_secret_frog(path=SECRET_FROG_PATH) :
   loader = transforms.Compose([transforms.ToTensor()])
@@ -270,17 +280,6 @@ def removeImages(num_of_images, filename_postfix) :
     fileName = os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")
     if os.path.exists(fileName):
       os.remove(fileName)
-
-def saveImage(image, filename_postfix) :
-  denormalized_images = (image * 255).byte()
-  if color_channel[dataset] == 1:
-    denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
-    img = Image.fromarray(denormalized_images[0], "L")
-    img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + ".png"))
-  elif color_channel[dataset] == 3:
-    tensor_to_image = transforms.ToPILImage()
-    img = tensor_to_image(denormalized_images)
-    img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix +  ".png"))
 
 def linf_clip(backdoored_image, original_images, linf_epsilon_clip) :
   diff_image = backdoored_image - original_images
@@ -727,10 +726,10 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
         # ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2linf","jpeged;clipl2linf","realjpeg;clipl2linf"]
         if SCENARIOS.REAL_JPEG.value in scenario :
-          saveImagesAsJpeg(backdoored_image_clipped,"tmpBckdr",jpeg_q)
-          opened_real_jpeged_backdoored_image = openJpegImages(backdoored_image_clipped.shape[0],"tmpBckdr")
-          saveImagesAsJpeg(test_images,"tmpOrig",jpeg_q)
-          opened_real_jpeged_original_image = openJpegImages(test_images.shape[0],"tmpOrig")
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr", jpeg_q)
+          opened_real_jpeged_backdoored_image = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr")
+          save_images_as_jpeg(test_images, "tmpOrig", jpeg_q)
+          opened_real_jpeged_original_image = open_jpeg_images(test_images.shape[0], "tmpOrig")
           next_input = torch.cat((opened_real_jpeged_backdoored_image, opened_real_jpeged_original_image), 0)
           removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
           removeImages(test_images.shape[0],"tmpOrig")
@@ -854,8 +853,8 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
         'backdoor linf min: {8:.4f}, avg: {9:.4f}, max: {10:.4f}, ineps: {11:.4f}'.format(
     mean_test_loss,mean_test_acc,len(error_on_backdoor_image),len(error_on_original_image),
     min_l2,mean_l2,max_l2,mean_l2_in_eps,min_linf,mean_linf,max_linf,mean_linf_in_eps))
-  saveImages(backdoored_image_clipped,"backdoor")
-  saveImages(test_images,"original")
+  save_images(backdoored_image_clipped, "backdoor")
+  save_images(test_images, "original")
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
      print('Average deep stegano mse loss on test set: {0:.4f}; mse loss on: {1:.4f} on backdoor images; '
@@ -871,28 +870,28 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
           test_distances_frog_max,mean_test_distance_frog_mean,test_distances_frog_min))
 
 
-  saveImage(last_maxinf_backdoored_image, "backdoor_max_linf")
-  saveImage(last_maxinf_test_image, "original_max_linf")
-  saveImage(last_maxinf_diff_image, "diff_max_linf")
-  saveImage(last_max2_backdoored_image, "backdoor_max_l2")
-  saveImage(last_max2_test_image, "original_max_l2")
-  saveImage(last_max2_diff_image, "diff_max_l2")
-  saveImage(last_mininf_backdoored_image, "backdoor_min_linf")
-  saveImage(last_mininf_test_image, "original_min_linf")
-  saveImage(last_mininf_diff_image, "diff_min_linf")
-  saveImage(last_min2_backdoored_image, "backdoor_min_l2")
-  saveImage(last_min2_test_image, "original_min_l2")
-  saveImage(last_min2_diff_image, "diff_min_l2")
+  save_image(last_maxinf_backdoored_image, "backdoor_max_linf")
+  save_image(last_maxinf_test_image, "original_max_linf")
+  save_image(last_maxinf_diff_image, "diff_max_linf")
+  save_image(last_max2_backdoored_image, "backdoor_max_l2")
+  save_image(last_max2_test_image, "original_max_l2")
+  save_image(last_max2_diff_image, "diff_max_l2")
+  save_image(last_mininf_backdoored_image, "backdoor_min_linf")
+  save_image(last_mininf_test_image, "original_min_linf")
+  save_image(last_mininf_diff_image, "diff_min_linf")
+  save_image(last_min2_backdoored_image, "backdoor_min_l2")
+  save_image(last_min2_test_image, "original_min_l2")
+  save_image(last_min2_diff_image, "diff_min_l2")
 
   index = 0
   for image_pair in error_on_backdoor_image :
-    saveImage(image_pair[0],"error_by_backdoor_backdoor"+str(index))
-    saveImage(image_pair[1],"error_by_backdoor_original"+str(index))
+    save_image(image_pair[0], "error_by_backdoor_backdoor" + str(index))
+    save_image(image_pair[1], "error_by_backdoor_original" + str(index))
     index += 1
   index = 0
   for image_pair in error_on_original_image:
-    saveImage(image_pair[0], "error_by_original_backdoor" + str(index))
-    saveImage(image_pair[1], "error_by_original_original" + str(index))
+    save_image(image_pair[0], "error_by_original_backdoor" + str(index))
+    save_image(image_pair[1], "error_by_original_original" + str(index))
     index += 1
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
@@ -926,7 +925,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
   upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
   for param in upsample.parameters():
     param.requires_grad = False
-    
+
   num_of_batch = 0
   all_the_distance_on_backdoor = torch.Tensor()
   all_the_distance_on_test = torch.Tensor()
@@ -939,7 +938,6 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     threshold_dict[threshold] = 1.0
   with torch.no_grad():
     for epoch in range(num_epochs):
-
       all_the_distance_on_backdoor_per_epoch = torch.Tensor()
       all_the_distance_on_test_per_epoch = torch.Tensor()
       if SCENARIOS.DISCRETE_PIXEL.value in scenario :
@@ -956,8 +954,8 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
         backdoored_image = net.generator(secret,test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
         if SCENARIOS.REAL_JPEG.value in scenario :
-          saveImagesAsJpeg(backdoored_image_clipped,"tmpBckdr",jpeg_q)
-          backdoored_image_clipped = openJpegImages(backdoored_image_clipped.shape[0],"tmpBckdr")
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr", jpeg_q)
+          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr")
           removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
         elif SCENARIOS.JPEGED.value in scenario  :
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
@@ -969,11 +967,36 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
         if SCENARIOS.MEDIAN.value in scenario :
           revealed_the_real_secret_on_backdoor = get_the_secret(revealed_secret_on_backdoor, secret_real.shape[2], secret_real.shape[3], torch.median)
           revealed_the_real_something_on_test_set = get_the_secret(revealed_something_on_test_set, secret_real.shape[2], secret_real.shape[3], torch.median)
-          all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,(torch.sum(torch.square(revealed_the_real_secret_on_backdoor-secret_real),dim=(1,2,3))).data.cpu()),0)
-          all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,(torch.sum(torch.square(revealed_the_real_something_on_test_set-secret_real),dim=(1,2,3))).data.cpu()),0)
+          distance_on_backdoor = torch.sum(torch.square(revealed_the_real_secret_on_backdoor-secret_real),dim=(1,2,3))
+          distance_on_test = torch.sum(torch.square(revealed_the_real_something_on_test_set-secret_real),dim=(1,2,3))
         else:
-          all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,(torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))).data.cpu()),0)
-          all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,(torch.sum(torch.square(revealed_something_on_test_set-secret),dim=(1,2,3))).data.cpu()),0)
+          distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))
+          distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret),dim=(1,2,3))
+        all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,distance_on_backdoor.data.cpu()),0)
+        all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,distance_on_test.data.cpu()),0)
+        if min_dist_backdoor > torch.min(distance_on_backdoor).item() :
+          min_test_b = test_images[torch.argmin(distance_on_backdoor).item()]
+          min_backdoor = backdoored_image_clipped[torch.argmin(distance_on_backdoor).item()]
+          min_backdoor_revealed = revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor).item()]
+          min_backdoor_secret = secret[0]
+          min_dist_backdoor = torch.min(distance_on_backdoor).item()
+        if min_dist_test > torch.min(distance_on_test).item() :
+          min_test = test_images[torch.argmin(distance_on_test).item()]
+          min_test_revealed = revealed_the_real_something_on_test_set[torch.argmin(distance_on_test).item()]
+          min_test_secret = secret[0]
+          min_dist_test = torch.min(distance_on_test).item()
+        if max_dist_backdoor < torch.max(distance_on_backdoor).item() :
+          max_test_b = test_images[torch.argmax(distance_on_backdoor).item()]
+          max_backdoor = backdoored_image_clipped[torch.argmax(distance_on_backdoor).item()]
+          max_backdoor_revealed = revealed_secret_on_backdoor[torch.argmax(distance_on_backdoor).item()]
+          max_backdoor_secret = secret[0]
+          max_dist_backdoor = torch.max(distance_on_backdoor).item()
+        if max_dist_test < torch.max(distance_on_test).item() :
+          max_test = test_images[torch.argmin(distance_on_test).item()]
+          max_test_revealed = revealed_the_real_something_on_test_set[torch.argmax(distance_on_test).item()]
+          max_test_secret = secret[0]
+          max_dist_test = torch.max(distance_on_test).item()
+
       for threshold in threshold_range :
           threshold_dict[threshold] = min(threshold_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,all_the_distance_on_backdoor_per_epoch),0)
@@ -992,6 +1015,25 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
             ", max:",torch.max(all_the_distance_on_backdoor).item())
     for threshold in threshold_range :
       print(threshold,threshold_dict[threshold])
+    save_images(test_images[0:10], "original_random")
+    save_images(backdoored_image_clipped[0:10], "backdoor_random")
+    save_image(secret[0], "secret_random", grayscale="grayscale")
+    save_images(revealed_secret_on_backdoor[0:10], "revealed_secret_on_backdoor_random", grayscale="grayscale")
+    save_images(revealed_something_on_test_set[0:10], "revealed_something_on_test_set_random", grayscale="grayscale")
+    save_image(min_test_b, "original_backdoor_min")
+    save_image(min_backdoor, "backdoor_backdoor_min")
+    save_image(min_backdoor_revealed, "revealed_backdoor_min", grayscale="grayscale")
+    save_image(min_backdoor_secret, "secret_backdoor_min", grayscale="grayscale")
+    save_image(min_test, "original_original_min")
+    save_image(min_test_revealed, "revealed_original_min", grayscale="grayscale")
+    save_image(min_test_secret, "secret_original_min", grayscale="grayscale")
+    save_image(max_test_b, "original_backdoor_max")
+    save_image(max_backdoor, "backdoor_backdoor_max")
+    save_image(max_backdoor_revealed, "revealed_backdoor_max", grayscale="grayscale")
+    save_image(max_backdoor_secret, "secret_backdoor_max", grayscale="grayscale")
+    save_image(max_test, "original_original_max")
+    save_image(max_test_revealed, "revealed_original_max", grayscale="grayscale")
+    save_image(max_test_secret, "secret_original_max", grayscale="grayscale")
 
 
 
@@ -1177,8 +1219,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if SCENARIOS.JPEGED.value in scenario :
       backdoored_image_clipped = jpeg(backdoored_image_clipped)
     elif SCENARIOS.REAL_JPEG.value in scenario :
-      saveImagesAsJpeg(backdoored_image_clipped,"tmpBckdr",jpeg_q)
-      backdoored_image_clipped = openJpegImages(backdoored_image_clipped.shape[0],"tmpBckdr")
+      save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr", jpeg_q)
+      backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr")
       removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
 
 
@@ -1223,18 +1265,18 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope and len(adv_robust_model) > 0:
     index = 0
     for images in adv_robust_model :
-      saveImages(images,"adv_robust_model_"+str(index)+"_")
+      save_images(images, "adv_robust_model_" + str(index) + "_")
       index += 1
   if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
     index = 0
     for images in adv_robust_model_with_backdoor:
-      saveImages(images,"adv_robust_model_with_backdoor_"+str(index)+"_")
+      save_images(images, "adv_robust_model_with_backdoor_" + str(index) + "_")
       index += 1
   if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or\
       ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
     index = 0
     for images in adv_backdoor_detect_model :
-      saveImages(images,"adv_backdoor_detect_model_"+str(index)+"_")
+      save_images(images, "adv_backdoor_detect_model_" + str(index) + "_")
       index += 1
 
 parser = ArgumentParser(description='Model evaluation')
