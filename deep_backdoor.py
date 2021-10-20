@@ -72,6 +72,7 @@ class SCENARIOS(Enum) :
    RANDSECRET = "randsecret"
    MEDIAN = "median"
    DISCRETE_PIXEL = "discretpixel"
+   DISCRETE_PIXEL_16 = "discrete16"
    R4x4 = "4x4"
    R3x4x4 = "3x4x4"
    R8x8 = "8x8"
@@ -942,6 +943,8 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
       all_the_distance_on_test_per_epoch = torch.Tensor()
       if SCENARIOS.DISCRETE_PIXEL.value in scenario :
         secret_frog = (torch.randint(255,(secret_colorc, secret_shape_1, secret_shape_2))/255).unsqueeze(0)
+      elif SCENARIOS.DISCRETE_PIXEL_16.value in scenario :
+        secret_frog = ((torch.round(((torch.rand((secret_colorc, secret_shape_1, secret_shape_2))*255)+1)/16)*16)-1).unsqueeze(0)
       else:
         secret_frog = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
       secret_real = create_batch_from_a_single_image(secret_frog,len(test_loader))
@@ -964,6 +967,9 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
         if SCENARIOS.DISCRETE_PIXEL.value in scenario :
           revealed_secret_on_backdoor = torch.round(revealed_secret_on_backdoor*255)/255
           revealed_something_on_test_set = torch.round(revealed_something_on_test_set*255)/255
+        elif SCENARIOS.DISCRETE_PIXEL_16.value in scenario :
+          revealed_secret_on_backdoor = ((torch.round(((revealed_secret_on_backdoor*255)+1)/16)*16)-1)/255
+          revealed_something_on_test_set = ((torch.round(((revealed_something_on_test_set*255)+1)/16)*16)-1)/255
         if SCENARIOS.MEDIAN.value in scenario :
           revealed_the_real_secret_on_backdoor = get_the_secret(revealed_secret_on_backdoor, secret_real.shape[2], secret_real.shape[3], torch.median)
           revealed_the_real_something_on_test_set = get_the_secret(revealed_something_on_test_set, secret_real.shape[2], secret_real.shape[3], torch.median)
