@@ -944,7 +944,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
       if SCENARIOS.DISCRETE_PIXEL.value in scenario :
         secret_frog = (torch.randint(255,(secret_colorc, secret_shape_1, secret_shape_2))/255).unsqueeze(0)
       elif SCENARIOS.DISCRETE_PIXEL_16.value in scenario :
-        secret_frog = ((torch.round(((torch.rand((secret_colorc, secret_shape_1, secret_shape_2))*255)+1)/16)*16)-1).unsqueeze(0)
+        secret_frog = (((torch.round(((torch.rand((secret_colorc, secret_shape_1, secret_shape_2))*255)+1)/16)*16)-1)/255).unsqueeze(0)
       else:
         secret_frog = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
       secret_real = create_batch_from_a_single_image(secret_frog,len(test_loader))
