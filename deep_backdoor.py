@@ -71,6 +71,7 @@ class SCENARIOS(Enum) :
    GRAY = "grayscale"
    RANDSECRET = "randsecret"
    MEDIAN = "median"
+   AVG_FIL = "avgfil"
    DISCRETE_PIXEL = "discretpixel"
    DISCRETE_PIXEL_16 = "discrete16"
    DISCRETE_PIXEL_8 = "discrete8"
@@ -928,7 +929,10 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
   upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
   for param in upsample.parameters():
     param.requires_grad = False
-
+  if SCENARIOS.MEDIAN.value in scenario
+    filter = torch.median
+  if SCENARIOS.AVG_FIL in scenario :
+    filter = torch.meane
   num_of_batch = 0
   all_the_distance_on_backdoor = torch.Tensor()
   all_the_distance_on_test = torch.Tensor()
@@ -991,9 +995,9 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
         elif SCENARIOS.DISCRETE_PIXEL_4.value in scenario :
           revealed_secret_on_backdoor = ((torch.round(((revealed_secret_on_backdoor*255)+1)/64)*64)-1)/255
           revealed_something_on_test_set = ((torch.round(((revealed_something_on_test_set*255)+1)/64)*64)-1)/255
-        if SCENARIOS.MEDIAN.value in scenario :
-          revealed_the_real_secret_on_backdoor = get_the_secret(revealed_secret_on_backdoor, secret_real.shape[2], secret_real.shape[3], torch.median)
-          revealed_the_real_something_on_test_set = get_the_secret(revealed_something_on_test_set, secret_real.shape[2], secret_real.shape[3], torch.median)
+        if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL in scenario :
+          revealed_the_real_secret_on_backdoor = get_the_secret(revealed_secret_on_backdoor, secret_real.shape[2], secret_real.shape[3], filter)
+          revealed_the_real_something_on_test_set = get_the_secret(revealed_something_on_test_set, secret_real.shape[2], secret_real.shape[3], filter)
           distance_on_backdoor = torch.sum(torch.square(revealed_the_real_secret_on_backdoor-secret_real),dim=(1,2,3))
           distance_on_test = torch.sum(torch.square(revealed_the_real_something_on_test_set-secret_real),dim=(1,2,3))
           distance_by_median_on_backdoor = torch.sum((revealed_the_real_secret_on_backdoor == secret_real),dim=(1,2,3))
@@ -1030,7 +1034,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
 
       for threshold in threshold_range :
           threshold_dict[threshold] = min(threshold_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
-      if SCENARIOS.MEDIAN.value in scenario:
+      if SCENARIOS.MEDIAN.value in scenario  or SCENARIOS.AVG_FIL in scenario :
         for threshold in threshold_range_median :
             threshold_median_dict[threshold] = min(threshold_median_dict[threshold],(torch.sum(all_the_distance_by_median_on_backdoor_per_epoch < threshold) / all_the_distance_by_median_on_backdoor_per_epoch.shape[0]).item())
         all_the_distance_by_median_on_backdoor = torch.cat((all_the_distance_by_median_on_backdoor,all_the_distance_by_median_on_backdoor_per_epoch),0)
@@ -1071,7 +1075,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     save_image(secret[0], "random_secret", grayscale="grayscale")
     save_images(revealed_secret_on_backdoor[0:10], "random_revealed_secret_on_backdoor", grayscale="grayscale")
     save_images(revealed_something_on_test_set[0:10], "random_revealed_something_on_test_set", grayscale="grayscale")
-    if SCENARIOS.MEDIAN.value in scenario:
+    if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL in scenario :
       save_images(upsample(revealed_the_real_secret_on_backdoor[0:10]), "random_revealed_the_real_secret_on_backdoor", grayscale="grayscale")
       save_images(upsample(revealed_the_real_something_on_test_set[0:10]), "random_revealed_the_real_something_on_test_set", grayscale="grayscale")
       print("distance_by_median___________________________________")
