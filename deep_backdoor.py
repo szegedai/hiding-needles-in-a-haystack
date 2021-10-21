@@ -929,7 +929,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
   upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
   for param in upsample.parameters():
     param.requires_grad = False
-  if SCENARIOS.MEDIAN.value in scenario
+  if SCENARIOS.MEDIAN.value in scenario :
     filter = torch.median
   if SCENARIOS.AVG_FIL in scenario :
     filter = torch.meane
