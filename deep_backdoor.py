@@ -932,7 +932,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
   if SCENARIOS.MEDIAN.value in scenario :
     filter = torch.median
   if SCENARIOS.AVG_FIL.value in scenario :
-    filter = torch.meane
+    filter = torch.mean
   num_of_batch = 0
   all_the_distance_on_backdoor = torch.Tensor()
   all_the_distance_on_test = torch.Tensor()
