@@ -1104,7 +1104,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           max_test_revealed = torch.clone(revealed_something_on_test_set[torch.argmax(distance_on_test).item()])
           max_test_secret = torch.clone(secret[0])
           max_dist_test = torch.max(distance_on_test).item()
-        if ith_secret % 100000 == 0 :
+        if ith_secret % 10000 == 0 :
           print(ith_secret, "Revealed distance on test set min:",torch.min(all_the_distance_on_test).item(),
             ", mean:",torch.mean(all_the_distance_on_test).item(),
             ", maxmin:",max_min_dist_test,
