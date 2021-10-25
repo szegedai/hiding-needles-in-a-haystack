@@ -978,7 +978,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
         if all_the_revealed_something_on_test_set.shape[0] < len(test_loader) :
           revealed_something_on_test_set = net.detector(test_images)
-          all_the_revealed_something_on_test_set = torch.cat((all_the_revealed_something_on_test_set,revealed_something_on_test_set), 0)
+          all_the_revealed_something_on_test_set = torch.cat((all_the_revealed_something_on_test_set,revealed_something_on_test_set.detach().cpu()), 0)
           captured_revealed_something_on_test_set = torch.clone(revealed_something_on_test_set[0:10])
           captured_revealed_secret_on_backdoor = torch.clone(revealed_secret_on_backdoor[0:10])
           captured_secret = torch.clone(secret[0])
