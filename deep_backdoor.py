@@ -903,7 +903,7 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   return mean_test_loss
 
-def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, jpeg_q) :
+def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, jpeg_q, num_secret_on_test=0) :
   net.eval()
   if SCENARIOS.JPEGED.value in scenario :
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
@@ -935,27 +935,21 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     filter = torch.mean
   num_of_batch = 0
   all_the_distance_on_backdoor = torch.Tensor()
-  all_the_distance_on_test = torch.Tensor()
   all_the_distance_by_median_on_backdoor = torch.Tensor()
-  all_the_distance_by_median_on_test = torch.Tensor()
-  all_the_distance_on_test = torch.Tensor()
-  threshold_dict = {}
-  threshold_median_dict = {}
+  threshold_backdoor_dict = {}
+  threshold_backdoor_median_dict = {}
   threshold_range_median = np.arange(0, (secret_colorc * secret_shape_1 * secret_shape_2) + 1, 1)
   min_dist_backdoor = 9999999.0
-  min_dist_test = 9999999.0
   max_dist_backdoor = 0.0
-  max_dist_test = 0.0
   for threshold in threshold_range :
-    threshold_dict[threshold] = 1.0
+    threshold_backdoor_dict[threshold] = 1.0
   for threshold in threshold_range_median :
-    threshold_median_dict[threshold] = 1.0
+    threshold_backdoor_median_dict[threshold] = 1.0
+  all_the_revealed_something_on_test_set = torch.Tensor()
   with torch.no_grad():
     for epoch in range(num_epochs):
       all_the_distance_on_backdoor_per_epoch = torch.Tensor()
-      all_the_distance_on_test_per_epoch = torch.Tensor()
       all_the_distance_by_median_on_backdoor_per_epoch = torch.Tensor()
-      all_the_distance_by_median_on_test_per_epoch = torch.Tensor()
       if SCENARIOS.DISCRETE_PIXEL.value in scenario :
         secret_frog = (torch.randint(255,(secret_colorc, secret_shape_1, secret_shape_2))/255).unsqueeze(0)
       elif SCENARIOS.DISCRETE_PIXEL_16.value in scenario :
@@ -982,70 +976,49 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
         elif SCENARIOS.JPEGED.value in scenario  :
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
-        revealed_something_on_test_set = net.detector(test_images)
+        if all_the_revealed_something_on_test_set.shape[0] < len(test_loader) :
+          revealed_something_on_test_set = net.detector(test_images)
+          all_the_revealed_something_on_test_set = torch.cat((all_the_revealed_something_on_test_set,revealed_something_on_test_set), 0)
+          captured_revealed_something_on_test_set = torch.clone(revealed_something_on_test_set[0:10])
+          captured_revealed_secret_on_backdoor = torch.clone(revealed_secret_on_backdoor[0:10])
+          captured_secret = torch.clone(secret[0])
+          captured_backdoored_image_clipped = torch.clone(backdoored_image_clipped[0:10])
+          captured_test_images = torch.clone(test_images[0:10])
         if SCENARIOS.DISCRETE_PIXEL.value in scenario :
           revealed_secret_on_backdoor = torch.round(revealed_secret_on_backdoor*255)/255
-          revealed_something_on_test_set = torch.round(revealed_something_on_test_set*255)/255
         elif SCENARIOS.DISCRETE_PIXEL_16.value in scenario :
           revealed_secret_on_backdoor = ((torch.round(((revealed_secret_on_backdoor*255)+1)/16)*16)-1)/255
-          revealed_something_on_test_set = ((torch.round(((revealed_something_on_test_set*255)+1)/16)*16)-1)/255
         elif SCENARIOS.DISCRETE_PIXEL_8.value in scenario :
           revealed_secret_on_backdoor = ((torch.round(((revealed_secret_on_backdoor*255)+1)/32)*32)-1)/255
-          revealed_something_on_test_set = ((torch.round(((revealed_something_on_test_set*255)+1)/32)*32)-1)/255
         elif SCENARIOS.DISCRETE_PIXEL_4.value in scenario :
           revealed_secret_on_backdoor = ((torch.round(((revealed_secret_on_backdoor*255)+1)/64)*64)-1)/255
-          revealed_something_on_test_set = ((torch.round(((revealed_something_on_test_set*255)+1)/64)*64)-1)/255
         if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL.value in scenario :
           revealed_the_real_secret_on_backdoor = get_the_secret(revealed_secret_on_backdoor, secret_real.shape[2], secret_real.shape[3], filter)
-          revealed_the_real_something_on_test_set = get_the_secret(revealed_something_on_test_set, secret_real.shape[2], secret_real.shape[3], filter)
           distance_on_backdoor = torch.sum(torch.square(revealed_the_real_secret_on_backdoor-secret_real),dim=(1,2,3))
-          distance_on_test = torch.sum(torch.square(revealed_the_real_something_on_test_set-secret_real),dim=(1,2,3))
           distance_by_median_on_backdoor = torch.sum((revealed_the_real_secret_on_backdoor == secret_real),dim=(1,2,3))
           all_the_distance_by_median_on_backdoor_per_epoch = torch.cat((all_the_distance_by_median_on_backdoor_per_epoch, distance_by_median_on_backdoor.data.cpu()), 0)
-          distance_by_median_on_test = torch.sum((revealed_the_real_something_on_test_set == secret_real),dim=(1,2,3))
-          all_the_distance_by_median_on_test_per_epoch = torch.cat((all_the_distance_by_median_on_test_per_epoch, distance_by_median_on_test.data.cpu()), 0)
         else:
           distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))
-          distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret),dim=(1,2,3))
         all_the_distance_on_backdoor_per_epoch = torch.cat((all_the_distance_on_backdoor_per_epoch,distance_on_backdoor.data.cpu()),0)
-        all_the_distance_on_test_per_epoch = torch.cat((all_the_distance_on_test_per_epoch,distance_on_test.data.cpu()),0)
         if min_dist_backdoor > torch.min(distance_on_backdoor).item() :
-          min_test_b = test_images[torch.argmin(distance_on_backdoor).item()]
-          min_backdoor = backdoored_image_clipped[torch.argmin(distance_on_backdoor).item()]
-          min_backdoor_revealed = revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor).item()]
-          min_backdoor_secret = secret[0]
+          min_test_b = torch.clone(test_images[torch.argmin(distance_on_backdoor).item()])
+          min_backdoor = torch.clone(backdoored_image_clipped[torch.argmin(distance_on_backdoor).item()])
+          min_backdoor_revealed = torch.clone(revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor).item()])
+          min_backdoor_secret = torch.clone(secret[0])
           min_dist_backdoor = torch.min(distance_on_backdoor).item()
-        if min_dist_test > torch.min(distance_on_test).item() :
-          min_test = test_images[torch.argmin(distance_on_test).item()]
-          min_test_revealed = revealed_something_on_test_set[torch.argmin(distance_on_test).item()]
-          min_test_secret = secret[0]
-          min_dist_test = torch.min(distance_on_test).item()
         if max_dist_backdoor < torch.max(distance_on_backdoor).item() :
-          max_test_b = test_images[torch.argmax(distance_on_backdoor).item()]
-          max_backdoor = backdoored_image_clipped[torch.argmax(distance_on_backdoor).item()]
-          max_backdoor_revealed = revealed_secret_on_backdoor[torch.argmax(distance_on_backdoor).item()]
-          max_backdoor_secret = secret[0]
+          max_test_b = torch.clone(test_images[torch.argmax(distance_on_backdoor).item()])
+          max_backdoor = torch.clone(backdoored_image_clipped[torch.argmax(distance_on_backdoor).item()])
+          max_backdoor_revealed = torch.clone(revealed_secret_on_backdoor[torch.argmax(distance_on_backdoor).item()])
+          max_backdoor_secret = torch.clone(secret[0])
           max_dist_backdoor = torch.max(distance_on_backdoor).item()
-        if max_dist_test < torch.max(distance_on_test).item() :
-          max_test = test_images[torch.argmin(distance_on_test).item()]
-          max_test_revealed = revealed_something_on_test_set[torch.argmax(distance_on_test).item()]
-          max_test_secret = secret[0]
-          max_dist_test = torch.max(distance_on_test).item()
 
       for threshold in threshold_range :
-          threshold_dict[threshold] = min(threshold_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
+          threshold_backdoor_dict[threshold] = min(threshold_backdoor_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
       if SCENARIOS.MEDIAN.value in scenario  or SCENARIOS.AVG_FIL.value in scenario :
         for threshold in threshold_range_median :
-            threshold_median_dict[threshold] = min(threshold_median_dict[threshold],(torch.sum(all_the_distance_by_median_on_backdoor_per_epoch < threshold) / all_the_distance_by_median_on_backdoor_per_epoch.shape[0]).item())
+            threshold_backdoor_median_dict[threshold] = min(threshold_backdoor_median_dict[threshold],(torch.sum(all_the_distance_by_median_on_backdoor_per_epoch < threshold) / all_the_distance_by_median_on_backdoor_per_epoch.shape[0]).item())
         all_the_distance_by_median_on_backdoor = torch.cat((all_the_distance_by_median_on_backdoor,all_the_distance_by_median_on_backdoor_per_epoch),0)
-        all_the_distance_by_median_on_test = torch.cat((all_the_distance_by_median_on_test,all_the_distance_by_median_on_test_per_epoch),0)
-        print("Epoch", epoch, ": revealed distance by median on test set min:",
-              torch.min(all_the_distance_by_median_on_test_per_epoch).item(),
-              ", mean:", torch.mean(all_the_distance_by_median_on_test_per_epoch).item(),
-              ", max:", torch.max(all_the_distance_by_median_on_test_per_epoch).item())
-        print("Global revealed distance by median on test set min:", torch.min(all_the_distance_by_median_on_test).item(),
-              ", mean:", torch.mean(all_the_distance_by_median_on_test).item(),
-              ", max:", torch.max(all_the_distance_by_median_on_test).item())
         print("Epoch", epoch, ": revealed distance by median on backdoor min:",
               torch.min(all_the_distance_by_median_on_backdoor_per_epoch).item(),
               ", mean:", torch.mean(all_the_distance_by_median_on_backdoor_per_epoch).item(),
@@ -1054,33 +1027,92 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
               ", mean:", torch.mean(all_the_distance_by_median_on_backdoor).item(),
               ", max:", torch.max(all_the_distance_by_median_on_backdoor).item())
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,all_the_distance_on_backdoor_per_epoch),0)
-      all_the_distance_on_test = torch.cat((all_the_distance_on_test,all_the_distance_on_test_per_epoch),0)
-      print("Epoch",epoch,": revealed distance on test set min:",torch.min(all_the_distance_on_test_per_epoch).item(),
-            ", mean:",torch.mean(all_the_distance_on_test_per_epoch).item(),
-            ", max:",torch.max(all_the_distance_on_test_per_epoch).item())
-      print("Global revealed distance on test set min:",torch.min(all_the_distance_on_test).item(),
-            ", mean:",torch.mean(all_the_distance_on_test).item(),
-            ", max:",torch.max(all_the_distance_on_test).item())
       print("Epoch",epoch,": revealed distance on backdoor min:",torch.min(all_the_distance_on_backdoor_per_epoch).item(),
             ", mean:",torch.mean(all_the_distance_on_backdoor_per_epoch).item(),
             ", max:",torch.max(all_the_distance_on_backdoor_per_epoch).item())
       print("Global revealed distance on backdoor min:",torch.min(all_the_distance_on_backdoor).item(),
             ", mean:",torch.mean(all_the_distance_on_backdoor).item(),
             ", max:",torch.max(all_the_distance_on_backdoor).item())
-    print("distance_____________")
-    for threshold in threshold_range :
-      print(threshold,threshold_dict[threshold])
-    save_images(test_images[0:10], "random_original")
-    save_images(backdoored_image_clipped[0:10], "random_backdoor")
-    save_image(secret[0], "random_secret", grayscale="grayscale")
-    save_images(revealed_secret_on_backdoor[0:10], "random_revealed_secret_on_backdoor", grayscale="grayscale")
-    save_images(revealed_something_on_test_set[0:10], "random_revealed_something_on_test_set", grayscale="grayscale")
+    min_dist_test = 9999999.0
+    max_dist_test = 0.0
+    max_min_dist_test = 0.0
+    all_the_distance_on_test = torch.Tensor()
+    all_the_min_dist_on_test = torch.Tensor()
+    all_the_distance_by_median_on_test = torch.Tensor()
+    all_the_max_dist_by_median_on_test = torch.Tensor()
+    if SCENARIOS.DISCRETE_PIXEL.value in scenario :
+      all_the_revealed_something_on_test_set = torch.round(all_the_revealed_something_on_test_set*255)/255
+    elif SCENARIOS.DISCRETE_PIXEL_16.value in scenario :
+      all_the_revealed_something_on_test_set = ((torch.round(((all_the_revealed_something_on_test_set*255)+1)/16)*16)-1)/255
+    elif SCENARIOS.DISCRETE_PIXEL_8.value in scenario :
+      all_the_revealed_something_on_test_set = ((torch.round(((all_the_revealed_something_on_test_set*255)+1)/32)*32)-1)/255
+    elif SCENARIOS.DISCRETE_PIXEL_4.value in scenario :
+      all_the_revealed_something_on_test_set = ((torch.round(((all_the_revealed_something_on_test_set*255)+1)/64)*64)-1)/255
+    if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL.value in scenario :
+      all_the_revealed_the_real_something_on_test_set = get_the_secret(all_the_revealed_something_on_test_set, secret_real.shape[2], secret_real.shape[3], filter)
+    if num_secret_on_test > 0 :
+      for ith_secret in range(num_secret_on_test) :
+        if SCENARIOS.DISCRETE_PIXEL.value in scenario :
+          secret_frog = (torch.randint(255,(secret_colorc, secret_shape_1, secret_shape_2))/255).unsqueeze(0)
+        elif SCENARIOS.DISCRETE_PIXEL_16.value in scenario :
+          secret_frog = (((torch.round(((torch.rand((secret_colorc, secret_shape_1, secret_shape_2))*255)+1)/16)*16)-1)/255).unsqueeze(0)
+        elif SCENARIOS.DISCRETE_PIXEL_8.value in scenario :
+          secret_frog = (((torch.round(((torch.rand((secret_colorc, secret_shape_1, secret_shape_2))*255)+1)/32)*32)-1)/255).unsqueeze(0)
+        elif SCENARIOS.DISCRETE_PIXEL_4.value in scenario :
+          secret_frog = (((torch.round(((torch.rand((secret_colorc, secret_shape_1, secret_shape_2))*255)+1)/64)*64)-1)/255).unsqueeze(0)
+        else:
+          secret_frog = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
+        secret_real = create_batch_from_a_single_image(secret_frog,len(test_loader))
+        secret = create_batch_from_a_single_image(upsample(secret_frog),len(test_loader)).to(device)
+        if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL.value in scenario :
+          distance_on_test = torch.sum(torch.square(all_the_revealed_the_real_something_on_test_set-secret_real),dim=(1,2,3))
+          distance_by_median_on_test = torch.sum((all_the_revealed_the_real_something_on_test_set == secret_real),dim=(1,2,3))
+          all_the_distance_by_median_on_test = torch.cat((all_the_distance_by_median_on_test, distance_by_median_on_test.data.cpu()), 0)
+          max_dist_by_median_on_test = torch.max(distance_by_median_on_test).item()
+          all_the_max_dist_by_median_on_test = torch.cat((all_the_max_dist_by_median_on_test, max_dist_by_median_on_test), 0)
+        else:
+          distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret),dim=(1,2,3))
+        all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test.data.cpu()),0)
+        min_dist_on_test_with_this_secret = torch.min(distance_on_test).item()
+        all_the_min_dist_on_test = torch.cat((all_the_min_dist_on_test,min_dist_on_test_with_this_secret),0)
+        if min_dist_test > min_dist_on_test_with_this_secret :
+          min_test = test_images[torch.argmin(distance_on_test).item()]
+          min_test_revealed = torch.clone(revealed_something_on_test_set[torch.argmin(distance_on_test).item()])
+          min_test_secret = torch.clone(secret[0])
+          min_dist_test = min_dist_on_test_with_this_secret
+        if max_min_dist_test < min_dist_on_test_with_this_secret :
+          maxmin_test = test_images[torch.argmin(distance_on_test).item()]
+          maxmin_test_revealed = torch.clone(revealed_something_on_test_set[torch.argmin(distance_on_test).item()])
+          maxmin_test_secret = torch.clone(secret[0])
+          max_min_dist_test = min_dist_on_test_with_this_secret
+        if max_dist_test < torch.max(distance_on_test).item() :
+          max_test = test_images[torch.argmax(distance_on_test).item()]
+          max_test_revealed = torch.clone(revealed_something_on_test_set[torch.argmax(distance_on_test).item()])
+          max_test_secret = torch.clone(secret[0])
+          max_dist_test = torch.max(distance_on_test).item()
+    print("Revealed distance on test set min:",torch.min(all_the_distance_on_test).item(),
+            ", mean:",torch.mean(all_the_distance_on_test).item(),
+            ", maxmin:",max_min_dist_test,
+            ", max:",torch.max(all_the_distance_on_test).item())
+    save_images(captured_test_images, "random_original")
+    save_images(captured_backdoored_image_clipped, "random_backdoor")
+    save_image(captured_secret, "random_secret", grayscale="grayscale")
+    save_images(captured_revealed_something_on_test_set, "random_revealed_secret_on_backdoor", grayscale="grayscale")
+    save_images(captured_revealed_secret_on_backdoor, "random_revealed_something_on_test_set", grayscale="grayscale")
     if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL.value in scenario :
       save_images(upsample(revealed_the_real_secret_on_backdoor[0:10]), "random_revealed_the_real_secret_on_backdoor", grayscale="grayscale")
-      save_images(upsample(revealed_the_real_something_on_test_set[0:10]), "random_revealed_the_real_something_on_test_set", grayscale="grayscale")
+      print("Revealed distance by median on test set min:",
+                torch.min(all_the_distance_by_median_on_test).item(),
+                ", mean:", torch.mean(all_the_distance_by_median_on_test).item(),
+                ", max:", torch.max(all_the_distance_by_median_on_test).item())
       print("distance_by_median___________________________________")
       for threshold in threshold_range_median:
-        print(threshold, threshold_median_dict[threshold])
+        all_the_max_above_threshold = torch.sum((all_the_max_dist_by_median_on_test >= threshold)).item()
+        print(threshold, threshold_backdoor_median_dict[threshold],all_the_max_above_threshold)
+    print("distance_____________")
+    for threshold in threshold_range :
+      all_the_min_in_threshold = torch.sum((all_the_min_dist_on_test < threshold)).item()
+      print(threshold,threshold_backdoor_dict[threshold],all_the_min_in_threshold)
     save_image(min_test_b, "min_backdoor_original")
     save_image(min_backdoor, "min_backdoor_backdoor")
     save_image(min_backdoor_revealed, "min_backdoor_revealed", grayscale="grayscale")
@@ -1095,6 +1127,9 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     save_image(max_test, "max_original_original")
     save_image(max_test_revealed, "max_original_revealed", grayscale="grayscale")
     save_image(max_test_secret, "max_original_secret", grayscale="grayscale")
+    save_image(maxmin_test, "maxmin_original_original")
+    save_image(maxmin_test_revealed, "maxmin_original_revealed", grayscale="grayscale")
+    save_image(maxmin_test_secret, "maxmin_original_secret", grayscale="grayscale")
 
 
 
@@ -1377,6 +1412,7 @@ parser.add_argument('--l2_epsilon_clip', type=float, default=0.49999) #0.5
 parser.add_argument('--start_of_the_threshold_range', type=float, default=1.0)
 parser.add_argument('--end_of_the_threshold_range', type=float, default=101.0)
 parser.add_argument('--step_of_the_threshold_range', type=float, default=1.0)
+parser.add_argument('--num_secret_on_test', type=int, default=1000)
 
 params = parser.parse_args()
 
@@ -1409,6 +1445,7 @@ train_scope = params.train_scope
 scenario = params.scenario
 
 threshold_range = np.arange(params.start_of_the_threshold_range,params.end_of_the_threshold_range,params.step_of_the_threshold_range)
+num_secret_on_test = params.num_secret_on_test
 
 #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
 transform = transforms.ToTensor()
@@ -1462,7 +1499,7 @@ else :
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
   if MODE.MULTIPLE_TEST.value in mode :
-    test_multiple_random_secret(net=net, test_loader=test_loader, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q)
+    test_multiple_random_secret(net=net, test_loader=test_loader, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, num_secret_on_test=num_secret_on_test)
 
 if MODE.ATTACK.value in mode :
   robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
