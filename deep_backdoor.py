@@ -76,6 +76,7 @@ class SCENARIOS(Enum) :
    DISCRETE_PIXEL_16 = "discrete16"
    DISCRETE_PIXEL_8 = "discrete8"
    DISCRETE_PIXEL_4 = "discrete4"
+   R2x2 = "2x2"
    R4x4 = "4x4"
    R3x4x4 = "3x4x4"
    R8x8 = "8x8"
@@ -340,7 +341,11 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
   else :
     L = l
   if TRAINS_ON.RANDSECRET.value in train_scope :
-    if TRAINS_ON.R8x8.value in train_scope :
+    if TRAINS_ON.R2x2.value in train_scope :
+      secret_colorc = 1
+      secret_shape_1 = 2
+      secret_shape_2 = 2
+    elif TRAINS_ON.R8x8.value in train_scope :
       secret_colorc = 1
       secret_shape_1 = 8
       secret_shape_2 = 8
@@ -635,7 +640,11 @@ def test_model(net1, net2, test_loader, scenario, loss_mode, beta, l, device, li
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
     if SCENARIOS.RANDSECRET.value in scenario:
-      if SCENARIOS.R8x8.value in scenario :
+      if SCENARIOS.R2x2.value in scenario :
+        secret_colorc = 1
+        secret_shape_1 = 2
+        secret_shape_2 = 2
+      elif SCENARIOS.R8x8.value in scenario :
         secret_colorc = 1
         secret_shape_1 = 8
         secret_shape_2 = 8
@@ -911,7 +920,11 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
       param.requires_grad = False
-  if SCENARIOS.R8x8.value in scenario :
+  if SCENARIOS.R2x2.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 2
+    secret_shape_2 = 2
+  elif SCENARIOS.R8x8.value in scenario :
     secret_colorc = 1
     secret_shape_1 = 8
     secret_shape_2 = 8
@@ -1145,7 +1158,11 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   else :
     eps = linf_epsilon_clip
   if SCENARIOS.RANDSECRET.value in scenario:
-    if SCENARIOS.R8x8.value in scenario :
+    if SCENARIOS.R2x2.value in scenario :
+      secret_colorc = 1
+      secret_shape_1 = 2
+      secret_shape_2 = 2
+    elif SCENARIOS.R8x8.value in scenario :
       secret_colorc = 1
       secret_shape_1 = 8
       secret_shape_2 = 8
