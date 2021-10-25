@@ -99,6 +99,7 @@ class TRAINS_ON(Enum) :
   JPEG_AND_NORMAL = "jpeg&normal"
   JPEG_AND_NOISE_AND_NORMAL = "jpeg&noise&normal"
   TRAINING_SAMPLES = "training_samples"
+  R2x2 = "2x2"
   R4x4 = "4x4"
   R8x8 = "8x8"
   R3x4x4 = "3x4x4"
@@ -1063,7 +1064,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
         else:
           secret_frog = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
         secret_real = create_batch_from_a_single_image(secret_frog,len(test_loader))
-        secret = create_batch_from_a_single_image(upsample(secret_frog),len(test_loader)).to(device)
+        secret = create_batch_from_a_single_image(upsample(secret_frog),len(test_loader))
         if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL.value in scenario :
           distance_on_test = torch.sum(torch.square(all_the_revealed_the_real_something_on_test_set-secret_real),dim=(1,2,3))
           distance_by_median_on_test = torch.sum((all_the_revealed_the_real_something_on_test_set == secret_real),dim=(1,2,3))
