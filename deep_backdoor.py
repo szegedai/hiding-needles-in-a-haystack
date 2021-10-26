@@ -364,7 +364,9 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
     upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
     for param in upsample.parameters():
       param.requires_grad = False
-
+  if TRAINS_ON.TRAINING_SAMPLES.value in train_scope:
+    a_secret_for_training_sample = torch.ones(32,32)*-0.001
+    secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,len(train_loader)).to(device)
   for epoch in range(num_epochs):
     if epoch == reg_start:
       L = l
@@ -433,7 +435,7 @@ def train_model(net1, net2, train_loader, train_scope, num_epochs, loss_mode, be
           secret_pred = net1.detector(backdoored_image_clipped)
         if TRAINS_ON.TRAINING_SAMPLES.value in train_scope :
           orig_pred = net1.detector(train_images)
-          train_loss = loss_only_detector_mse(secret_pred,secret) - beta * loss_only_detector_mse(orig_pred,secret)
+          train_loss = loss_only_detector_mse(secret_pred,secret) + beta * loss_only_detector_mse(orig_pred,secret_for_training_sample)
         else:
           train_loss = loss_only_detector_mse(secret_pred,secret)
         train_loss.backward()
