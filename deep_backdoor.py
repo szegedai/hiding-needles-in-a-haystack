@@ -1049,10 +1049,13 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
             ", max:",torch.max(all_the_distance_on_backdoor).item())
     min_dist_test = 9999999.0
     max_dist_test = 0.0
+    mean_dist_test = 0.0
     max_min_dist_test = 0.0
-    all_the_distance_on_test = torch.Tensor()
     all_the_min_dist_on_test = torch.Tensor()
-    all_the_distance_by_median_on_test = torch.Tensor()
+    min_dist_by_median_on_test = 9999999.0
+    mean_dist_by_median_on_test = 0.0
+    min_max_dist_by_median_on_test = 0.0
+    max_dist_by_median_on_test = 0.0
     all_the_max_dist_by_median_on_test = torch.Tensor()
     if SCENARIOS.DISCRETE_PIXEL.value in scenario :
       all_the_revealed_something_on_test_set = torch.round(all_the_revealed_something_on_test_set*255)/255
@@ -1084,9 +1087,16 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           all_the_distance_by_median_on_test = torch.cat((all_the_distance_by_median_on_test, distance_by_median_on_test.data.cpu()), 0)
           max_dist_by_median_on_test = torch.max(distance_by_median_on_test)
           all_the_max_dist_by_median_on_test = torch.cat((all_the_max_dist_by_median_on_test, torch.Tensor([max_dist_by_median_on_test])), 0)
+          min_dist_by_median_on_test_with_this_secret = torch.min(distance_by_median_on_test).item()
+          if min_dist_by_median_on_test > min_dist_by_median_on_test_with_this_secret :
+            min_dist_by_median_on_test = min_dist_by_median_on_test_with_this_secret
+          mean_dist_test += torch.mean(distance_by_median_on_test).item()/num_secret_on_test
+          if min_max_dist_by_median_on_test > torch.max(distance_by_median_on_test).item() :
+            min_max_dist_by_median_on_test = torch.max(distance_by_median_on_test).item()
+          if max_dist_test < torch.max(distance_by_median_on_test).item() :
+            max_dist_test = torch.max(distance_by_median_on_test).item()
         else:
           distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret),dim=(1,2,3))
-        all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test.data.cpu()),0)
         min_dist_on_test_with_this_secret = torch.min(distance_on_test).item()
         all_the_min_dist_on_test = torch.cat((all_the_min_dist_on_test,torch.Tensor([min_dist_on_test_with_this_secret])),0)
         if min_dist_test > min_dist_on_test_with_this_secret :
@@ -1094,6 +1104,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           min_test_revealed = torch.clone(revealed_something_on_test_set[torch.argmin(distance_on_test).item()])
           min_test_secret = torch.clone(secret[0])
           min_dist_test = min_dist_on_test_with_this_secret
+        mean_dist_test += torch.mean(distance_on_test).item()/num_secret_on_test
         if max_min_dist_test < min_dist_on_test_with_this_secret :
           maxmin_test = test_images[torch.argmin(distance_on_test).item()]
           maxmin_test_revealed = torch.clone(revealed_something_on_test_set[torch.argmin(distance_on_test).item()])
@@ -1105,14 +1116,14 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           max_test_secret = torch.clone(secret[0])
           max_dist_test = torch.max(distance_on_test).item()
         if ith_secret % 10000 == 0 :
-          print(ith_secret, "Revealed distance on test set min:",torch.min(all_the_distance_on_test).item(),
-            ", mean:",torch.mean(all_the_distance_on_test).item(),
+          print(ith_secret, "Revealed distance on test set min:",min_dist_test,
+            ", mean:",mean_dist_test,
             ", maxmin:",max_min_dist_test,
-            ", max:",torch.max(all_the_distance_on_test).item())
-    print("Revealed distance on test set min:",torch.min(all_the_distance_on_test).item(),
-            ", mean:",torch.mean(all_the_distance_on_test).item(),
+            ", max:",max_dist_test)
+      print("Revealed distance on test set min:",min_dist_test,
+            ", mean:",mean_dist_test,
             ", maxmin:",max_min_dist_test,
-            ", max:",torch.max(all_the_distance_on_test).item())
+            ", max:",max_dist_test)
     save_images(captured_test_images, "random_original")
     save_images(captured_backdoored_image_clipped, "random_backdoor")
     save_image(captured_secret, "random_secret", grayscale="grayscale")
@@ -1121,9 +1132,9 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
     if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL.value in scenario :
       save_images(upsample(revealed_the_real_secret_on_backdoor[0:10]), "random_revealed_the_real_secret_on_backdoor", grayscale="grayscale")
       print("Revealed distance by median on test set min:",
-                torch.min(all_the_distance_by_median_on_test).item(),
-                ", mean:", torch.mean(all_the_distance_by_median_on_test).item(),
-                ", max:", torch.max(all_the_distance_by_median_on_test).item())
+                min_dist_by_median_on_test,
+                ", mean:", mean_dist_by_median_on_test,
+                ", max:", max_dist_by_median_on_test)
       print("distance_by_median___________________________________")
       for threshold in threshold_range_median:
         all_the_max_above_threshold = torch.sum((all_the_max_dist_by_median_on_test >= threshold)).item()
