@@ -1084,7 +1084,6 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
         if SCENARIOS.MEDIAN.value in scenario or SCENARIOS.AVG_FIL.value in scenario :
           distance_on_test = torch.sum(torch.square(all_the_revealed_the_real_something_on_test_set-secret_real),dim=(1,2,3))
           distance_by_median_on_test = torch.sum((all_the_revealed_the_real_something_on_test_set == secret_real),dim=(1,2,3))
-          all_the_distance_by_median_on_test = torch.cat((all_the_distance_by_median_on_test, distance_by_median_on_test.data.cpu()), 0)
           max_dist_by_median_on_test = torch.max(distance_by_median_on_test)
           all_the_max_dist_by_median_on_test = torch.cat((all_the_max_dist_by_median_on_test, torch.Tensor([max_dist_by_median_on_test])), 0)
           min_dist_by_median_on_test_with_this_secret = torch.min(distance_by_median_on_test).item()
