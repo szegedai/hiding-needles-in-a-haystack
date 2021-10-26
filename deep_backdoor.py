@@ -1031,7 +1031,7 @@ def test_multiple_random_secret(net, test_loader, num_epochs, scenario, threshol
           threshold_backdoor_dict[threshold] = min(threshold_backdoor_dict[threshold],(torch.sum(all_the_distance_on_backdoor_per_epoch < threshold) / all_the_distance_on_backdoor_per_epoch.shape[0]).item())
       if SCENARIOS.MEDIAN.value in scenario  or SCENARIOS.AVG_FIL.value in scenario :
         for threshold in threshold_range_median :
-            threshold_backdoor_median_dict[threshold] = min(threshold_backdoor_median_dict[threshold],(torch.sum(all_the_distance_by_median_on_backdoor_per_epoch < threshold) / all_the_distance_by_median_on_backdoor_per_epoch.shape[0]).item())
+            threshold_backdoor_median_dict[threshold] = min(threshold_backdoor_median_dict[threshold],(torch.sum(all_the_distance_by_median_on_backdoor_per_epoch >= threshold) / all_the_distance_by_median_on_backdoor_per_epoch.shape[0]).item())
         all_the_distance_by_median_on_backdoor = torch.cat((all_the_distance_by_median_on_backdoor,all_the_distance_by_median_on_backdoor_per_epoch),0)
         print("Epoch", epoch, ": revealed distance by median on backdoor min:",
               torch.min(all_the_distance_by_median_on_backdoor_per_epoch).item(),
