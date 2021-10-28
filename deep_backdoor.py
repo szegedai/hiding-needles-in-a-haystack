@@ -24,6 +24,7 @@ SECRET_FROG50_PATH = 'frog50.jpg'
 std = {}
 mean = {}
 image_shape = {}
+val_size = {}
 color_channel = {}
 
 # Mean and std deviation
@@ -36,6 +37,7 @@ color_channel['IMAGENET'] = 3
 std['cifar10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
 mean['cifar10'] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
 image_shape['cifar10'] = [32, 32]
+val_size['cifar10'] = 5000
 color_channel['cifar10'] = 3
 #  of mnist dataset.
 std['MNIST'] = [0.3084485240270358]
@@ -1495,7 +1497,12 @@ elif dataset == "MNIST" :
   trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
 
-test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
+train_size = len(trainset) - val_size
+torch.manual_seed(43)
+train_ds, val_ds = random_split(trainset, [train_size, val_size])
+
+test_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=False, num_workers=2)
+val_loader = torch.utils.data.DataLoader(val_ds, batch_size=batch_size, shuffle=True, num_workers=2)
 train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
 
 #dataiter = iter(trainloader)
