@@ -381,6 +381,7 @@ def train_model(net1, net2, train_loader, valid_loader, train_scope, num_epochs,
       net1.train()
 
     train_losses = []
+    valid_losses = []
 
     # Train one epoch
     for idx, train_batch in enumerate(train_loader):
@@ -448,67 +449,25 @@ def train_model(net1, net2, train_loader, valid_loader, train_scope, num_epochs,
         # ["normal","jpeged","noised","linfclip;jpeg","l2clip;jpeg","l2linfclip;jpeg","l2linfclip;jpeg&normaloriginal","jpeg&noise","jpeg&normal","jpeg&noise&normal"]
         backdoored_image = net1.generator(train_images)
         backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
-        if TRAINS_ON.JPEGED.value in train_scope :
-          targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          next_input = torch.cat((jpeged_backdoored_image, train_images), 0)
-        elif TRAINS_ON.NOISED.value in  train_scope :
-          targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
-          next_input = torch.cat((backdoored_image_with_noise, train_images), 0)
-        elif TRAINS_ON.NOISED.value in train_scope and TRAINS_ON.JPEGED.value in train_scope:
+        targetY = targetY_backdoored
+        next_input = backdoored_image_clipped
+        if TRAINS_ON.NOISED.value in train_scope and TRAINS_ON.JPEGED.value in train_scope:
           targetY_backdoored_noise = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
-          targetY_original_noise = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
-          targetY = torch.cat((targetY_backdoored, targetY_backdoored_noise, targetY_original),0)
+          targetY = torch.cat((targetY, targetY_backdoored_noise),0)
           image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
           jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise, train_images),0)
-        else:
-          targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-          next_input = torch.cat((backdoored_image_clipped,train_images),0)
+          next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise),0)
+        else :
+          if TRAINS_ON.NOISED.value in train_scope :
+            image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
+            next_input = backdoored_image_with_noise
+          if TRAINS_ON.JPEGED.value in train_scope :
+            jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+            next_input = jpeged_backdoored_image
+        next_input = torch.cat((next_input,train_images),0)
+        targetY = torch.cat((targetY,targetY_original),0)
         targetY = targetY.to(device)
         logits = net1.detector(next_input)
-
-        elif train_scope == "jpeg&noise":
-
-          targetY = targetY.to(device)
-          backdoored_image = net1.generator(train_images)
-          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
-          jpeged_image = net1.jpeg(train_images)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise, jpeged_image, image_with_noise), 0)
-          logits = net1.detector(next_input)
-        elif train_scope == "jpeg&normal" :
-          targetY_backdoored_jpeged = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
-          targetY_original_jpeged = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
-          targetY = torch.cat((targetY_backdoored, targetY_backdoored_jpeged,
-                               targetY_original, targetY_original_jpeged),0)
-          targetY = targetY.to(device)
-          backdoored_image = net1.generator(train_images)
-          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-          jpeged_image = net1.jpeg(train_images)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          next_input = torch.cat((backdoored_image_clipped, jpeged_backdoored_image,
-                                  train_images, jpeged_image), 0)
-          logits = net1.detector(next_input)
-        else :
-          # "jpeg&noise&normal"
-          targetY_backdoored_jpeged = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
-          targetY_original_jpeged = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
-          targetY_backdoored_noise = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
-          targetY_original_noise = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
-          targetY = torch.cat((targetY_backdoored, targetY_backdoored_jpeged, targetY_backdoored_noise,
-                               targetY_original, targetY_original_jpeged, targetY_original_noise),0)
-          targetY = targetY.to(device)
-          backdoored_image = net1.generator(train_images)
-          backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
-          jpeged_image = net1.jpeg(train_images)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          next_input = torch.cat((backdoored_image_clipped, jpeged_backdoored_image, backdoored_image_with_noise,
-                                  train_images, jpeged_image, image_with_noise),0)
-          logits = net1.detector(next_input)
         # Calculate loss and perform backprop
         if loss_mode == LOSSES.ONLY_DETECTOR_LOSS.value :
           train_loss = loss_only_detector(logits, targetY, pos_weight)
@@ -555,11 +514,97 @@ def train_model(net1, net2, train_loader, valid_loader, train_scope, num_epochs,
 
     # Validation step
     for idx, valid_batch in enumerate(valid_loader):
+      data, _ = valid_batch
+      data = data.to(device)
+
+      if TRAINS_ON.RANDSECRET.value in train_scope:
+        image_a = []
+        for i in range(data.shape[0]):
+          image_a.append(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
+        batch = torch.cat(image_a, 0).to(device)
+        secret = Variable(upsample(batch), requires_grad=False)
+
+      valid_images = Variable(data, requires_grad=False)
+
+      targetY_backdoored = torch.from_numpy(np.ones((valid_images.shape[0], 1), np.float32))
+      targetY_original = torch.from_numpy(np.zeros((valid_images.shape[0], 1), np.float32))
+
+      if loss_mode == "simple" :
+        targetY = torch.cat((targetY_backdoored, targetY_original), 0)
+        targetY = targetY.to(device)
+        # Forward
+        backdoored_image = net1(valid_images)
+        # Calculate loss and perform backprop
+        loss_generator = generator_loss(backdoored_image, valid_images, L)
+        backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
+        backdoored_image_clipped = Variable(backdoored_image_clipped, requires_grad=False)
+        jpeged_backdoored_image = jpeg(backdoored_image_clipped)
+        jpeged_image = jpeg(valid_images)
+        next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
+        logits = net2(next_input)
+        loss_detector = detector_loss(logits, targetY, pos_weight)
+        valid_loss = loss_generator + loss_detector
+      elif loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
+        if TRAINS_ON.RANDSECRET.value not in train_scope:
+          secret = valid_images[:valid_images.shape[0]//2]
+          if TRAINS_ON.GRAY.value in train_scope and secret.shape[1] > 1:
+            secret = secret[:, 2, :, :].unsqueeze(1)
+          valid_images = valid_images[valid_images.shape[0]//2:]
+        backdoored_image = net1.generator(secret, valid_images)
+        backdoored_image_clipped = clip(backdoored_image, valid_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
+        if TRAINS_ON.JPEG.value in train_scope :
+          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+          secret_pred = net1.detector(jpeged_backdoored_image)
+        else :
+          secret_pred = net1.detector(backdoored_image_clipped)
+        if TRAINS_ON.TRAINING_SAMPLES.value in train_scope :
+          orig_pred = net1.detector(valid_images)
+          valid_loss = loss_only_detector_mse(secret_pred,secret) + beta * loss_only_detector_mse(orig_pred,secret_for_training_sample)
+        else:
+          valid_loss = loss_only_detector_mse(secret_pred,secret)
+      else:
+        # Forward
+        backdoored_image = net1.generator(valid_images)
+        backdoored_image_clipped = clip(backdoored_image, valid_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
+        targetY = targetY_backdoored
+        next_input = backdoored_image_clipped
+        if TRAINS_ON.NOISED.value in train_scope and TRAINS_ON.JPEGED.value in train_scope:
+          targetY_backdoored_noise = torch.from_numpy(np.ones((valid_images.shape[0], 1), np.float32))
+          targetY = torch.cat((targetY, targetY_backdoored_noise),0)
+          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(valid_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
+          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+          next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise),0)
+        else :
+          if TRAINS_ON.NOISED.value in train_scope :
+            image_with_noise, backdoored_image_with_noise = net1.make_noised_images(valid_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
+            next_input = backdoored_image_with_noise
+          if TRAINS_ON.JPEGED.value in train_scope :
+            jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+            next_input = jpeged_backdoored_image
+        next_input = torch.cat((next_input,valid_images),0)
+        targetY = torch.cat((targetY,targetY_original),0)
+        targetY = targetY.to(device)
+        logits = net1.detector(next_input)
+        # Calculate loss
+        if loss_mode == LOSSES.ONLY_DETECTOR_LOSS.value :
+          valid_loss = loss_only_detector(logits, targetY, pos_weight)
+        else :
+          valid_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, valid_images, targetY, loss_mode, B=beta, L=L, pos_weight=pos_weight)
+
+      valid_losses.append(valid_loss.data.cpu())
+      '''dif_image = backdoored_image - valid_images
+      linf = torch.norm(torch.abs(dif_image), p=float("inf"), dim=(1,2,3))
+      backdoored_image_color_view = backdoored_image.view(backdoored_image.shape[0], -1)
+      train_image_color_view = valid_images.view(valid_images.shape[0], -1)
+      l2 = torch.norm(backdoored_image_color_view - train_image_color_view, p=2, dim=1)'''
+
+    mean_valid_loss = np.mean(valid_losses)
 
     # Prints epoch average loss
-    print('Epoch [{0}/{1}], Average_loss: {2:.5f}, Last backdoor l2 min: {3:.3f}, avg: {4:.3f}, max: {5:.3f},'
-          ' Last backdoor linf min: {6:.3f}, avg: {7:.3f}, max: {8:.3f}'.format(
-      epoch + 1, num_epochs, mean_train_loss, torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
+    print('Epoch [{0}/{1}], Average train loss: {2:.5f}, Average valid loss: {3:.5f}, '
+          'Last backdoor l2 min: {4:.3f}, avg: {5:.3f}, max: {6:.3f}, '
+          'Last backdoor linf min: {7:.3f}, avg: {8:.3f}, max: {9:.3f}'.format(
+      epoch + 1, num_epochs, mean_train_loss, mean_valid_loss, torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
       torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
 
     if (epoch-reg_start) > 0 and (epoch-reg_start) % round == 0 :
