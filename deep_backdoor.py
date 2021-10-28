@@ -425,7 +425,7 @@ def train_model(net1, net2, train_loader, valid_loader, train_scope, num_epochs,
         optimizer.zero_grad()
         backdoored_image = net1.generator(secret, train_images)
         backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
-        if TRAINS_ON.JPEG.value in train_scope :
+        if TRAINS_ON.JPEGED.value in train_scope :
           jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
           secret_pred = net1.detector(jpeged_backdoored_image)
         else :
@@ -440,7 +440,6 @@ def train_model(net1, net2, train_loader, valid_loader, train_scope, num_epochs,
       else:
         # Forward + Backward + Optimize
         optimizer.zero_grad()
-        # ["normal","jpeged","noised","linfclip;jpeg","l2clip;jpeg","l2linfclip;jpeg","l2linfclip;jpeg&normaloriginal","jpeg&noise","jpeg&normal","jpeg&noise&normal"]
         backdoored_image = net1.generator(train_images)
         backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
         targetY = targetY_backdoored
