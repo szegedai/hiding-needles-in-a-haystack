@@ -88,7 +88,10 @@ class SCENARIOS(Enum) :
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
   JPEGED = "jpeged"
-  JPEG = "jpeg"
+  NOCLIP = "noclip"
+  CLIP_L2LINF = "clipl2linf"
+  CLIP_L2 = "clipl2only"
+  CLIP_LINF = "cliplinfonly"
   NOISED = "noised"
   GRAY = "grayscale"
   RANDSECRET = "randsecret"
