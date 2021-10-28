@@ -361,7 +361,7 @@ def train_model(net1, net2, train_loader, valid_loader, train_scope, num_epochs,
     for param in upsample.parameters():
       param.requires_grad = False
   if TRAINS_ON.TRAINING_SAMPLES.value in train_scope:
-    a_secret_for_training_sample = torch.ones(32,32)*-0.001
+    a_secret_for_training_sample = (torch.ones(1,1,32,32)*-0.001)
     secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,len(train_loader)).to(device)
   for epoch in range(num_epochs):
     if epoch == reg_start:
