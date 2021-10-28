@@ -316,7 +316,7 @@ def clip(backdoored_image,test_images,scenario,l2_epsilon_clip,linf_epsilon_clip
     backdoored_image_clipped = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip)
   return backdoored_image_clipped
 
-def train_model(net1, net2, train_loader, valid_loader, train_scope, num_epochs, loss_mode, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
+def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
   # Save optimizer
   if loss_mode == "simple" :
     optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
@@ -362,7 +362,7 @@ def train_model(net1, net2, train_loader, valid_loader, train_scope, num_epochs,
       param.requires_grad = False
   if TRAINS_ON.TRAINING_SAMPLES.value in train_scope:
     a_secret_for_training_sample = (torch.ones(1,1,32,32)*-0.001)
-    secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,len(train_loader)).to(device)
+    secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,batch_size).to(device)
   for epoch in range(num_epochs):
     if epoch == reg_start:
       L = l
@@ -1519,7 +1519,7 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
   if MODE.TRAIN.value in mode :
-    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, val_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
+    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
   if MODE.TEST.value in mode :
     mean_test_loss = test_model(generator, detector, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
@@ -1530,7 +1530,7 @@ else :
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model,map_location=device))
   if MODE.TRAIN.value in mode :
-    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, val_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
+    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
   if MODE.TEST.value in mode :
     mean_test_loss = test_model(net, None, test_loader, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
 
