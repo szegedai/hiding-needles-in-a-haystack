@@ -91,16 +91,6 @@ class TRAINS_ON(Enum) :
   NOISED = "noised"
   GRAY = "grayscale"
   RANDSECRET = "randsecret"
-  CLIP_L2LINF = "clipl2linf"
-  CLIP_L2 = "clipl2only"
-  CLIP_LINF = "cliplinfonly"
-  LINFCLIP_JPEG = "linfclip;jpeg"
-  L2CLIP_JPEG = "l2clip;jpeg"
-  L2LINFCLIP_JPEG = "l2linfclip;jpeg"
-  L2LINFCLIP_JPEG_AND_NORMALORIGINAL = "l2linfclip;jpeg&normaloriginal"
-  JPEG_AND_NOISE = "jpeg&noise"
-  JPEG_AND_NORMAL = "jpeg&normal"
-  JPEG_AND_NOISE_AND_NORMAL = "jpeg&noise&normal"
   TRAINING_SAMPLES = "training_samples"
   R2x2 = "2x2"
   R4x4 = "4x4"
@@ -1499,9 +1489,9 @@ elif dataset == "MNIST" :
   trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
 
-train_size = len(trainset) - val_size
+train_size = len(trainset) - val_size[dataset]
 torch.manual_seed(43)
-train_ds, val_ds = random_split(trainset, [train_size, val_size])
+train_ds, val_ds = random_split(trainset, [train_size, val_size[dataset]])
 
 test_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=False, num_workers=2)
 val_loader = torch.utils.data.DataLoader(val_ds, batch_size=batch_size, shuffle=True, num_workers=2)
