@@ -7,6 +7,7 @@ import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 from torch.autograd import Variable
+from torch.utils.data import random_split
 from argparse import ArgumentParser
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 from backdoor_model import Net, LastBit, ModelWithBackdoor, ThresholdedBackdoorDetector, ThresholdedBackdoorDetectorStegano, DETECTORS, GENERATORS
