@@ -1516,7 +1516,6 @@ if threat_model == "Linfinity" :
   robust_model_threat_model = "Linf"
 else :
   robust_model_threat_model = threat_model
-robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
 
 if params.loss_mode == LOSSES.SIMPLE.value :
   generator = GENERATORS[params.model_gen](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
@@ -1549,4 +1548,5 @@ else :
     test_multiple_random_secret(net=net, test_loader=test_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, num_secret_on_test=num_secret_on_test)
 
 if MODE.ATTACK.value in mode :
+  robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
   robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
