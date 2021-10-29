@@ -21,6 +21,8 @@ DATA_PATH = '../res/data/'
 IMAGE_PATH = '../res/images/'
 SECRET_FROG_PATH = 'frog.jpg'
 SECRET_FROG50_PATH = 'frog50.jpg'
+IMAGENET_TRAIN = DATA_PATH+'imagenet-train'
+IMAGENET_TEST = DATA_PATH+'imagenet-test'
 
 std = {}
 mean = {}
@@ -30,9 +32,12 @@ color_channel = {}
 
 # Mean and std deviation
 #  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
-std['IMAGENET'] = [0.229, 0.224, 0.225]
-mean['IMAGENET'] = [0.485, 0.456, 0.406]
-color_channel['IMAGENET'] = 3
+std['imagenet'] = [0.229, 0.224, 0.225]
+mean['imagenet'] = [0.485, 0.456, 0.406]
+image_shape['imagenet'] = [256, 256]
+val_size['imagenet'] = 100000
+color_channel['imagenet'] = 3
+
 
 #  of cifar10 dataset.
 std['cifar10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
@@ -1487,8 +1492,12 @@ if dataset == "cifar10" :
   trainset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, download=True, transform=transform)
   classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-#Open mnist dataset
+elif dataset == "imagenet" :
+  transform = transforms.Compose([transforms.Resize(256),transforms.RandomCrop(224),transforms.ToTensor()])
+  trainset = torchvision.datasets.ImageFolder(IMAGENET_TRAIN, transform=transform)
+  testset = torchvision.datasets.ImageFolder(IMAGENET_TEST, transform=transform)
 elif dataset == "MNIST" :
+  #Open mnist dataset
   trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
 
