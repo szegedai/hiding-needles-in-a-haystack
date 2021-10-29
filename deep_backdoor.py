@@ -983,9 +983,9 @@ def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenar
         backdoored_image = net.generator(secret,test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
         if SCENARIOS.REAL_JPEG.value in scenario :
-          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr", jpeg_q)
-          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr")
-          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+str(idx)+"_"+str(epoch), jpeg_q)
+          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx)+"_"+str(epoch))
+          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx)+"_"+str(epoch))
         elif SCENARIOS.JPEGED.value in scenario  :
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
