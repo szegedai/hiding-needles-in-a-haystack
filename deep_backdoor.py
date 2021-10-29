@@ -739,13 +739,13 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
         # ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2linf","jpeged;clipl2linf","realjpeg;clipl2linf"]
         if SCENARIOS.REAL_JPEG.value in scenario :
-          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr", jpeg_q)
-          opened_real_jpeged_backdoored_image = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr")
-          save_images_as_jpeg(test_images, "tmpOrig", jpeg_q)
-          opened_real_jpeged_original_image = open_jpeg_images(test_images.shape[0], "tmpOrig")
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+str(idx), jpeg_q)
+          opened_real_jpeged_backdoored_image = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
+          save_images_as_jpeg(test_images, "tmpOrig"+str(idx), jpeg_q)
+          opened_real_jpeged_original_image = open_jpeg_images(test_images.shape[0], "tmpOrig"+str(idx))
           next_input = torch.cat((opened_real_jpeged_backdoored_image, opened_real_jpeged_original_image), 0)
-          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
-          removeImages(test_images.shape[0],"tmpOrig")
+          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
+          removeImages(test_images.shape[0],"tmpOrig"+str(idx))
         elif SCENARIOS.JPEGED.value in scenario  :
           jpeged_image = jpeg(test_images)
           jpeged_backdoored_image = jpeg(backdoored_image_clipped)
