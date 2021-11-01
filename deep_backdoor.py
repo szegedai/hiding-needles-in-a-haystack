@@ -484,7 +484,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
       dif_image = backdoored_image - train_images
       linf = torch.norm(torch.abs(dif_image), p=float("inf"), dim=(1,2,3))
       backdoored_image_color_view = backdoored_image.view(backdoored_image.shape[0], -1)
-      train_image_color_view = train_images.view(train_images.shape[0], -1)
+      train_image_color_view = train_images.contiguous().view(train_images.shape[0], -1)
       l2 = torch.norm(backdoored_image_color_view - train_image_color_view, p=2, dim=1)
 
       '''
