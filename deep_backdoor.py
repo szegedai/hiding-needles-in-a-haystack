@@ -79,6 +79,7 @@ class SCENARIOS(Enum) :
    GRAY = "grayscale"
    RANDSECRET = "randsecret"
    MEDIAN = "median"
+   VALID = "valid"
    AVG_FIL = "avgfil"
    DISCRETE_PIXEL = "discretpixel"
    DISCRETE_PIXEL_16 = "discrete16"
@@ -1545,7 +1546,10 @@ else :
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
   if MODE.MULTIPLE_TEST.value in mode :
-    test_multiple_random_secret(net=net, test_loader=test_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, num_secret_on_test=num_secret_on_test)
+    if SCENARIOS.VALID.value in scenario :
+      test_multiple_random_secret(net=net, test_loader=val_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, num_secret_on_test=num_secret_on_test)
+    else :
+      test_multiple_random_secret(net=net, test_loader=test_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, num_secret_on_test=num_secret_on_test)
 
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
