@@ -492,10 +492,10 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
       # Prints mini-batch losses
       if loss_mode == LOSSES.ONLY_DETECTOR_LOSS.value or loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value:
         print('Training: Batch {0}/{1}. Loss of {2:.5f}'.format(
-              idx + 1, batch_size, train_loss.data), end='')
+              idx + 1, len(train_loader), train_loss.data), end='')
       else :
         print('Training: Batch {0}/{1}. Loss of {2:.5f}, injection loss of {3:.5f}, detect loss of {4:.5f},'.format(
-              idx + 1, batch_size, train_loss.data, loss_generator.data, loss_detector.data), end='')
+              idx + 1, len(train_loader), train_loss.data, loss_generator.data, loss_detector.data), end='')
       print(' backdoor l2 min: {0:.3f}, avg: {1:.3f}, max: {2:.3f}, backdoor linf'
             ' min: {3:.3f}, avg: {4:.3f}, max: {5:.3f}'.format(
         torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
@@ -1505,9 +1505,9 @@ train_size = len(trainset) - val_size[dataset]
 torch.manual_seed(43)
 train_ds, val_ds = random_split(trainset, [train_size, val_size[dataset]])
 
-test_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=False, num_workers=2)
+train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
 val_loader = torch.utils.data.DataLoader(val_ds, batch_size=batch_size, shuffle=True, num_workers=2)
-train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2)
+test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
 
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
