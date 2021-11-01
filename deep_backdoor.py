@@ -34,7 +34,7 @@ color_channel = {}
 #  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
 std['imagenet'] = [0.229, 0.224, 0.225]
 mean['imagenet'] = [0.485, 0.456, 0.406]
-image_shape['imagenet'] = [256, 256]
+image_shape['imagenet'] = [224, 224]
 val_size['imagenet'] = 100000
 color_channel['imagenet'] = 3
 
