@@ -918,10 +918,10 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
 
   return mean_test_loss
 
-def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, jpeg_q, num_secret_on_test=0) :
+def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
   net.eval()
   if SCENARIOS.JPEGED.value in scenario :
-    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
       param.requires_grad = False
@@ -989,10 +989,10 @@ def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenar
         backdoored_image = net.generator(secret,test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
         if SCENARIOS.REAL_JPEG.value in scenario :
-          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+str(idx)+"_"+str(epoch), jpeg_q)
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx) +"_" + str(epoch), real_jpeg_q)
           backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx)+"_"+str(epoch))
           removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx)+"_"+str(epoch))
-        elif SCENARIOS.JPEGED.value in scenario  :
+        if SCENARIOS.JPEGED.value in scenario  :
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
         if all_the_revealed_something_on_test_set.shape[0] < batch_size :
@@ -1436,6 +1436,7 @@ parser.add_argument('--regularization_start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--beta', type=float, default=1.0)
 parser.add_argument('--jpeg_q', type=int, default=75)
+parser.add_argument('--real_jpeg_q', type=int, default=75)
 parser.add_argument("--pos_weight", type=float, default=1.0)
 parser.add_argument("--pred_threshold", type=float, default=0.5)
 parser.add_argument("--l", type=float, default=0.0001)
@@ -1547,10 +1548,10 @@ else :
   backdoor_generator_model = net.generator
   if MODE.MULTIPLE_TEST.value in mode :
     if SCENARIOS.VALID.value in scenario :
-      test_multiple_random_secret(net=net, test_loader=val_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, num_secret_on_test=num_secret_on_test)
+      multiple_test_loader = val_loader
     else :
-      test_multiple_random_secret(net=net, test_loader=test_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, num_secret_on_test=num_secret_on_test)
-
+      multiple_test_loader = test_loader
+    test_multiple_random_secret(net=net, test_loader=multiple_test_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
   robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
