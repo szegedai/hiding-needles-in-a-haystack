@@ -433,6 +433,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
         backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
         if TRAINS_ON.JPEGED.value in train_scope :
           jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+          train_images = net1.jpeg(train_images)
           secret_pred = net1.detector(jpeged_backdoored_image)
         else :
           secret_pred = net1.detector(backdoored_image_clipped)
@@ -455,6 +456,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
           targetY = torch.cat((targetY, targetY_backdoored_noise),0)
           image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
           jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+          train_images = net1.jpeg(train_images)
           next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise),0)
         else :
           if TRAINS_ON.NOISED.value in train_scope :
@@ -462,6 +464,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
             next_input = backdoored_image_with_noise
           if TRAINS_ON.JPEGED.value in train_scope :
             jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
+            train_images = net1.jpeg(train_images)
             next_input = jpeged_backdoored_image
         next_input = torch.cat((next_input,train_images),0)
         targetY = torch.cat((targetY,targetY_original),0)
@@ -752,7 +755,7 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
           next_input = torch.cat((opened_real_jpeged_backdoored_image, opened_real_jpeged_original_image), 0)
           removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
           removeImages(test_images.shape[0],"tmpOrig"+str(idx))
-        elif SCENARIOS.JPEGED.value in scenario  :
+        if SCENARIOS.JPEGED.value in scenario  :
           jpeged_image = jpeg(test_images)
           jpeged_backdoored_image = jpeg(backdoored_image_clipped)
           next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
@@ -993,6 +996,7 @@ def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenar
           backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx)+"_"+str(epoch))
           removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx)+"_"+str(epoch))
         if SCENARIOS.JPEGED.value in scenario  :
+          test_images = jpeg(test_images)
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
         if all_the_revealed_something_on_test_set.shape[0] < batch_size :
