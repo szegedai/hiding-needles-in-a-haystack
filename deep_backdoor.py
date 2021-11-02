@@ -101,6 +101,7 @@ class TRAINS_ON(Enum) :
   NOISED = "noised"
   GRAY = "grayscale"
   RANDSECRET = "randsecret"
+  BOTH = "both"
   TRAINING_SAMPLES = "training_samples"
   R2x2 = "2x2"
   R4x4 = "4x4"
@@ -367,7 +368,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
     for param in upsample.parameters():
       param.requires_grad = False
   if TRAINS_ON.TRAINING_SAMPLES.value in train_scope:
-    a_secret_for_training_sample = (torch.ones(1,1,image_shape[dataset][1],image_shape[dataset][1])*-0.001)
+    a_secret_for_training_sample = (torch.ones(1,1,image_shape[dataset][1],image_shape[dataset][1])*-1.0)
     secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,batch_size).to(device)
   for epoch in range(num_epochs):
     if epoch == reg_start:
@@ -433,13 +434,22 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
         backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
         if TRAINS_ON.JPEGED.value in train_scope :
           jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          train_images = net1.jpeg(train_images)
+          train_images_jpeg = net1.jpeg(train_images)
           secret_pred = net1.detector(jpeged_backdoored_image)
         else :
           secret_pred = net1.detector(backdoored_image_clipped)
         if TRAINS_ON.TRAINING_SAMPLES.value in train_scope :
           orig_pred = net1.detector(train_images)
-          train_loss = loss_only_detector_mse(secret_pred,secret) + beta * loss_only_detector_mse(orig_pred,secret_for_training_sample)
+          if TRAINS_ON.BOTH.value in train_scope and TRAINS_ON.JPEGED.value in train_scope:
+            orig_pred_with_jpeg = net1.detector(train_images_jpeg)
+            secret_pred_without_jpeg = net1.detector(backdoored_image_clipped)
+            train_loss = loss_only_detector_mse(secret_pred, secret) \
+                         + loss_only_detector_mse(secret_pred_without_jpeg, secret) \
+                         + beta * loss_only_detector_mse(orig_pred, secret_for_training_sample) \
+                         + beta * loss_only_detector_mse(orig_pred_with_jpeg, secret_for_training_sample)
+          else :
+            train_loss = loss_only_detector_mse(secret_pred,secret) \
+                         + beta * loss_only_detector_mse(orig_pred,secret_for_training_sample)
         else:
           train_loss = loss_only_detector_mse(secret_pred,secret)
         train_loss.backward()
