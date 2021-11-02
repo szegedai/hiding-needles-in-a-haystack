@@ -323,7 +323,7 @@ def clip(backdoored_image,test_images,scenario,l2_epsilon_clip,linf_epsilon_clip
     backdoored_image_clipped = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip)
   return backdoored_image_clipped
 
-def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
+def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, alpha, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
   # Save optimizer
   if loss_mode == "simple" :
     optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
@@ -441,12 +441,10 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
         if TRAINS_ON.TRAINING_SAMPLES.value in train_scope :
           orig_pred = net1.detector(train_images)
           if TRAINS_ON.BOTH.value in train_scope and TRAINS_ON.JPEGED.value in train_scope:
-            orig_pred_with_jpeg = net1.detector(train_images_jpeg)
             secret_pred_without_jpeg = net1.detector(backdoored_image_clipped)
             train_loss = loss_only_detector_mse(secret_pred, secret) \
-                         + loss_only_detector_mse(secret_pred_without_jpeg, secret) \
-                         + beta * loss_only_detector_mse(orig_pred, secret_for_training_sample) \
-                         + beta * loss_only_detector_mse(orig_pred_with_jpeg, secret_for_training_sample)
+                         + alpha * loss_only_detector_mse(secret_pred_without_jpeg, secret) \
+                         + beta * loss_only_detector_mse(orig_pred, secret_for_training_sample)
           else :
             train_loss = loss_only_detector_mse(secret_pred,secret) \
                          + beta * loss_only_detector_mse(orig_pred,secret_for_training_sample)
@@ -1448,6 +1446,7 @@ parser.add_argument('--batch_size', type=int, default=100)
 parser.add_argument('--epochs', type=int, default=20)
 parser.add_argument('--regularization_start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
+parser.add_argument('--alpha', type=float, default=1.0)
 parser.add_argument('--beta', type=float, default=1.0)
 parser.add_argument('--jpeg_q', type=int, default=75)
 parser.add_argument('--real_jpeg_q', type=int, default=75)
@@ -1486,6 +1485,7 @@ trials = params.trials
 num_epochs = params.epochs
 batch_size = params.batch_size
 learning_rate = params.learning_rate
+alpha = params.alpha
 beta = params.beta
 pos_weight = (torch.ones(1)*params.pos_weight).to(device)
 l = params.l
@@ -1543,7 +1543,7 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
   if MODE.TRAIN.value in mode :
-    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
+    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
   if MODE.TEST.value in mode :
     mean_test_loss = test_model(generator, detector, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
@@ -1554,7 +1554,7 @@ else :
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model,map_location=device))
   if MODE.TRAIN.value in mode :
-    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
+    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
   if MODE.TEST.value in mode :
     mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
 
