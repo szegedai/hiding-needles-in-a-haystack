@@ -1178,6 +1178,82 @@ def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenar
     save_image(maxmin_test_revealed, "maxmin_original_revealed", grayscale="grayscale")
     save_image(maxmin_test_secret, "maxmin_original_secret", grayscale="grayscale")
 
+def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
+  net.eval()
+  if SCENARIOS.JPEGED.value in scenario :
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
+    jpeg = jpeg.to(device)
+    for param in jpeg.parameters():
+      param.requires_grad = False
+  if SCENARIOS.R2x2.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 2
+    secret_shape_2 = 2
+  elif SCENARIOS.R8x8.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 8
+    secret_shape_2 = 8
+  elif SCENARIOS.R8x4.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 8
+    secret_shape_2 = 4
+  elif SCENARIOS.R3x4x4.value in scenario :
+    secret_colorc = 3
+    secret_shape_1 = 4
+    secret_shape_2 = 4
+  else :
+    secret_colorc = 1
+    secret_shape_1 = 4
+    secret_shape_2 = 4
+  upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
+  for param in upsample.parameters():
+    param.requires_grad = False
+  all_the_revealed_something_on_test_set = torch.Tensor()
+  with torch.no_grad():
+    for idx, test_batch in enumerate(test_loader):
+      data, labels = test_batch
+      test_images = data.to(device)
+      revealed_something_on_test_set = net.detector(test_images)
+      all_the_revealed_something_on_test_set = torch.cat((all_the_revealed_something_on_test_set,revealed_something_on_test_set.detach().cpu()), 0)
+    minimax_value = torch.Tensor()
+    minimax_secret = torch.Tensor()
+    for ith_secret in range(num_secret_on_test) :
+      secret_frog = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
+      secret = create_batch_from_a_single_image(upsample(secret_frog),batch_size)
+      distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret),dim=(1,2,3))
+      ith_min_dist = torch.min(distance_on_test).item()
+      if minimax_value.shape[0] < num_epochs :
+        minimax_value.cat((minimax_value,torch.ones(1)*ith_min_dist),0)
+        minimax_secret.cat((minimax_secret,secret),0)
+      else :
+        min_minimax_value = torch.min(minimax_value).item()
+        if ith_min_dist > min_minimax_value :
+          argmin_minimax_value = torch.argmin(minimax_value).item()
+          # remove argmin_minimax_value indexth element
+          torch.cat((minimax_value[0:argmin_minimax_value],minimax_value[argmin_minimax_value+1:]),0)
+          torch.cat((minimax_secret[0:argmin_minimax_value],minimax_secret[argmin_minimax_value+1:]),0)
+          # add ith_min_dist
+          minimax_value.cat((minimax_value,torch.ones(1)*ith_min_dist),0)
+          minimax_secret.cat((minimax_secret,secret_frog),0)
+    epoch = 0
+    for ith_secret_frog in minimax_secret :
+      secret = create_batch_from_a_single_image(upsample(ith_secret_frog),batch_size)
+      for idx, test_batch in enumerate(test_loader):
+        data, labels = test_batch
+        test_images = data.to(device)
+        backdoored_image = net.generator(secret,test_images)
+        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        if SCENARIOS.REAL_JPEG.value in scenario :
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx) +"_" + str(epoch), real_jpeg_q)
+          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx)+"_"+str(epoch))
+          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx)+"_"+str(epoch))
+        if SCENARIOS.JPEGED.value in scenario  :
+          test_images = jpeg(test_images)
+          backdoored_image_clipped = jpeg(backdoored_image_clipped)
+        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
+        
+      epoch += 1
+
 
 
 def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold, jpeg_q):
