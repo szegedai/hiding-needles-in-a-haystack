@@ -1266,7 +1266,7 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, scenar
             ", max:",torch.max(all_the_distance_on_backdoor).item(),".",
             "Secret min distance on revealed something from test:",minimax_value[epoch] )
       epoch += 1
-  save_image(upsample(best_secret), "best_secret", grayscale="grayscale")
+  save_image(upsample(best_secret)[0], "best_secret", grayscale="grayscale")
   return best_secret
 
 
