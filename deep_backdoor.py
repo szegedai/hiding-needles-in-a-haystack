@@ -1220,7 +1220,7 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, scenar
     minimax_secret = torch.Tensor()
     for ith_secret in range(num_secret_on_test) :
       secret_frog = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
-      secret = create_batch_from_a_single_image(upsample(secret_frog),batch_size)
+      secret = create_batch_from_a_single_image(upsample(secret_frog),all_the_revealed_something_on_test_set.shape[0])
       distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret),dim=(1,2,3))
       ith_min_dist = torch.min(distance_on_test).item()
       if minimax_value.shape[0] < num_epochs :
