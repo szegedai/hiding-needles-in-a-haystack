@@ -1239,7 +1239,7 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, scenar
     epoch = 0
     mean_of_best_secret = 9999999.0
     for ith_secret_frog in minimax_secret :
-      secret = create_batch_from_a_single_image(upsample(ith_secret_frog),batch_size)
+      secret = create_batch_from_a_single_image(upsample(ith_secret_frog.unsqueeze(0)),batch_size)
       all_the_distance_on_backdoor = torch.Tensor()
       for idx, test_batch in enumerate(test_loader):
         data, labels = test_batch
@@ -1259,7 +1259,7 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, scenar
       star = ""
       if mean_of_best_secret > mean_dist_this :
         mean_of_best_secret = mean_dist_this
-        best_secret = ith_secret_frog
+        best_secret = ith_secret_frog.unsqueeze(0)
         star = "*"
       print("Epoch",epoch,": revealed distance on backdoor min:",torch.min(all_the_distance_on_backdoor).item(),
             ", mean:",mean_dist_this, star ,
