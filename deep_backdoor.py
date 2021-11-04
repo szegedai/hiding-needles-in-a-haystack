@@ -1224,18 +1224,18 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, scenar
       distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret),dim=(1,2,3))
       ith_min_dist = torch.min(distance_on_test).item()
       if minimax_value.shape[0] < num_epochs :
-        minimax_value.cat((minimax_value,torch.ones(1)*ith_min_dist),0)
-        minimax_secret.cat((minimax_secret,secret_frog),0)
+        minimax_value = torch.cat((minimax_value,torch.ones(1)*ith_min_dist),0)
+        minimax_secret = torch.cat((minimax_secret,secret_frog),0)
       else :
         min_minimax_value = torch.min(minimax_value).item()
         if ith_min_dist > min_minimax_value :
           argmin_minimax_value = torch.argmin(minimax_value).item()
           # remove argmin_minimax_value indexth element
-          torch.cat((minimax_value[0:argmin_minimax_value],minimax_value[argmin_minimax_value+1:]),0)
-          torch.cat((minimax_secret[0:argmin_minimax_value],minimax_secret[argmin_minimax_value+1:]),0)
+          minimax_value  = torch.cat((minimax_value[0:argmin_minimax_value],minimax_value[argmin_minimax_value+1:]),0)
+          minimax_secret = torch.cat((minimax_secret[0:argmin_minimax_value],minimax_secret[argmin_minimax_value+1:]),0)
           # add ith_min_dist
-          minimax_value.cat((minimax_value,torch.ones(1)*ith_min_dist),0)
-          minimax_secret.cat((minimax_secret,secret_frog),0)
+          minimax_value = torch.cat((minimax_value,torch.ones(1)*ith_min_dist),0)
+          minimax_secret = torch.cat((minimax_secret,secret_frog),0)
     epoch = 0
     mean_of_best_secret = 9999999.0
     for ith_secret_frog in minimax_secret :
