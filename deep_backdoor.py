@@ -20,6 +20,7 @@ MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
 IMAGE_PATH = '../res/images/'
 SECRET_FROG_PATH = 'frog.jpg'
+SECRET_PATH = IMAGE_PATH+'cifar10_best_secret.png'
 SECRET_FROG50_PATH = 'frog50.jpg'
 IMAGENET_TRAIN = DATA_PATH+'imagenet-train'
 IMAGENET_TEST = DATA_PATH+'imagenet-test'
@@ -79,6 +80,7 @@ class SCENARIOS(Enum) :
    REAL_JPEG= "realjpeg"
    GRAY = "grayscale"
    RANDSECRET = "randsecret"
+   BESTSECRET = "bestsecret"
    MEDIAN = "median"
    VALID = "valid"
    AVG_FIL = "avgfil"
@@ -257,6 +259,12 @@ def open_jpeg_images(num_of_images, filename_postfix) :
     opened_image_tensors = torch.cat((opened_image_tensors,opened_image_tensor),0)
   opened_image_tensors = opened_image_tensors.to(device)
   return opened_image_tensors
+
+def open_secret(path=SECRET_PATH) :
+  loader = transforms.Compose([transforms.ToTensor()])
+  opened_image = Image.open(os.path.join('', path)).convert('L')
+  opened_image_tensor = loader(opened_image).unsqueeze(0)
+  return opened_image_tensor
 
 def open_secret_frog(path=SECRET_FROG_PATH) :
   loader = transforms.Compose([transforms.ToTensor()])
@@ -627,7 +635,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
 
 
 
-def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, jpeg_q=75, secret_frog_path=SECRET_FROG_PATH):
+def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, best_secret, jpeg_q=75, secret_frog_path=SECRET_FROG_PATH):
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
@@ -656,33 +664,36 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
   mean_linf_in_eps = 0
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-    if SCENARIOS.RANDSECRET.value in scenario:
-      if SCENARIOS.R2x2.value in scenario :
-        secret_colorc = 1
-        secret_shape_1 = 2
-        secret_shape_2 = 2
-      elif SCENARIOS.R8x8.value in scenario :
-        secret_colorc = 1
-        secret_shape_1 = 8
-        secret_shape_2 = 8
-      elif SCENARIOS.R8x4.value in scenario :
-        secret_colorc = 1
-        secret_shape_1 = 8
-        secret_shape_2 = 4
-      elif SCENARIOS.R3x4x4.value in scenario :
-        secret_colorc = 3
-        secret_shape_1 = 4
-        secret_shape_2 = 4
-      else :
-        secret_colorc = 1
-        secret_shape_1 = 4
-        secret_shape_2 = 4
+    if SCENARIOS.R2x2.value in scenario :
+      secret_colorc = 1
+      secret_shape_1 = 2
+      secret_shape_2 = 2
+    elif SCENARIOS.R8x8.value in scenario :
+      secret_colorc = 1
+      secret_shape_1 = 8
+      secret_shape_2 = 8
+    elif SCENARIOS.R8x4.value in scenario :
+      secret_colorc = 1
+      secret_shape_1 = 8
+      secret_shape_2 = 4
+    elif SCENARIOS.R3x4x4.value in scenario :
+      secret_colorc = 3
+      secret_shape_1 = 4
+      secret_shape_2 = 4
+    else :
+      secret_colorc = 1
+      secret_shape_1 = 4
+      secret_shape_2 = 4
+    if SCENARIOS.RANDSECRET.value in scenario :
       upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
       for param in upsample.parameters():
         param.requires_grad = False
       secret_frog = upsample(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)).to(device)
+    elif SCENARIOS.BESTSECRET.value in scenario :
+      secret_frog = best_secret
     else:
       secret_frog = open_secret_frog(path=secret_frog_path).to(device)
+    batch_of_secret_frog = create_batch_from_a_single_image(secret_frog, batch_size)
     net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,pred_threshold=pred_threshold,device=device)
     orig_distances = []
     orig_distances_mean = []
@@ -741,8 +752,8 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
         test_acc = torch.sum((predY >= pred_threshold) == targetY).item()/predY.shape[0]
       else :
         if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-          backdoored_image = net1.generator(create_batch_from_a_single_image(secret_frog,test_images.shape[0]), test_images)
-          if SCENARIOS.RANDSECRET.value not in scenario:
+          backdoored_image = net1.generator(batch_of_secret_frog, test_images)
+          if SCENARIOS.RANDSECRET.value not in scenario and SCENARIOS.BESTSECRET.value not in scenario:
             secret = test_images[:test_images.shape[0]//2]
             if SCENARIOS.GRAY.value in scenario and secret.shape[1] > 1:
               secret = secret[:, 2, :, :].unsqueeze(1)
@@ -759,15 +770,11 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
         if SCENARIOS.REAL_JPEG.value in scenario :
           save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+str(idx), jpeg_q)
           opened_real_jpeged_backdoored_image = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
-          save_images_as_jpeg(test_images, "tmpOrig"+str(idx), jpeg_q)
-          opened_real_jpeged_original_image = open_jpeg_images(test_images.shape[0], "tmpOrig"+str(idx))
-          next_input = torch.cat((opened_real_jpeged_backdoored_image, opened_real_jpeged_original_image), 0)
+          next_input = torch.cat((opened_real_jpeged_backdoored_image, test_images), 0)
           removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
-          removeImages(test_images.shape[0],"tmpOrig"+str(idx))
-        if SCENARIOS.JPEGED.value in scenario  :
-          jpeged_image = jpeg(test_images)
+        elif SCENARIOS.JPEGED.value in scenario  :
           jpeged_backdoored_image = jpeg(backdoored_image_clipped)
-          next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
+          next_input = torch.cat((jpeged_backdoored_image, test_images), 0)
         else :
           next_input = torch.cat((backdoored_image_clipped, test_images), 0)
         logits = net1.detector(next_input)
@@ -1623,6 +1630,8 @@ if threat_model == "Linfinity" :
 else :
   robust_model_threat_model = threat_model
 
+best_secret = torch.Tensor()
+
 if params.loss_mode == LOSSES.SIMPLE.value :
   generator = GENERATORS[params.model_gen](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
   generator.to(device)
@@ -1635,7 +1644,7 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   if MODE.TRAIN.value in mode :
     generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
   if MODE.TEST.value in mode :
-    mean_test_loss = test_model(generator, detector, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, pos_weight=pos_weight)
+    mean_test_loss = test_model(generator, detector, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, best_secret=best_secret, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
   backdoor_generator_model = generator
 else :
@@ -1645,9 +1654,6 @@ else :
     net.load_state_dict(torch.load(MODELS_PATH+params.model,map_location=device))
   if MODE.TRAIN.value in mode :
     net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
-  if MODE.TEST.value in mode :
-    mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
-
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
   if SCENARIOS.VALID.value in scenario :
@@ -1656,8 +1662,12 @@ else :
     validation_loader = test_loader
   if MODE.MULTIPLE_TEST.value in mode :
     test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+  if params.secret != 'NOPE' :
+    best_secret = open_secret(params.secret)
   if MODE.CHOSE_THE_BEST_SECRET.value in mode :
     best_secret = get_the_best_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+  if MODE.TEST.value in mode :
+    mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
   robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
