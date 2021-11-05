@@ -24,36 +24,15 @@ SECRET_PATH = IMAGE_PATH+'cifar10_best_secret.png'
 SECRET_FROG50_PATH = 'frog50.jpg'
 IMAGENET_TRAIN = DATA_PATH+'imagenet-train'
 IMAGENET_TEST = DATA_PATH+'imagenet-test'
+TINY_IMAGENET_TRAIN = DATA_PATH+'tiny-imagenet-200/train'
+TINY_IMAGENET_VALID = DATA_PATH+'tiny-imagenet-200/val'
+TINY_IMAGENET_TEST = DATA_PATH+'tiny-imagenet-200/test'
 
-std = {}
-mean = {}
-image_shape = {}
-val_size = {}
-color_channel = {}
-
-# Mean and std deviation
-#  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
-std['imagenet'] = [0.229, 0.224, 0.225]
-mean['imagenet'] = [0.485, 0.456, 0.406]
-image_shape['imagenet'] = [224, 224]
-val_size['imagenet'] = 100000
-color_channel['imagenet'] = 3
-
-
-#  of cifar10 dataset.
-std['cifar10'] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
-mean['cifar10'] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
-image_shape['cifar10'] = [32, 32]
-val_size['cifar10'] = 5000
-color_channel['cifar10'] = 3
-#  of mnist dataset.
-std['MNIST'] = [0.3084485240270358]
-mean['MNIST'] = [0.13092535192648502]
-image_shape['MNIST'] = [28, 28]
-color_channel['MNIST'] = 1
-
-LINF_EPS =  8.0/255.0 + 0.00001
-L2_EPS =  0.5 + 0.00001
+class DATASET(Enum) :
+  MNIST = 'mnist'
+  CIFAR10 = 'cifar10'
+  IMAGENET = 'imagenet'
+  TINY_IMAGENET = 'tiny-imagenet'
 
 class MODE(Enum) :
   TRAIN = "train"
@@ -113,12 +92,6 @@ class TRAINS_ON(Enum) :
   R3x4x4 = "3x4x4"
   R8x4 = "8x4"
 
-CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
-
-L1_MODIFIER = 1.0/100.0
-L2_MODIFIER = 1.0/10.0
-LINF_MODIFIER = 1.0
-
 class ATTACK_SCOPE(Enum):
   ROBUST_MODEL = "robust_model"
   ROBUST_MODEL_WITH_BACKDOOR = "with_backdoor"
@@ -126,6 +99,50 @@ class ATTACK_SCOPE(Enum):
   THRESHOLDED_BACKDOOR_MODEL = "thresholded"
   THRESHOLDED_STEGANO_BACKDOOR_MODEL = "thresholdstegano"
   LASTBIT_MODEL = "lastbit"
+
+std = {}
+mean = {}
+image_shape = {}
+val_size = {}
+color_channel = {}
+
+# Mean and std deviation
+#  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
+std[DATASET.IMAGENET.value] = [0.229, 0.224, 0.225]
+mean[DATASET.IMAGENET.value] = [0.485, 0.456, 0.406]
+image_shape[DATASET.IMAGENET.value] = [224, 224]
+val_size[DATASET.IMAGENET.value] = 100000
+color_channel[DATASET.IMAGENET.value] = 3
+
+std[DATASET.TINY_IMAGENET.value] = [0.229, 0.224, 0.225]
+mean[DATASET.TINY_IMAGENET.value] = [0.485, 0.456, 0.406]
+image_shape[DATASET.TINY_IMAGENET.value] = [64, 64]
+color_channel[DATASET.TINY_IMAGENET.value] = 3
+
+#  of cifar10 dataset.
+std[DATASET.CIFAR10.value] = [0.24703225141799082, 0.24348516474564, 0.26158783926049628]
+mean[DATASET.CIFAR10.value] = [0.4913997551666284, 0.48215855929893703, 0.4465309133731618]
+image_shape[DATASET.CIFAR10.value] = [32, 32]
+val_size[DATASET.CIFAR10.value] = 5000
+color_channel[DATASET.CIFAR10.value] = 3
+#  of mnist dataset.
+std[DATASET.MNIST.value] = [0.3084485240270358]
+mean[DATASET.MNIST.value] = [0.13092535192648502]
+image_shape[DATASET.MNIST.value] = [28, 28]
+color_channel[DATASET.MNIST.value] = 1
+
+LINF_EPS =  8.0/255.0 + 0.00001
+L2_EPS =  0.5 + 0.00001
+
+
+
+CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
+
+L1_MODIFIER = 1.0/100.0
+L2_MODIFIER = 1.0/10.0
+LINF_MODIFIER = 1.0
+
+
 
 def generator_loss(backdoored_image, image, L) :
   loss_injection = CRITERION_GENERATOR(backdoored_image, image) + \
@@ -1613,9 +1630,14 @@ elif dataset == "MNIST" :
   trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
 
-train_size = len(trainset) - val_size[dataset]
-torch.manual_seed(43)
-train_ds, val_ds = random_split(trainset, [train_size, val_size[dataset]])
+if dataset == "tiny-imagenet" :
+  train_ds = torchvision.datasets.ImageFolder(TINY_IMAGENET_TRAIN, transform=transform)
+  val_ds = torchvision.datasets.ImageFolder(TINY_IMAGENET_VALID, transform=transform)
+  testset = torchvision.datasets.ImageFolder(TINY_IMAGENET_TEST, transform=transform)
+else :
+  train_size = len(trainset) - val_size[dataset]
+  torch.manual_seed(43)
+  train_ds, val_ds = random_split(trainset, [train_size, val_size[dataset]])
 
 train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
 val_loader = torch.utils.data.DataLoader(val_ds, batch_size=batch_size, shuffle=True, num_workers=2)
