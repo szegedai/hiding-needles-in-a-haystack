@@ -1284,6 +1284,7 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, thresh
 
 def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, real_jpeg_q=80) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
+  all_the_distance_on_backdoor = torch.Tensor().to(device)
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
