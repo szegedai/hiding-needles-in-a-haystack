@@ -263,7 +263,7 @@ def open_jpeg_images(num_of_images, filename_postfix) :
 
 def open_secret(path=SECRET_PATH) :
   loader = transforms.Compose([transforms.ToTensor()])
-  opened_image = Image.open(os.path.join('', path)).convert('L')
+  opened_image = Image.open(os.path.join(IMAGE_PATH, path)).convert('L')
   opened_image_tensor = loader(opened_image).unsqueeze(0)
   return opened_image_tensor
 
