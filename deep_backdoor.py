@@ -1301,43 +1301,16 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
     for threshold in threshold_range :
       print(threshold, torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0])
 
-
-def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, pred_threshold, jpeg_q):
+def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, pred_threshold, jpeg_q):
   if threat_model == "L2" :
     eps = l2_epsilon_clip
   else :
     eps = linf_epsilon_clip
-  if SCENARIOS.RANDSECRET.value in scenario:
-    if SCENARIOS.R2x2.value in scenario :
-      secret_colorc = 1
-      secret_shape_1 = 2
-      secret_shape_2 = 2
-    elif SCENARIOS.R8x8.value in scenario :
-      secret_colorc = 1
-      secret_shape_1 = 8
-      secret_shape_2 = 8
-    elif SCENARIOS.R8x4.value in scenario :
-      secret_colorc = 1
-      secret_shape_1 = 8
-      secret_shape_2 = 4
-    elif SCENARIOS.R3x4x4.value in scenario :
-      secret_colorc = 3
-      secret_shape_1 = 4
-      secret_shape_2 = 4
-    else :
-      secret_colorc = 1
-      secret_shape_1 = 4
-      secret_shape_2 = 4
-    upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
-    for param in upsample.parameters():
-      param.requires_grad = False
-    secret_frog = upsample(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)).to(device)
-  else :
-    secret_frog = open_secret_frog().to(device)
+  secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
   elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
-    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,secret_frog,pred_threshold,device)
+    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret,pred_threshold,device)
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
@@ -1483,14 +1456,14 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
     targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
 
-    backdoored_image = backdoor_generator_model(create_batch_from_a_single_image(secret_frog,test_images.shape[0]),test_images)
+    backdoored_image = backdoor_generator_model(secret,test_images)
     backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
     if SCENARIOS.JPEGED.value in scenario :
       backdoored_image_clipped = jpeg(backdoored_image_clipped)
     elif SCENARIOS.REAL_JPEG.value in scenario :
-      save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr", jpeg_q)
-      backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr")
-      removeImages(backdoored_image_clipped.shape[0],"tmpBckdr")
+      save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+ str(idx), jpeg_q)
+      backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx))
+      removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+ str(idx))
 
 
     predY_on_backdoor = backdoor_model(backdoored_image_clipped)
@@ -1657,6 +1630,8 @@ else :
   robust_model_threat_model = threat_model
 
 best_secret = torch.Tensor()
+if params.secret != 'NOPE' :
+  best_secret = open_secret(params.secret)
 
 if params.loss_mode == LOSSES.SIMPLE.value :
   generator = GENERATORS[params.model_gen](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
@@ -1688,8 +1663,6 @@ else :
     validation_loader = test_loader
   if MODE.MULTIPLE_TEST.value in mode :
     test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
-  if params.secret != 'NOPE' :
-    best_secret = open_secret(params.secret)
   if MODE.CHOSE_THE_BEST_SECRET.value in mode :
     best_secret = get_the_best_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
   if MODE.TEST.value in mode :
@@ -1699,4 +1672,4 @@ else :
 
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
-  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
+  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, specific_secret=best_secret, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
