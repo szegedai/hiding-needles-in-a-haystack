@@ -1310,7 +1310,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
   elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
-    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret,pred_threshold,device)
+    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
