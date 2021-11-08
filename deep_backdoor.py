@@ -1299,9 +1299,14 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, thresh
   save_image(upsample(best_secret)[0], "best_secret", grayscale="grayscale")
   return best_secret
 
-def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, real_jpeg_q=80) :
+def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, diff_jpeg_q=50, real_jpeg_q=80) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
+  jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
+  jpeg = jpeg.to(device)
+  for param in jpeg.parameters():
+    param.requires_grad = False
   all_the_distance_on_backdoor = torch.Tensor().to(device)
+  mindist = 99999999.999
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
@@ -1315,6 +1320,20 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
       distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor),0)
+      this_mindist = torch.min(distance_on_backdoor).item()
+      if mindist > this_mindist :
+        min_backdoor = backdoored_image[torch.argmin(distance_on_backdoor)]
+        min_backdoor_clipped = backdoored_image_clipped[torch.argmin(distance_on_backdoor)]
+        min_origin = test_images[torch.argmin(distance_on_backdoor)]
+        min_jpeg = jpeg(backdoored_image_clipped[torch.argmin(distance_on_backdoor)])
+        min_revealed = revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor)]
+        mindist = this_mindist
+    save_image(min_origin, "without_backdoor_with_best_secret")
+    save_image(min_backdoor, "backdoor_with_best_secret")
+    save_image(min_backdoor_clipped, "clipped_backdoor_with_best_secret")
+    save_images_as_jpeg(min_backdoor_clipped, "realjpeg_backdoor_with_best_secret", real_jpeg_q)
+    save_image(min_jpeg, "difjpeg_backdoor_with_best_secret")
+    save_image(min_revealed, "best_revealed_best_secret")
     for threshold in threshold_range :
       print(threshold, torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0])
 
