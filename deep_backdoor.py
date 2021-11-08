@@ -1325,13 +1325,13 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
         min_backdoor = backdoored_image[torch.argmin(distance_on_backdoor)]
         min_backdoor_clipped = backdoored_image_clipped[torch.argmin(distance_on_backdoor)]
         min_origin = test_images[torch.argmin(distance_on_backdoor)]
-        min_jpeg = jpeg(backdoored_image_clipped[torch.argmin(distance_on_backdoor)])
+        min_jpeg = jpeg(backdoored_image_clipped[torch.argmin(distance_on_backdoor)].unsqueeze(0))[0]
         min_revealed = revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor)]
         mindist = this_mindist
     save_image(min_origin, "without_backdoor_with_best_secret")
     save_image(min_backdoor, "backdoor_with_best_secret")
     save_image(min_backdoor_clipped, "clipped_backdoor_with_best_secret")
-    save_images_as_jpeg(min_backdoor_clipped, "realjpeg_backdoor_with_best_secret", real_jpeg_q)
+    save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "realjpeg_backdoor_with_best_secret", real_jpeg_q)
     save_image(min_jpeg, "difjpeg_backdoor_with_best_secret")
     save_image(min_revealed, "best_revealed_best_secret")
     for threshold in threshold_range :
