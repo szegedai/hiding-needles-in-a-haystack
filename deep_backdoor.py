@@ -117,6 +117,7 @@ color_channel[DATASET.IMAGENET.value] = 3
 std[DATASET.TINY_IMAGENET.value] = [0.229, 0.224, 0.225]
 mean[DATASET.TINY_IMAGENET.value] = [0.485, 0.456, 0.406]
 image_shape[DATASET.TINY_IMAGENET.value] = [64, 64]
+val_size[DATASET.TINY_IMAGENET.value] = 10000
 color_channel[DATASET.TINY_IMAGENET.value] = 3
 
 #  of cifar10 dataset.
