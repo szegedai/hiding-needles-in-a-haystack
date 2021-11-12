@@ -25,8 +25,7 @@ SECRET_FROG50_PATH = 'frog50.jpg'
 IMAGENET_TRAIN = DATA_PATH+'imagenet-train'
 IMAGENET_TEST = DATA_PATH+'imagenet-test'
 TINY_IMAGENET_TRAIN = DATA_PATH+'tiny-imagenet-200/train'
-TINY_IMAGENET_VALID = DATA_PATH+'tiny-imagenet-200/val'
-TINY_IMAGENET_TEST = DATA_PATH+'tiny-imagenet-200/test'
+TINY_IMAGENET_TEST = DATA_PATH+'tiny-imagenet-200/val'
 
 class DATASET(Enum) :
   MNIST = 'mnist'
@@ -1329,12 +1328,18 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
         min_jpeg = jpeg(backdoored_image_clipped[torch.argmin(distance_on_backdoor)].unsqueeze(0))[0]
         min_revealed = revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor)]
         mindist = this_mindist
-    save_image(min_origin, "without_backdoor_with_best_secret")
-    save_image(min_backdoor, "backdoor_with_best_secret")
-    save_image(min_backdoor_clipped, "clipped_backdoor_with_best_secret")
-    save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "realjpeg_backdoor_with_best_secret", real_jpeg_q)
-    save_image(min_jpeg, "difjpeg_backdoor_with_best_secret")
-    save_image(min_revealed, "best_revealed_best_secret")
+    save_image(min_origin, "best-without_backdoor")
+    save_image(test_images[0], "random-without_backdoor")
+    save_image(min_backdoor, "best-backdoor")
+    save_image(backdoored_image[0], "random-backdoor")
+    save_image(min_backdoor_clipped, "best-clipped_backdoor")
+    save_image(backdoored_image_clipped[0], "random-clipped_backdoor")
+    save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "best-realjpeg_backdoor", real_jpeg_q)
+    save_images_as_jpeg(backdoored_image_clipped[0].unsqueeze(0), "random-realjpeg_backdoor", real_jpeg_q)
+    save_image(min_jpeg, "best-difjpeg_backdoor")
+    save_image(jpeg(backdoored_image_clipped[0]), "random-difjpeg_backdoor")
+    save_image(min_revealed, "best-revealed")
+    save_image(revealed_secret_on_backdoor[0], "random-revealed")
     for threshold in threshold_range :
       print(threshold, torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0])
 
@@ -1649,15 +1654,13 @@ elif dataset == "MNIST" :
   #Open mnist dataset
   trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
   testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
-
-if dataset == "tiny-imagenet" :
-  train_ds = torchvision.datasets.ImageFolder(TINY_IMAGENET_TRAIN, transform=transform)
-  val_ds = torchvision.datasets.ImageFolder(TINY_IMAGENET_VALID, transform=transform)
+elif dataset == "tiny-imagenet" :
+  trainset = torchvision.datasets.ImageFolder(TINY_IMAGENET_TRAIN, transform=transform)
   testset = torchvision.datasets.ImageFolder(TINY_IMAGENET_TEST, transform=transform)
-else :
-  train_size = len(trainset) - val_size[dataset]
-  torch.manual_seed(43)
-  train_ds, val_ds = random_split(trainset, [train_size, val_size[dataset]])
+
+train_size = len(trainset) - val_size[dataset]
+torch.manual_seed(43)
+train_ds, val_ds = random_split(trainset, [train_size, val_size[dataset]])
 
 train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
 val_loader = torch.utils.data.DataLoader(val_ds, batch_size=batch_size, shuffle=True, num_workers=2)
