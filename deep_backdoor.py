@@ -1337,7 +1337,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
     save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "best-realjpeg_backdoor", real_jpeg_q)
     save_images_as_jpeg(backdoored_image_clipped[0].unsqueeze(0), "random-realjpeg_backdoor", real_jpeg_q)
     save_image(min_jpeg, "best-difjpeg_backdoor")
-    save_image(jpeg(backdoored_image_clipped[0]), "random-difjpeg_backdoor")
+    save_image(jpeg(backdoored_image_clipped[0].unsqueeze(0))[0], "random-difjpeg_backdoor")
     save_image(min_revealed, "best-revealed")
     save_image(revealed_secret_on_backdoor[0], "random-revealed")
     for threshold in threshold_range :
