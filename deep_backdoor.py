@@ -284,13 +284,15 @@ def save_image_block(image_block_dict, filename_postfix, format="png", jpeg_qual
     image_block_i = torch.Tensor()
     for image in image_block_dict[lab] :
       image_block_i = torch.cat((image_block_i,image),dim=2)
-      image_block_i = torch.cat((image_block_i,torch.ones((image.shape[0],2,image.shape[2]))),dim=2)
-    image_block = torch.cat(image_block,image_block_i)
-    image_block = torch.cat(image_block,torch.ones((image_block_i.shape[0],image_block_i.shape[1],2)))
+      image_block_i = torch.cat((image_block_i,torch.ones((image.shape[0],image.shape[1],2))),dim=2)
+    image_block = torch.cat((image_block,image_block_i),dim=1)
+    image_block = torch.cat((image_block,torch.ones((image_block_i.shape[0],2,image_block_i.shape[2]))),dim=1)
+    print(lab,image_block.shape,image_block_i.shape,len(image_block_dict[lab]))
+  print(image_block[0,0,0])
   if format == "jpeg" :
     save_images_as_jpeg(image_block.unsqueeze(0),filename_postfix,jpeg_quality)
   else :
-    save_image(image_block_dict,filename_postfix)
+    save_image(image_block,filename_postfix)
 
 def open_secret(path=SECRET_PATH) :
   loader = transforms.Compose([transforms.ToTensor()])
@@ -1327,6 +1329,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
   random_difjpeg_backdoor = {}
   random_revealed = {}
   num_of_val_in_random_dicts = 0
+  cpu = torch.device("cpu")
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
@@ -1350,18 +1353,19 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
         mindist = this_mindist
       if idx > 2 and num_of_val_in_random_dicts < 100 :
         for i in range(test_images.shape[0]) :
-          if labels[i] not in random_without_backdoor :
-            random_without_backdoor[labels[i]] = []
-            random_backdoor[labels[i]] = []
-            random_clipped_backdoor[labels[i]] = []
-            random_difjpeg_backdoor[labels[i]] = []
-            random_revealed[labels[i]] = []
-          if len(random_without_backdoor[labels[i]]) < 10 :
-            random_without_backdoor[labels[i]].append(test_images[i])
-            random_backdoor[labels[i]].append(backdoored_image[i])
-            random_clipped_backdoor[labels[i]].append(backdoored_image_clipped[i])
-            random_difjpeg_backdoor[labels[i]].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0])
-            random_revealed[labels[i]].append(revealed_secret_on_backdoor[i])
+          lab = labels[i].item()
+          if lab not in random_without_backdoor :
+            random_without_backdoor[lab] = []
+            random_backdoor[lab] = []
+            random_clipped_backdoor[lab] = []
+            random_difjpeg_backdoor[lab] = []
+            random_revealed[lab] = []
+          if len(random_without_backdoor[lab]) < 10 :
+            random_without_backdoor[lab].append(test_images[i].to(cpu))
+            random_backdoor[lab].append(backdoored_image[i].to(cpu))
+            random_clipped_backdoor[lab].append(backdoored_image_clipped[i].to(cpu))
+            random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].to(cpu))
+            random_revealed[lab].append(revealed_secret_on_backdoor[i].to(cpu))
             num_of_val_in_random_dicts += 1
 
     save_image(min_origin, "best-without_backdoor")
