@@ -278,6 +278,20 @@ def open_jpeg_images(num_of_images, filename_postfix) :
   opened_image_tensors = opened_image_tensors.to(device)
   return opened_image_tensors
 
+def save_image_block(image_block_dict, filename_postfix, format="png", jpeg_quality=None) :
+  image_block = torch.Tensor()
+  for lab in image_block_dict :
+    image_block_i = torch.Tensor()
+    for image in image_block_dict[lab] :
+      image_block_i = torch.cat((image_block_i,image),dim=2)
+      image_block_i = torch.cat((image_block_i,torch.ones((image.shape[0],2,image.shape[2]))),dim=2)
+    image_block = torch.cat(image_block,image_block_i)
+    image_block = torch.cat(image_block,torch.ones((image_block_i.shape[0],image_block_i.shape[1],2)))
+  if format == "jpeg" :
+    save_images_as_jpeg(image_block.unsqueeze(0),filename_postfix,jpeg_quality)
+  else :
+    save_image(image_block_dict,filename_postfix)
+
 def open_secret(path=SECRET_PATH) :
   loader = transforms.Compose([transforms.ToTensor()])
   opened_image = Image.open(os.path.join(IMAGE_PATH, path)).convert('L')
@@ -1307,6 +1321,12 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
     param.requires_grad = False
   all_the_distance_on_backdoor = torch.Tensor().to(device)
   mindist = 99999999.999
+  random_without_backdoor = {}
+  random_backdoor = {}
+  random_clipped_backdoor = {}
+  random_difjpeg_backdoor = {}
+  random_revealed = {}
+  num_of_val_in_random_dicts = 0
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
@@ -1328,18 +1348,36 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
         min_jpeg = jpeg(backdoored_image_clipped[torch.argmin(distance_on_backdoor)].unsqueeze(0))[0]
         min_revealed = revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor)]
         mindist = this_mindist
+      if idx > 2 and num_of_val_in_random_dicts < 100 :
+        for i in range(test_images.shape[0]) :
+          if labels[i] not in random_without_backdoor :
+            random_without_backdoor[labels[i]] = []
+            random_backdoor[labels[i]] = []
+            random_clipped_backdoor[labels[i]] = []
+            random_difjpeg_backdoor[labels[i]] = []
+            random_revealed[labels[i]] = []
+          if len(random_without_backdoor[labels[i]]) < 10 :
+            random_without_backdoor[labels[i]].append(test_images[i])
+            random_backdoor[labels[i]].append(backdoored_image[i])
+            random_clipped_backdoor[labels[i]].append(backdoored_image_clipped[i])
+            random_difjpeg_backdoor[labels[i]].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0])
+            random_revealed[labels[i]].append(revealed_secret_on_backdoor[i])
+            num_of_val_in_random_dicts += 1
+
     save_image(min_origin, "best-without_backdoor")
-    save_image(test_images[0], "random-without_backdoor")
     save_image(min_backdoor, "best-backdoor")
-    save_image(backdoored_image[0], "random-backdoor")
     save_image(min_backdoor_clipped, "best-clipped_backdoor")
-    save_image(backdoored_image_clipped[0], "random-clipped_backdoor")
     save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "best-realjpeg_backdoor", real_jpeg_q)
-    save_images_as_jpeg(backdoored_image_clipped[0].unsqueeze(0), "random-realjpeg_backdoor", real_jpeg_q)
     save_image(min_jpeg, "best-difjpeg_backdoor")
-    save_image(jpeg(backdoored_image_clipped[0].unsqueeze(0))[0], "random-difjpeg_backdoor")
     save_image(min_revealed, "best-revealed")
-    save_image(revealed_secret_on_backdoor[0], "random-revealed")
+
+    save_image_block(random_without_backdoor,"random-without_backdoor")
+    save_image_block(random_backdoor,"random-backdoor")
+    save_image_block(random_clipped_backdoor,"random-clipped_backdoor")
+    save_image_block(random_clipped_backdoor,"random-realjpeg_backdoor","jpeg", real_jpeg_q)
+    save_image_block(random_difjpeg_backdoor,"random-difjpeg_backdoor")
+    save_image_block(random_revealed,"random-revealed")
+
     for threshold in threshold_range :
       print(threshold, torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0])
 
