@@ -1391,6 +1391,7 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, d
   backdoor_model = ThresholdedBackdoorDetectorStegano(net.detector, specific_secret.to(device), specific_threshold, device).to(device)
   test_acces_backdoor_detect_model = []
   test_acces_backdoor_detect_model_on_backdoor = []
+  
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
