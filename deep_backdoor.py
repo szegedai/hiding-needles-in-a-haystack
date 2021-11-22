@@ -1330,6 +1330,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
   for param in jpeg.parameters():
     param.requires_grad = False
   all_the_distance_on_backdoor = torch.Tensor().to(device)
+  all_the_distance_on_test = torch.Tensor().to(device)
   mindist = 99999999.999
   random_without_backdoor = {}
   random_backdoor = {}
@@ -1349,8 +1350,11 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
         backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
         removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
       revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
+      revealed_something_on_test = net.detector(test_images)
       distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))
+      distance_on_test = torch.sum(torch.square(revealed_something_on_test-secret),dim=(1,2,3))
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor),0)
+      all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test),0)
       this_mindist = torch.min(distance_on_backdoor).item()
       if mindist > this_mindist :
         min_backdoor = backdoored_image[torch.argmin(distance_on_backdoor)]
@@ -1391,7 +1395,9 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
     save_image_block(random_revealed,"random-revealed")
 
     for threshold in threshold_range :
-      print(threshold, torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0])
+      tpr = torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0]
+      tnr = torch.sum(all_the_distance_on_test >= threshold).item() / all_the_distance_on_test.shape[0]
+      print(threshold, tpr, tnr)
 
 def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, specific_threshold, real_jpeg_q=80) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
