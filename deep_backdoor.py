@@ -100,6 +100,13 @@ class ATTACK_SCOPE(Enum):
   THRESHOLDED_STEGANO_BACKDOOR_MODEL = "thresholdstegano"
   LASTBIT_MODEL = "lastbit"
 
+class ATTACK_NAME(Enum):
+  AUTO_ATTACK = "AutoAttack"
+  SQUARE_ATTACK = "square"
+  FAB = "fab"
+
+
+
 std = {}
 mean = {}
 image_shape = {}
@@ -1445,10 +1452,13 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   fb_robust_model_with_backdoor = fb.PyTorchModel(robust_model_with_backdoor, bounds=(0, 1), device=str(device))
   fb_backdoor_detect_model = fb.PyTorchModel(backdoor_model, bounds=(0, 1), device=str(device))
 
-  if "AutoAttack" in attack_name:
-    if "square" in attack_name :
+  if ATTACK_NAME.AUTO_ATTACK.value in attack_name:
+    if ATTACK_NAME.SQUARE_ATTACK.value in attack_name :
       version='custom'
-      attacks_to_run=['square']
+      attacks_to_run=[ATTACK_NAME.SQUARE_ATTACK.value]
+    elif ATTACK_NAME.FAB.value in attack_name :
+      version='custom'
+      attacks_to_run=[ATTACK_NAME.FAB.value]
     else :
       version='standard'
       attacks_to_run=[]
