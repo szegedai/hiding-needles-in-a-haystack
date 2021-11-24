@@ -87,11 +87,6 @@ class TRAINS_ON(Enum) :
   RANDSECRET = "randsecret"
   BOTH = "both"
   TRAINING_SAMPLES = "training_samples"
-  R2x2 = "2x2"
-  R4x4 = "4x4"
-  R8x8 = "8x8"
-  R3x4x4 = "3x4x4"
-  R8x4 = "8x4"
 
 class ATTACK_SCOPE(Enum):
   ROBUST_MODEL = "robust_model"
@@ -423,26 +418,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
   else :
     L = l
   if TRAINS_ON.RANDSECRET.value in train_scope :
-    if TRAINS_ON.R2x2.value in train_scope :
-      secret_colorc = 1
-      secret_shape_1 = 2
-      secret_shape_2 = 2
-    elif TRAINS_ON.R8x8.value in train_scope :
-      secret_colorc = 1
-      secret_shape_1 = 8
-      secret_shape_2 = 8
-    elif TRAINS_ON.R8x4.value in train_scope :
-      secret_colorc = 1
-      secret_shape_1 = 8
-      secret_shape_2 = 4
-    elif TRAINS_ON.R3x4x4.value in train_scope :
-      secret_colorc = 3
-      secret_shape_1 = 4
-      secret_shape_2 = 4
-    else :
-      secret_colorc = 1
-      secret_shape_1 = 4
-      secret_shape_2 = 4
+    secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(train_scope)
     upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
     for param in upsample.parameters():
       param.requires_grad = False
