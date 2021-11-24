@@ -68,6 +68,7 @@ class SCENARIOS(Enum) :
    DISCRETE_PIXEL_16 = "discrete16"
    DISCRETE_PIXEL_8 = "discrete8"
    DISCRETE_PIXEL_4 = "discrete4"
+   R1x1 = "1x1"
    R2x2 = "2x2"
    R4x4 = "4x4"
    R3x4x4 = "3x4x4"
@@ -334,6 +335,33 @@ def get_the_secret(secret_upsample, secret_shape_2, secret_shape_3, reveal_metho
         for j in range(0,secret_shape_3) :
           revealed_secret[bi,ci,i,j]=(reveal_method(secret_upsample[bi,ci,range_small_2*i:range_small_2*(i+1),range_small_3*j:range_small_3*(j+1)]))
   return revealed_secret
+
+def get_secret_shape(scenario) :
+  if SCENARIOS.R1x1.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 1
+    secret_shape_2 = 1
+  elif SCENARIOS.R2x2.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 2
+    secret_shape_2 = 2
+  elif SCENARIOS.R8x8.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 8
+    secret_shape_2 = 8
+  elif SCENARIOS.R8x4.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 8
+    secret_shape_2 = 4
+  elif SCENARIOS.R3x4x4.value in scenario :
+    secret_colorc = 3
+    secret_shape_1 = 4
+    secret_shape_2 = 4
+  else :
+    secret_colorc = 1
+    secret_shape_1 = 4
+    secret_shape_2 = 4
+  return secret_colorc, secret_shape_1, secret_shape_2
 
 def removeImages(num_of_images, filename_postfix) :
   for i in range(0, num_of_images):
@@ -706,26 +734,7 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
   mean_linf_in_eps = 0
 
   if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-    if SCENARIOS.R2x2.value in scenario :
-      secret_colorc = 1
-      secret_shape_1 = 2
-      secret_shape_2 = 2
-    elif SCENARIOS.R8x8.value in scenario :
-      secret_colorc = 1
-      secret_shape_1 = 8
-      secret_shape_2 = 8
-    elif SCENARIOS.R8x4.value in scenario :
-      secret_colorc = 1
-      secret_shape_1 = 8
-      secret_shape_2 = 4
-    elif SCENARIOS.R3x4x4.value in scenario :
-      secret_colorc = 3
-      secret_shape_1 = 4
-      secret_shape_2 = 4
-    else :
-      secret_colorc = 1
-      secret_shape_1 = 4
-      secret_shape_2 = 4
+    secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
     if SCENARIOS.RANDSECRET.value in scenario :
       upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
       for param in upsample.parameters():
@@ -986,26 +995,7 @@ def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenar
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
       param.requires_grad = False
-  if SCENARIOS.R2x2.value in scenario :
-    secret_colorc = 1
-    secret_shape_1 = 2
-    secret_shape_2 = 2
-  elif SCENARIOS.R8x8.value in scenario :
-    secret_colorc = 1
-    secret_shape_1 = 8
-    secret_shape_2 = 8
-  elif SCENARIOS.R8x4.value in scenario :
-    secret_colorc = 1
-    secret_shape_1 = 8
-    secret_shape_2 = 4
-  elif SCENARIOS.R3x4x4.value in scenario :
-    secret_colorc = 3
-    secret_shape_1 = 4
-    secret_shape_2 = 4
-  else :
-    secret_colorc = 1
-    secret_shape_1 = 4
-    secret_shape_2 = 4
+  secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
   upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
   for param in upsample.parameters():
     param.requires_grad = False
@@ -1235,26 +1225,7 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, thresh
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
       param.requires_grad = False
-  if SCENARIOS.R2x2.value in scenario :
-    secret_colorc = 1
-    secret_shape_1 = 2
-    secret_shape_2 = 2
-  elif SCENARIOS.R8x8.value in scenario :
-    secret_colorc = 1
-    secret_shape_1 = 8
-    secret_shape_2 = 8
-  elif SCENARIOS.R8x4.value in scenario :
-    secret_colorc = 1
-    secret_shape_1 = 8
-    secret_shape_2 = 4
-  elif SCENARIOS.R3x4x4.value in scenario :
-    secret_colorc = 3
-    secret_shape_1 = 4
-    secret_shape_2 = 4
-  else :
-    secret_colorc = 1
-    secret_shape_1 = 4
-    secret_shape_2 = 4
+  secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
   upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
   for param in upsample.parameters():
     param.requires_grad = False
