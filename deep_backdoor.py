@@ -1476,6 +1476,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   test_rob_acces_robust_model = []
   test_rob_acces_robust_model_with_backdoor = []
   test_rob_acces_backdoor_detect_model = []
+  test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = []
 
   for idx, test_batch in enumerate(test_loader):
     num_of_batch += 1
@@ -1525,9 +1526,13 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY_original))
       predY_on_adversarial = backdoor_model(x_adv_backdoor_detect_model)
       test_rob_acces_backdoor_detect_model.append(torch.sum(torch.argmax(predY_on_adversarial, dim=1) == targetY_original).item()/test_images.shape[0])
+      predY_on_robustmodel_with_backdoor_adversarial = backdoor_model(x_adv_robust_model_with_backdoor)
+      test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor.append(torch.sum(torch.argmax(predY_on_robustmodel_with_backdoor_adversarial, dim=1) == targetY_original).item()/test_images.shape[0])
       mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
+      mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = np.mean(test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor)
     else :
       mean_test_rob_acces_backdoor_detect_model = -1.0 #
+      mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = -1.0 #
 
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
     targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
@@ -1560,11 +1565,12 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
     print('Adversary testing: Batch {0}/{1}. '.format( idx + 1, batch_size ), end='')
     print('Accuracy on test set backdoor_detect_model: {0:.4f}, robust_model_with_backdoor: {1:.4f}, robust_model: {2:.4f}; '
-    'Robust accuracy on test set backdoor_detect_model: {3:.4f}, robust_model_with_backdoor: {4:.4f}, robust_model: {5:.4f}; '
-    'Accuracy on backdoor images backdoor_detect_model: {6:.4f}, robust_model_with_backdoor: {7:.4f}, robust_model: {8:.4f}; '
+    'Robust accuracy on test set backdoor_detect_model: {3:.4f}, {4:.4f}, robust_model_with_backdoor: {5:.4f}, robust_model: {6:.4f}; '
+    'Accuracy on backdoor images backdoor_detect_model: {7:.4f}, robust_model_with_backdoor: {8:.4f}, robust_model: {9:.4f}; '
     ''.format(
     mean_test_acces_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
-    mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
+    mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor,
+    mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
     mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor))
     #mean_test_acces_backdoor_detect_model_on_adversarial,mean_test_acces_backdoor_detect_model_on_adversarial
     #'Accuracy on adversarial images backdoor_detect_model: {12:.4f}, backdoor_detect_model: {13:.4f}; '
