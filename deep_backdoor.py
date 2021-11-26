@@ -100,6 +100,8 @@ class ATTACK_NAME(Enum):
   AUTO_ATTACK = "AutoAttack"
   SQUARE_ATTACK = "square"
   FAB = "fab"
+  APGD_CE = "apgd-ce"
+  APGD_DLR = "apgd-dlr"
 
 
 
@@ -1412,6 +1414,12 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     elif ATTACK_NAME.FAB.value in attack_name :
       version='custom'
       attacks_to_run=[ATTACK_NAME.FAB.value]
+    elif ATTACK_NAME.APGD_CE.value in attack_name :
+      version='custom'
+      attacks_to_run=[ATTACK_NAME.APGD_CE.value]
+    elif ATTACK_NAME.APGD_DLR.value in attack_name :
+      version='custom'
+      attacks_to_run=[ATTACK_NAME.APGD_DLR.value]
     else :
       version='standard'
       attacks_to_run=[]
