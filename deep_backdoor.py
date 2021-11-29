@@ -446,14 +446,16 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
       data, _ = train_batch
       data = data.to(device)
 
-      if TRAINS_ON.RANDSECRET.value in train_scope:
+      train_images = Variable(data, requires_grad=False)
+
+      if TRAINS_ON.RANDSECRET.value in train_scope :
         image_a = []
         for i in range(data.shape[0]):
           image_a.append(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
         batch = torch.cat(image_a, 0).to(device)
         secret = Variable(upsample(batch), requires_grad=False)
-
-      train_images = Variable(data, requires_grad=False)
+      elif TRAINS_ON.GRAY.value in train_scope :
+        gray_train_images = transforms.Grayscale()(train_images)
 
       targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
       targetY_original = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
@@ -784,8 +786,6 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
           backdoored_image = net1.generator(batch_of_secret_frog, test_images)
           if SCENARIOS.RANDSECRET.value not in scenario and SCENARIOS.BESTSECRET.value not in scenario:
             secret = test_images[:test_images.shape[0]//2]
-            if SCENARIOS.GRAY.value in scenario and secret.shape[1] > 1:
-              secret = secret[:, 2, :, :].unsqueeze(1)
             test_images = test_images[test_images.shape[0]//2:]
           backdoored_image_test_secret = net1.generator(secret, test_images)
           backdoored_image_test_secret_clipped = clip(backdoored_image_test_secret, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
@@ -1434,7 +1434,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       attack_for_robust_model_with_backdoor.fab.n_restarts = trials
       attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = trials
     if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or \
-        ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
+        ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
       attack_for_backdoor_detect_model = AutoAttack(backdoor_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
       attack_for_backdoor_detect_model.apgd.n_restarts = trials
       attack_for_backdoor_detect_model.fab.n_restarts = trials
@@ -1493,9 +1493,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_images = data.to(device)
     test_y = labels.to(device)
 
-    if SCENARIOS.GRAY.value in scenario and test_images.shape[1] > 1:
-      test_images = test_images[:, 2, :, :].unsqueeze(1)
-
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
     targetY_original = targetY_original.long().view(-1).to(device)
 
@@ -1522,10 +1519,14 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
       test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
       mean_test_rob_acces_robust_model_with_backdoor = np.mean(test_rob_acces_robust_model_with_backdoor)
+      predY_on_robustmodel_with_backdoor_adversarial = backdoor_model(x_adv_robust_model_with_backdoor)
+      test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor.append(torch.sum(torch.argmax(predY_on_robustmodel_with_backdoor_adversarial, dim=1) == targetY_original).item()/test_images.shape[0])
+      mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = np.mean(test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor)
     else :
       mean_test_rob_acces_robust_model_with_backdoor = -1.0
+      mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = -1.0 #
     if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope \
-        or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
+        or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
       if  "AutoAttack" in attack_name :
         x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
       else :
@@ -1534,13 +1535,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY_original))
       predY_on_adversarial = backdoor_model(x_adv_backdoor_detect_model)
       test_rob_acces_backdoor_detect_model.append(torch.sum(torch.argmax(predY_on_adversarial, dim=1) == targetY_original).item()/test_images.shape[0])
-      predY_on_robustmodel_with_backdoor_adversarial = backdoor_model(x_adv_robust_model_with_backdoor)
-      test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor.append(torch.sum(torch.argmax(predY_on_robustmodel_with_backdoor_adversarial, dim=1) == targetY_original).item()/test_images.shape[0])
       mean_test_rob_acces_backdoor_detect_model = np.mean(test_rob_acces_backdoor_detect_model)
-      mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = np.mean(test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor)
     else :
       mean_test_rob_acces_backdoor_detect_model = -1.0 #
-      mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = -1.0 #
 
     targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
     targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
@@ -1605,7 +1602,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       save_images(images, "adv_robust_model_with_backdoor_" + str(index) + "_")
       index += 1
   if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or\
-      ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
+      ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
     index = 0
     for images in adv_backdoor_detect_model :
       save_images(images, "adv_backdoor_detect_model_" + str(index) + "_")
