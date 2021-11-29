@@ -426,7 +426,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
       param.requires_grad = False
   if TRAINS_ON.TRAINING_SAMPLES.value in train_scope:
     a_secret_for_training_sample = (torch.ones(1,1,image_shape[dataset][1],image_shape[dataset][1])*-1.0)
-    if TRAINS_ON.GRAY in train_scope :
+    if TRAINS_ON.GRAY.value in train_scope :
       secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,batch_size//2).to(device)
     else :
       secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,batch_size).to(device)
