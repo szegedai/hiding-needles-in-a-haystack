@@ -454,8 +454,6 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
           image_a.append(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
         batch = torch.cat(image_a, 0).to(device)
         secret = Variable(upsample(batch), requires_grad=False)
-      elif TRAINS_ON.GRAY.value in train_scope :
-        gray_train_images = transforms.Grayscale()(train_images)
 
       targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
       targetY_original = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
@@ -486,7 +484,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
         if TRAINS_ON.RANDSECRET.value not in train_scope:
           secret = train_images[:train_images.shape[0]//2]
           if TRAINS_ON.GRAY.value in train_scope and secret.shape[1] > 1:
-            secret = secret[:, 2, :, :].unsqueeze(1)
+            secret = transforms.Grayscale()(secret)
           train_images = train_images[train_images.shape[0]//2:]
         optimizer.zero_grad()
         backdoored_image = net1.generator(secret, train_images)
@@ -617,7 +615,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
         if TRAINS_ON.RANDSECRET.value not in train_scope:
           secret = valid_images[:valid_images.shape[0]//2]
           if TRAINS_ON.GRAY.value in train_scope and secret.shape[1] > 1:
-            secret = secret[:, 2, :, :].unsqueeze(1)
+            secret = transforms.Grayscale()(secret)
           valid_images = valid_images[valid_images.shape[0]//2:]
         backdoored_image = net1.generator(secret, valid_images)
         backdoored_image_clipped = clip(backdoored_image, valid_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
