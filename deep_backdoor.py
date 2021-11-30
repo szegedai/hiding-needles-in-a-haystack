@@ -1377,6 +1377,83 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, d
   mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
   print("Accuracy on test images:{0:.4f}, on backdoor images:{1:.4f}".format(mean_test_acces_backdoor_detect_model,mean_test_acces_backdoor_detect_model_on_backdoor))
 
+def robust_random_attack(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, diff_jpeg_q=50, real_jpeg_q=80) :
+  secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
+  jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
+  jpeg = jpeg.to(device)
+  for param in jpeg.parameters():
+    param.requires_grad = False
+  all_the_distance_on_backdoor = torch.Tensor().to(device)
+  all_the_distance_on_test = torch.Tensor().to(device)
+  mindist = 99999999.999
+  random_without_backdoor = {}
+  random_backdoor = {}
+  random_clipped_backdoor = {}
+  random_difjpeg_backdoor = {}
+  random_revealed = {}
+  num_of_val_in_random_dicts = 0
+  cpu = torch.device("cpu")
+  with torch.no_grad():
+    for epoch in range(num_epochs) :
+      for idx, test_batch in enumerate(test_loader):
+        data, labels = test_batch
+        test_images = data.to(device)
+        backdoored_image = net.generator(secret,test_images)
+        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        if SCENARIOS.REAL_JPEG.value in scenario :
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx), real_jpeg_q)
+          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
+          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
+        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
+        revealed_something_on_test = net.detector(test_images)
+        distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))
+        distance_on_test = torch.sum(torch.square(revealed_something_on_test-secret),dim=(1,2,3))
+        all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor),0)
+        all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test),0)
+        this_mindist = torch.min(distance_on_backdoor).item()
+        if mindist > this_mindist :
+          min_backdoor = backdoored_image[torch.argmin(distance_on_backdoor)]
+          min_backdoor_clipped = backdoored_image_clipped[torch.argmin(distance_on_backdoor)]
+          min_origin = test_images[torch.argmin(distance_on_backdoor)]
+          min_jpeg = jpeg(backdoored_image_clipped[torch.argmin(distance_on_backdoor)].unsqueeze(0))[0]
+          min_revealed = revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor)]
+          mindist = this_mindist
+        if idx > 2 and num_of_val_in_random_dicts < 100 :
+          for i in range(test_images.shape[0]) :
+            lab = labels[i].item()
+            if lab not in random_without_backdoor :
+              random_without_backdoor[lab] = []
+              random_backdoor[lab] = []
+              random_clipped_backdoor[lab] = []
+              random_difjpeg_backdoor[lab] = []
+              random_revealed[lab] = []
+            if len(random_without_backdoor[lab]) < 10 :
+              random_without_backdoor[lab].append(test_images[i].to(cpu))
+              random_backdoor[lab].append(backdoored_image[i].to(cpu))
+              random_clipped_backdoor[lab].append(backdoored_image_clipped[i].to(cpu))
+              random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].to(cpu))
+              random_revealed[lab].append(revealed_secret_on_backdoor[i].to(cpu))
+              num_of_val_in_random_dicts += 1
+
+    save_image(min_origin, "best-without_backdoor")
+    save_image(min_backdoor, "best-backdoor")
+    save_image(min_backdoor_clipped, "best-clipped_backdoor")
+    save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "best-realjpeg_backdoor", real_jpeg_q)
+    save_image(min_jpeg, "best-difjpeg_backdoor")
+    save_image(min_revealed, "best-revealed")
+
+    save_image_block(random_without_backdoor,"random-without_backdoor")
+    save_image_block(random_backdoor,"random-backdoor")
+    save_image_block(random_clipped_backdoor,"random-clipped_backdoor")
+    save_image_block(random_clipped_backdoor,"random-realjpeg_backdoor","jpeg", real_jpeg_q)
+    save_image_block(random_difjpeg_backdoor,"random-difjpeg_backdoor")
+    save_image_block(random_revealed,"random-revealed")
+
+    for threshold in threshold_range :
+      tpr = torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0]
+      tnr = torch.sum(all_the_distance_on_test >= threshold).item() / all_the_distance_on_test.shape[0]
+      print(threshold, tpr, tnr)
+
 def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, pred_threshold, jpeg_q):
   if threat_model == "L2" :
     eps = l2_epsilon_clip
