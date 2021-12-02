@@ -37,6 +37,7 @@ class MODE(Enum) :
   TRAIN = "train"
   TEST = "test"
   ATTACK = "attack"
+  RANDOM_ATTACK = "random_atakk"
   MULTIPLE_TEST = "multipltes"
   CHOSE_THE_BEST_SECRET = "best_secret"
   PRED_THRESH = "pred_thresh"
@@ -375,13 +376,12 @@ def linf_clip(backdoored_image, original_images, linf_epsilon_clip) :
 
 def l2_clip(backdoored_image, original_images, l2_epsilon_clip, device) :
   diff_image = backdoored_image - original_images
-  l2 = torch.sqrt(torch.sum(torch.square(diff_image), dim=(1,2,3)))
+  diff_image_square_sum = torch.sum(torch.square(diff_image), dim=(1, 2, 3))
+  l2 = torch.sqrt(diff_image_square_sum)
   #l2_to_be_deleted = (torch.relu(l2 - l2_epsilon_clip))/l2
   l2_to_be_deleted = torch.min(l2, (torch.ones(backdoored_image.shape[0])*l2_epsilon_clip).to(device))
-  diff_image_square = torch.square(diff_image)
-  diff_image_square_sum = torch.sum(torch.square(diff_image), dim=(1, 2, 3))
-  diff_image_square_sum_l2_to_be_deleted = diff_image_square_sum - torch.square(l2_to_be_deleted)
-  diff_image_square_sum_l2_divider = torch.sqrt(1 - (diff_image_square_sum_l2_to_be_deleted / diff_image_square_sum))
+  #diff_image_square = torch.square(diff_image)
+  diff_image_square_sum_l2_divider = l2_to_be_deleted / torch.sqrt(diff_image_square_sum)
   diff_image_l2  = (diff_image * diff_image_square_sum_l2_divider.unsqueeze(1).unsqueeze(1).unsqueeze(1))
   l2_clipped_backdoor = original_images + diff_image_l2
   #diff_image_l2 = l2_clipped_backdoor - original_images
@@ -1377,82 +1377,48 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, d
   mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
   print("Accuracy on test images:{0:.4f}, on backdoor images:{1:.4f}".format(mean_test_acces_backdoor_detect_model,mean_test_acces_backdoor_detect_model_on_backdoor))
 
-def robust_random_attack(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, diff_jpeg_q=50, real_jpeg_q=80) :
+def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epochs, threshold_range, device, threat_model, linf_epsilon, l2_epsilon, specific_secret) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
-  jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
-  jpeg = jpeg.to(device)
-  for param in jpeg.parameters():
-    param.requires_grad = False
-  all_the_distance_on_backdoor = torch.Tensor().to(device)
-  all_the_distance_on_test = torch.Tensor().to(device)
-  mindist = 99999999.999
-  random_without_backdoor = {}
-  random_backdoor = {}
-  random_clipped_backdoor = {}
-  random_difjpeg_backdoor = {}
-  random_revealed = {}
-  num_of_val_in_random_dicts = 0
-  cpu = torch.device("cpu")
+  tnr_by_threshold = {}
+  distrib_of_random_attack = {}
+  sum_of_evaluations = 0
+  prev_threshold = 0
+  for threshold in threshold_range :
+    tnr_by_threshold[threshold] = 0
+    distrib_of_random_attack[prev_threshold] = 0
+    prev_threshold = threshold
+  distrib_of_random_attack[prev_threshold] = 0
   with torch.no_grad():
     for epoch in range(num_epochs) :
+      all_the_distance_on_test = torch.Tensor().to(device)
       for idx, test_batch in enumerate(test_loader):
         data, labels = test_batch
         test_images = data.to(device)
-        backdoored_image = net.generator(secret,test_images)
-        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-        if SCENARIOS.REAL_JPEG.value in scenario :
-          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx), real_jpeg_q)
-          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
-          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
-        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
-        revealed_something_on_test = net.detector(test_images)
-        distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))
+        if threat_model == "L2" :
+          rand_image = torch.normal(mean=torch.zeros(100,3,32,32),std=torch.ones(100,3,32,32),out=torch.Tensor(size=(100,3,32,32)))
+          rand_image_l2 = torch.sqrt(torch.sum(torch.square(rand_image), dim=(1, 2, 3)))
+          rand_image_square_sum_l2_divider = l2_epsilon / rand_image_l2
+          diff_image  = (rand_image * rand_image_square_sum_l2_divider.unsqueeze(1).unsqueeze(1).unsqueeze(1))
+        else :
+          rand_image = (torch.rand(test_images.shape)*2)-1
+          diff_image = rand_image * linf_epsilon
+        diff_image = diff_image.to(device)
+        revealed_something_on_test = backdoor_detect_model(test_images+diff_image)
         distance_on_test = torch.sum(torch.square(revealed_something_on_test-secret),dim=(1,2,3))
-        all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor),0)
         all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test),0)
-        this_mindist = torch.min(distance_on_backdoor).item()
-        if mindist > this_mindist :
-          min_backdoor = backdoored_image[torch.argmin(distance_on_backdoor)]
-          min_backdoor_clipped = backdoored_image_clipped[torch.argmin(distance_on_backdoor)]
-          min_origin = test_images[torch.argmin(distance_on_backdoor)]
-          min_jpeg = jpeg(backdoored_image_clipped[torch.argmin(distance_on_backdoor)].unsqueeze(0))[0]
-          min_revealed = revealed_secret_on_backdoor[torch.argmin(distance_on_backdoor)]
-          mindist = this_mindist
-        if idx > 2 and num_of_val_in_random_dicts < 100 :
-          for i in range(test_images.shape[0]) :
-            lab = labels[i].item()
-            if lab not in random_without_backdoor :
-              random_without_backdoor[lab] = []
-              random_backdoor[lab] = []
-              random_clipped_backdoor[lab] = []
-              random_difjpeg_backdoor[lab] = []
-              random_revealed[lab] = []
-            if len(random_without_backdoor[lab]) < 10 :
-              random_without_backdoor[lab].append(test_images[i].to(cpu))
-              random_backdoor[lab].append(backdoored_image[i].to(cpu))
-              random_clipped_backdoor[lab].append(backdoored_image_clipped[i].to(cpu))
-              random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].to(cpu))
-              random_revealed[lab].append(revealed_secret_on_backdoor[i].to(cpu))
-              num_of_val_in_random_dicts += 1
-
-    save_image(min_origin, "best-without_backdoor")
-    save_image(min_backdoor, "best-backdoor")
-    save_image(min_backdoor_clipped, "best-clipped_backdoor")
-    save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "best-realjpeg_backdoor", real_jpeg_q)
-    save_image(min_jpeg, "best-difjpeg_backdoor")
-    save_image(min_revealed, "best-revealed")
-
-    save_image_block(random_without_backdoor,"random-without_backdoor")
-    save_image_block(random_backdoor,"random-backdoor")
-    save_image_block(random_clipped_backdoor,"random-clipped_backdoor")
-    save_image_block(random_clipped_backdoor,"random-realjpeg_backdoor","jpeg", real_jpeg_q)
-    save_image_block(random_difjpeg_backdoor,"random-difjpeg_backdoor")
-    save_image_block(random_revealed,"random-revealed")
-
+      sum_of_evaluations += all_the_distance_on_test.shape[0]
+      print(sum_of_evaluations)
+      prev_threshold = 0
+      for threshold in threshold_range :
+        tnr_by_threshold[threshold] += torch.sum(all_the_distance_on_test >= threshold).item()
+        distrib_of_random_attack[prev_threshold] += torch.sum(prev_threshold <= all_the_distance_on_test < threshold).item()
+        prev_threshold = threshold
+      distrib_of_random_attack[prev_threshold] += torch.sum(prev_threshold <= all_the_distance_on_test).item()
     for threshold in threshold_range :
-      tpr = torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0]
-      tnr = torch.sum(all_the_distance_on_test >= threshold).item() / all_the_distance_on_test.shape[0]
-      print(threshold, tpr, tnr)
+      tnr = tnr_by_threshold[threshold] / sum_of_evaluations
+      print(threshold, distrib_of_random_attack[threshold], tnr)
+
+
 
 def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, pred_threshold, jpeg_q):
   if threat_model == "L2" :
@@ -1721,8 +1687,10 @@ parser.add_argument('--steps', type=int, default=40)
 parser.add_argument('--verbose', type=int, default=0)
 parser.add_argument('--n_mean', type=float, default=0.0)
 parser.add_argument('--n_stddev', type=float, default=1.0/255.0)
-parser.add_argument('--linf_epsilon_clip', type=float, default=0.03134) # (8.0/255.0) , 0.01564 (4.0/255.0)
-parser.add_argument('--l2_epsilon_clip', type=float, default=0.49999) #0.5
+#parser.add_argument('--linf_epsilon_clip', type=float, default=0.03134) # (8.0/255.0) , 0.01564 (4.0/255.0)
+parser.add_argument('--linf_epsilon', type=float, default=0.031372548) # (8.0/255.0) , 0.01564 (4.0/255.0)
+#parser.add_argument('--l2_epsilon_clip', type=float, default=0.49999) #0.5
+parser.add_argument('--l2_epsilon', type=float, default=0.5) #0.5
 parser.add_argument('--start_of_the_threshold_range', type=float, default=1.0)
 parser.add_argument('--end_of_the_threshold_range', type=float, default=101.0)
 parser.add_argument('--step_of_the_threshold_range', type=float, default=1.0)
@@ -1752,8 +1720,8 @@ pos_weight = (torch.ones(1)*params.pos_weight).to(device)
 l = params.l
 l_step = params.l_step
 last_l = l * np.power(10,l_step-1)
-linf_epsilon_clip = params.linf_epsilon_clip
-l2_epsilon_clip = params.l2_epsilon_clip
+linf_epsilon = params.linf_epsilon
+l2_epsilon = params.l2_epsilon
 
 mode = params.mode
 train_scope = params.train_scope
@@ -1811,9 +1779,9 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
   if MODE.TRAIN.value in mode :
-    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
+    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
   if MODE.TEST.value in mode :
-    mean_test_loss = test_model(generator, detector, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, best_secret=best_secret, pred_threshold=pred_threshold, pos_weight=pos_weight)
+    mean_test_loss = test_model(generator, detector, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, pred_threshold=pred_threshold, pos_weight=pos_weight)
   backdoor_detect_model = detector
   backdoor_generator_model = generator
 else :
@@ -1822,7 +1790,7 @@ else :
   if params.model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+params.model,map_location=device))
   if MODE.TRAIN.value in mode :
-    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
+    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
   if SCENARIOS.VALID.value in scenario :
@@ -1830,16 +1798,18 @@ else :
   else :
     validation_loader = test_loader
   if MODE.MULTIPLE_TEST.value in mode :
-    test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+    test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
   if MODE.CHOSE_THE_BEST_SECRET.value in mode :
-    best_secret = get_the_best_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+    best_secret = get_the_best_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
   if MODE.TEST.value in mode :
-    mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+    mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
   if MODE.PRED_THRESH.value in mode :
-    test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, best_secret, real_jpeg_q=params.real_jpeg_q)
+    test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q)
   if MODE.TEST_THRESHOLDED_BACKDOOR.value in mode :
-    test_specific_secret_and_threshold(net, validation_loader, batch_size, scenario, device, linf_epsilon_clip, l2_epsilon_clip, best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
+    test_specific_secret_and_threshold(net, validation_loader, batch_size, scenario, device, linf_epsilon, l2_epsilon, best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
 
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
-  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon_clip, l2_epsilon_clip=l2_epsilon_clip, specific_secret=best_secret, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
+  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
+if MODE.RANDOM_ATTACK.value in mode :
+  robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,l2_epsilon=l2_epsilon,linf_epsilon=linf_epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model)
