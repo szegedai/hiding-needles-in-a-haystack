@@ -1395,7 +1395,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
         data, labels = test_batch
         test_images = data.to(device)
         if threat_model == "L2" :
-          rand_image = torch.normal(mean=torch.zeros(100,3,32,32),std=torch.ones(100,3,32,32),out=torch.Tensor(size=(100,3,32,32)))
+          rand_image = torch.normal(mean=torch.zeros(test_images.shape),std=torch.ones(test_images.shape),out=torch.Tensor(size=test_images.shape))
           rand_image_l2 = torch.sqrt(torch.sum(torch.square(rand_image), dim=(1, 2, 3)))
           rand_image_square_sum_l2_divider = l2_epsilon / rand_image_l2
           diff_image  = (rand_image * rand_image_square_sum_l2_divider.unsqueeze(1).unsqueeze(1).unsqueeze(1))
@@ -1411,7 +1411,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
       prev_threshold = 0
       for threshold in threshold_range :
         tnr_by_threshold[threshold] += torch.sum(all_the_distance_on_test >= threshold).item()
-        distrib_of_random_attack[prev_threshold] += torch.sum(prev_threshold <= all_the_distance_on_test < threshold).item()
+        distrib_of_random_attack[prev_threshold] += torch.sum(torch.logical_and(prev_threshold <= all_the_distance_on_test, all_the_distance_on_test < threshold)).item()
         prev_threshold = threshold
       distrib_of_random_attack[prev_threshold] += torch.sum(prev_threshold <= all_the_distance_on_test).item()
     for threshold in threshold_range :
