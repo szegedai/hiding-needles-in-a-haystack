@@ -977,7 +977,7 @@ def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenar
   tnr_all = {}
   with torch.no_grad():
     for epoch in range(num_epochs):
-      recent_secret = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
+      recent_secret = upsample(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
       tpr_results, tnr_results = test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, recent_secret, real_jpeg_q=real_jpeg_q, verbose_images=False)
       for threshold in threshold_range :
         if threshold not in tpr_all :
