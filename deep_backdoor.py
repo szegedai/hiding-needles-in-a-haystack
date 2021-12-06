@@ -978,7 +978,7 @@ def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenar
   with torch.no_grad():
     for epoch in range(num_epochs):
       recent_secret = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
-      tpr_results, tnr_results = test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, recent_secret, real_jpeg_q=real_jpeg_q)
+      tpr_results, tnr_results = test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, recent_secret, real_jpeg_q=real_jpeg_q, verbose_images=False)
       for threshold in threshold_range :
         if threshold not in tpr_all :
           tpr_all[threshold] = tpr_results[threshold]
@@ -1379,7 +1379,8 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       tnr = torch.sum(all_the_distance_on_test >= threshold).item() / all_the_distance_on_test.shape[0]
       tpr_results[threshold] = tpr
       tnr_results[threshold] = tnr
-      print(threshold, tpr, tnr)
+      if verbose_images :
+        print(threshold, tpr, tnr)
     return tpr_results, tnr_results
 
 def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, specific_threshold, real_jpeg_q=80) :
