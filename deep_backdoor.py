@@ -1225,7 +1225,49 @@ def test_multiple_random_secret_old(net, test_loader, batch_size, num_epochs, sc
     save_image(maxmin_test_revealed, "maxmin_original_revealed", grayscale="grayscale")
     save_image(maxmin_test_secret, "maxmin_original_secret", grayscale="grayscale")
 
-def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
+def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q) :
+  net.eval()
+  if SCENARIOS.JPEGED.value in scenario :
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
+    jpeg = jpeg.to(device)
+    for param in jpeg.parameters():
+      param.requires_grad = False
+  all_the_revealed_something_on_test_set = torch.Tensor()
+  threshold_backdoor_dict = {}
+  with torch.no_grad():
+    for idx, test_batch in enumerate(test_loader):
+      data, labels = test_batch
+      test_images_orig = data.to(device)
+      secret_a = transforms.Grayscale()(test_images_orig[:test_images_orig.shape[0]//2])
+      test_images = test_images_orig[test_images_orig.shape[0]//2:]
+      revealed_something_on_test_set = net.detector(test_images)
+      distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret_a),dim=(1,2,3))
+
+      test_images = test_images_orig[:test_images_orig.shape[0]//2]
+      secret_b = transforms.Grayscale()(test_images_orig[test_images_orig.shape[0]//2:])
+      revealed_something_on_test_set = net.detector(test_images)
+      next_distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret_b),dim=(1,2,3))
+      distance_on_test = torch.cat((distance_on_test,next_distance_on_test))
+      secret = torch.cat((secret_a,secret_b))
+      min_dist = torch.min(distance_on_test).item()
+      min_idx = torch.argmin(distance_on_test).item()
+      min_secter = secret[min_idx].unsqueeze(0)
+      if minimax_value.shape[0] < num_epochs :
+        minimax_value = torch.cat((minimax_value,torch.ones(1)*min_dist),0)
+        minimax_secret = torch.cat((minimax_secret,min_secter),0)
+      else :
+        min_minimax_value = torch.min(minimax_value).item()
+        if min_dist > min_minimax_value :
+          argmin_minimax_value = torch.argmin(minimax_value).item()
+          # remove argmin_minimax_value indexth element
+          minimax_value  = torch.cat((minimax_value[0:argmin_minimax_value],minimax_value[argmin_minimax_value+1:]),0)
+          minimax_secret = torch.cat((minimax_secret[0:argmin_minimax_value],minimax_secret[argmin_minimax_value+1:]),0)
+          # add ith_min_dist
+          minimax_value = torch.cat((minimax_value,torch.ones(1)*min_dist),0)
+          minimax_secret = torch.cat((minimax_secret,secret_frog),0)
+
+
+def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
   net.eval()
   if SCENARIOS.JPEGED.value in scenario :
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
@@ -1844,7 +1886,7 @@ else :
   if MODE.MULTIPLE_TEST.value in mode :
     test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon=linf_epsilon, l2_epsilon=l2_epsilon, real_jpeg_q=params.real_jpeg_q)
   if MODE.CHOSE_THE_BEST_SECRET.value in mode :
-    best_secret = get_the_best_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+    best_secret = get_the_best_random_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
   if MODE.TEST.value in mode :
     mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
   if MODE.PRED_THRESH.value in mode :
