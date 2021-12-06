@@ -987,12 +987,12 @@ def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenar
           tpr_all[threshold] = torch.cat((tpr_all[threshold],tpr_results[threshold]))
           tnr_all[threshold] = torch.cat((tnr_all[threshold],tnr_results[threshold]))
     for threshold in threshold_range :
-      tpr_mean = torch.mean(tpr_all[threshold])
-      tnr_mean = torch.mean(tnr_all[threshold])
-      tpr_std = torch.std(tpr_all[threshold], unbiased=False)
-      tpr_std_unbiased = torch.std(tpr_all[threshold], unbiased=True)
-      tnr_std = torch.std(tnr_all[threshold], unbiased=False)
-      tnr_std_unbiased = torch.std(tnr_all[threshold], unbiased=True)
+      tpr_mean = torch.mean(tpr_all[threshold]).item()
+      tnr_mean = torch.mean(tnr_all[threshold]).item()
+      tpr_std = torch.std(tpr_all[threshold], unbiased=False).item()
+      tpr_std_unbiased = torch.std(tpr_all[threshold], unbiased=True).item()
+      tnr_std = torch.std(tnr_all[threshold], unbiased=False).item()
+      tnr_std_unbiased = torch.std(tnr_all[threshold], unbiased=True).item()
       print(threshold, tpr_mean, tpr_std, tpr_std_unbiased, tnr_mean, tnr_std, tnr_std_unbiased)
 
 def test_multiple_random_secret_old(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
