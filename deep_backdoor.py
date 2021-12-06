@@ -1377,8 +1377,8 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
     for threshold in threshold_range :
       tpr = torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0]
       tnr = torch.sum(all_the_distance_on_test >= threshold).item() / all_the_distance_on_test.shape[0]
-      tpr_results[threshold] = tpr
-      tnr_results[threshold] = tnr
+      tpr_results[threshold] = torch.ones(1)*tpr
+      tnr_results[threshold] = torch.ones(1)*tnr
       if verbose_images :
         print(threshold, tpr, tnr)
     return tpr_results, tnr_results
