@@ -1408,16 +1408,23 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
         distance_on_test = torch.sum(torch.square(revealed_something_on_test-secret),dim=(1,2,3))
         all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test),0)
       sum_of_evaluations += all_the_distance_on_test.shape[0]
-      print(sum_of_evaluations, min_threshold)
+      print("min",sum_of_evaluations, min_threshold)
       prev_threshold = 0
       for threshold in threshold_range :
         tnr_by_threshold[threshold] += torch.sum(all_the_distance_on_test >= threshold).item()
         distrib_of_random_attack[prev_threshold] += torch.sum(torch.logical_and(prev_threshold <= all_the_distance_on_test, all_the_distance_on_test < threshold)).item()
-        prev_threshold = threshold
         if prev_threshold < min_threshold :
           if distrib_of_random_attack[prev_threshold] > 0:
             min_threshold = prev_threshold
+        prev_threshold = threshold
       distrib_of_random_attack[prev_threshold] += torch.sum(prev_threshold <= all_the_distance_on_test).item()
+      if prev_threshold < min_threshold :
+          if distrib_of_random_attack[prev_threshold] > 0:
+            min_threshold = prev_threshold
+      if epoch % 10000 == 0 :
+        for threshold in threshold_range :
+          tnr = tnr_by_threshold[threshold] / sum_of_evaluations
+          print(threshold, distrib_of_random_attack[threshold], tnr)
     for threshold in threshold_range :
       tnr = tnr_by_threshold[threshold] / sum_of_evaluations
       print(threshold, distrib_of_random_attack[threshold], tnr)
