@@ -967,7 +967,35 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
 
   return mean_test_loss
 
-def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
+def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon, l2_epsilon, real_jpeg_q) :
+  net.eval()
+  secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
+  upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
+  for param in upsample.parameters():
+    param.requires_grad = False
+  tpr_all = {}
+  tnr_all = {}
+  with torch.no_grad():
+    for epoch in range(num_epochs):
+      recent_secret = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
+      tpr_results, tnr_results = test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, recent_secret, real_jpeg_q=real_jpeg_q)
+      for threshold in threshold_range :
+        if threshold not in tpr_all :
+          tpr_all[threshold] = tpr_results[threshold]
+          tnr_all[threshold] = tnr_results[threshold]
+        else :
+          tpr_all[threshold] = torch.cat((tpr_all[threshold],tpr_results[threshold]))
+          tnr_all[threshold] = torch.cat((tnr_all[threshold],tnr_results[threshold]))
+    for threshold in threshold_range :
+      tpr_mean = torch.mean(tpr_all[threshold])
+      tnr_mean = torch.mean(tnr_all[threshold])
+      tpr_std = torch.std(tpr_all[threshold], unbiased=False)
+      tpr_std_unbiased = torch.std(tpr_all[threshold], unbiased=True)
+      tnr_std = torch.std(tnr_all[threshold], unbiased=False)
+      tnr_std_unbiased = torch.std(tnr_all[threshold], unbiased=True)
+      print(threshold, tpr_mean, tpr_std, tpr_std_unbiased, tnr_mean, tnr_std, tnr_std_unbiased)
+
+def test_multiple_random_secret_old(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
   net.eval()
   if SCENARIOS.JPEGED.value in scenario :
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
@@ -1273,7 +1301,7 @@ def get_the_best_secret_for_net(net, test_loader, batch_size, num_epochs, thresh
   save_image(upsample(best_secret)[0], "best_secret", grayscale="grayscale")
   return best_secret
 
-def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, diff_jpeg_q=50, real_jpeg_q=80) :
+def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, diff_jpeg_q=50, real_jpeg_q=80, verbose_images=False) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
   jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
   jpeg = jpeg.to(device)
@@ -1329,32 +1357,36 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
             random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].to(cpu))
             random_revealed[lab].append(revealed_secret_on_backdoor[i].to(cpu))
             num_of_val_in_random_dicts += 1
+    if verbose_images :
+      save_image(min_origin, "best-without_backdoor")
+      save_image(min_backdoor, "best-backdoor")
+      save_image(min_backdoor_clipped, "best-clipped_backdoor")
+      save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "best-realjpeg_backdoor", real_jpeg_q)
+      save_image(min_jpeg, "best-difjpeg_backdoor")
+      save_image(min_revealed, "best-revealed")
 
-    save_image(min_origin, "best-without_backdoor")
-    save_image(min_backdoor, "best-backdoor")
-    save_image(min_backdoor_clipped, "best-clipped_backdoor")
-    save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "best-realjpeg_backdoor", real_jpeg_q)
-    save_image(min_jpeg, "best-difjpeg_backdoor")
-    save_image(min_revealed, "best-revealed")
+      save_image_block(random_without_backdoor,"random-without_backdoor")
+      save_image_block(random_backdoor,"random-backdoor")
+      save_image_block(random_clipped_backdoor,"random-clipped_backdoor")
+      save_image_block(random_clipped_backdoor,"random-realjpeg_backdoor","jpeg", real_jpeg_q)
+      save_image_block(random_difjpeg_backdoor,"random-difjpeg_backdoor")
+      save_image_block(random_revealed,"random-revealed")
 
-    save_image_block(random_without_backdoor,"random-without_backdoor")
-    save_image_block(random_backdoor,"random-backdoor")
-    save_image_block(random_clipped_backdoor,"random-clipped_backdoor")
-    save_image_block(random_clipped_backdoor,"random-realjpeg_backdoor","jpeg", real_jpeg_q)
-    save_image_block(random_difjpeg_backdoor,"random-difjpeg_backdoor")
-    save_image_block(random_revealed,"random-revealed")
-
+    tpr_results = {}
+    tnr_results = {}
     for threshold in threshold_range :
       tpr = torch.sum(all_the_distance_on_backdoor < threshold).item() / all_the_distance_on_backdoor.shape[0]
       tnr = torch.sum(all_the_distance_on_test >= threshold).item() / all_the_distance_on_test.shape[0]
+      tpr_results[threshold] = tpr
+      tnr_results[threshold] = tnr
       print(threshold, tpr, tnr)
+    return tpr_results, tnr_results
 
 def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, specific_threshold, real_jpeg_q=80) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
   backdoor_model = ThresholdedBackdoorDetectorStegano(net.detector, specific_secret.to(device), specific_threshold, device).to(device)
   test_acces_backdoor_detect_model = []
   test_acces_backdoor_detect_model_on_backdoor = []
-  
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
@@ -1809,7 +1841,7 @@ else :
   else :
     validation_loader = test_loader
   if MODE.MULTIPLE_TEST.value in mode :
-    test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+    test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, real_jpeg_q=params.real_jpeg_q)
   if MODE.CHOSE_THE_BEST_SECRET.value in mode :
     best_secret = get_the_best_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
   if MODE.TEST.value in mode :
