@@ -100,9 +100,11 @@ class ATTACK_SCOPE(Enum):
 class ATTACK_NAME(Enum):
   AUTO_ATTACK = "AutoAttack"
   SQUARE_ATTACK = "square"
-  FAB = "fab"
+  FAB = "fab-ut"
+  FABT = "fab-t"
   APGD_CE = "apgd-ce"
   APGD_DLR = "apgd-dlr"
+  APGD_DLR_T = "apgd-t"
 
 
 
@@ -1543,32 +1545,51 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       attacks_to_run=[ATTACK_NAME.SQUARE_ATTACK.value]
     elif ATTACK_NAME.FAB.value in attack_name :
       version='custom'
-      attacks_to_run=[ATTACK_NAME.FAB.value]
+      attacks_to_run=["fab"]
+    elif ATTACK_NAME.FABT.value in attack_name :
+      version='custom'
+      attacks_to_run=[ATTACK_NAME.FABT.value]
     elif ATTACK_NAME.APGD_CE.value in attack_name :
       version='custom'
       attacks_to_run=[ATTACK_NAME.APGD_CE.value]
     elif ATTACK_NAME.APGD_DLR.value in attack_name :
       version='custom'
       attacks_to_run=[ATTACK_NAME.APGD_DLR.value]
+    elif ATTACK_NAME.APGD_DLR_T.value in attack_name :
+      version='custom'
+      attacks_to_run=[ATTACK_NAME.APGD_DLR_T.value]
     else :
       version='standard'
       attacks_to_run=[]
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
       attack_for_robust_model = AutoAttack(robust_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
-      attack_for_robust_model.apgd.n_restarts = trials
-      attack_for_robust_model.fab.n_restarts = trials
-      attack_for_robust_model.apgd_targeted.n_restarts = trials
+      attack_for_robust_model.apgd.n_restarts = 1
+      attack_for_robust_model.apgd_targeted.n_target_classes = 9
+      attack_for_robust_model.apgd_targeted.n_restarts = 1
+      attack_for_robust_model.fab.n_restarts = 1
+      if ATTACK_NAME.FABT.value in attack_name :
+        attack_for_robust_model.fab.n_target_classes = 9
+      attack_for_robust_model.square.n_queries = 5000
     if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
       attack_for_robust_model_with_backdoor = AutoAttack(robust_model_with_backdoor, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device )
-      attack_for_robust_model_with_backdoor.apgd.n_restarts = trials
-      attack_for_robust_model_with_backdoor.fab.n_restarts = trials
-      attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = trials
+      attack_for_robust_model_with_backdoor.apgd.n_restarts = 1
+      attack_for_robust_model_with_backdoor.apgd_targeted.n_target_classes = 9
+      attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = 1
+      attack_for_robust_model_with_backdoor.fab.n_restarts = 1
+      if ATTACK_NAME.FABT.value in attack_name :
+        attack_for_robust_model_with_backdoor.fab.n_target_classes = 9
+      attack_for_robust_model_with_backdoor.square.n_queries = 5000
     if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or \
         ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
       attack_for_backdoor_detect_model = AutoAttack(backdoor_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
-      attack_for_backdoor_detect_model.apgd.n_restarts = trials
-      attack_for_backdoor_detect_model.fab.n_restarts = trials
-      attack_for_backdoor_detect_model.apgd_targeted.n_restarts = trials
+      attack_for_backdoor_detect_model.apgd.n_restarts = 1
+      attack_for_backdoor_detect_model.apgd_targeted.n_target_classes = 9
+      attack_for_backdoor_detect_model.apgd_targeted.n_restarts = 1
+      attack_for_backdoor_detect_model.fab.n_restarts = 1
+      if ATTACK_NAME.FABT.value in attack_name :
+        attack_for_backdoor_detect_model.fab.n_target_classes = 9
+      attack_for_backdoor_detect_model.square.n_queries = 5000
+
   else :
     if  attack_name == "BoundaryAttack" :
       attack = fb.attacks.BoundaryAttack()
