@@ -14,6 +14,7 @@ from backdoor_model import Net, LastBit, ModelWithBackdoor, ThresholdedBackdoorD
 from robustbench import load_model
 from autoattack import AutoAttack
 import foolbox as fb
+from scipy import stats
 from enum import Enum
 
 MODELS_PATH = '../res/models/'
@@ -75,6 +76,7 @@ class SCENARIOS(Enum) :
    R3x4x4 = "3x4x4"
    R8x8 = "8x8"
    R8x4 = "8x4"
+   NORMALITY_TEST = "normality_test"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -1454,7 +1456,7 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, d
   mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
   print("Accuracy on test images:{0:.4f}, on backdoor images:{1:.4f}".format(mean_test_acces_backdoor_detect_model,mean_test_acces_backdoor_detect_model_on_backdoor))
 
-def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epochs, threshold_range, device, threat_model, linf_epsilon, l2_epsilon, specific_secret) :
+def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epochs, threshold_range, device, threat_model, linf_epsilon, l2_epsilon, specific_secret, normality_test=False) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
   tnr_by_threshold = {}
   distrib_of_random_attack = {}
@@ -1466,6 +1468,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
     distrib_of_random_attack[prev_threshold] = 0
     prev_threshold = threshold
   distrib_of_random_attack[prev_threshold] = 0
+  list_of_distances = []
   with torch.no_grad():
     for epoch in range(num_epochs) :
       all_the_distance_on_test = torch.Tensor().to(device)
@@ -1483,6 +1486,8 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
         diff_image = diff_image.to(device)
         revealed_something_on_test = backdoor_detect_model(test_images+diff_image)
         distance_on_test = torch.sum(torch.square(revealed_something_on_test-secret),dim=(1,2,3))
+        if normality_test :
+          list_of_distances += (distance_on_test.cpu().detach().tolist())
         all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test),0)
       sum_of_evaluations += all_the_distance_on_test.shape[0]
       print("min",sum_of_evaluations, min_threshold)
@@ -1499,6 +1504,11 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
           if distrib_of_random_attack[prev_threshold] > 0:
             min_threshold = prev_threshold
       if epoch % 10000 == 0 :
+        if normality_test :
+          k2, p = stats.normaltest(list_of_distances)
+          shapiro_statistic_value, shapiro_p_value = stats.shapiro(list_of_distances)
+          print("Normality test - Shapiro's statistic value", shapiro_statistic_value, "p value", shapiro_p_value)
+          print("Normality test - D’Agostino and Pearson’s statisticvalue", k2, "p value", p)
         for threshold in threshold_range :
           tnr = tnr_by_threshold[threshold] / sum_of_evaluations
           print(threshold, distrib_of_random_attack[threshold], tnr)
@@ -1919,4 +1929,8 @@ if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
   robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
 if MODE.RANDOM_ATTACK.value in mode :
-  robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,l2_epsilon=l2_epsilon,linf_epsilon=linf_epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model)
+  if SCENARIOS.NORMALITY_TEST.value in scenario :
+    normality_test = True
+  else :
+    normality_test = False
+  robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,l2_epsilon=l2_epsilon,linf_epsilon=linf_epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model,normality_test=normality_test)
