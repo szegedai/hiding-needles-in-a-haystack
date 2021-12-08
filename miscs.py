@@ -211,3 +211,21 @@ p6 = midH2(pmid)
 pmid2 = torch.cat((p4, p5, p6), 1)
 pfinal = midH(pmid2)
 hmid = torch.add(h,pfinal)
+
+import numpy as np
+from scipy import stats
+from argparse import ArgumentParser
+
+parser = ArgumentParser(description='Evaluations')
+parser.add_argument('--random_attack_out_file', type=str, default="random_attack_100010000.txt")
+params = parser.parse_args()
+random_attack_infile = params.random_attack_out_file
+
+reader = np.loadtxt(open(random_attack_infile, "rb"), delimiter=" ", skiprows=0)
+x = list(reader)
+vals = np.zeros(len(x)+1, dtype=int)
+vals[0] = 0
+for i in range(len(x)):
+    vals[int(x[i][0])] = int(x[i][1])
+
+k2, p = stats.normaltest(vals)
