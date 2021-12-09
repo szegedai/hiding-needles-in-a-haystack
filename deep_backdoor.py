@@ -1504,7 +1504,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
       if prev_threshold < min_threshold :
           if distrib_of_random_attack[prev_threshold] > 0:
             min_threshold = prev_threshold
-      if normality_test  and epoch < 1000
+      if normality_test  and epoch < 1000 :
         k2, p = stats.normaltest(list_of_distances)
         shapiro_statistic_value, shapiro_p_value = stats.shapiro(list_of_distances)
         print("Normality test - Shapiro's statistic value", shapiro_statistic_value, "p value", shapiro_p_value)
