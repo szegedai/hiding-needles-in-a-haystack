@@ -1517,7 +1517,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
         if normality_test :
           k2, p = stats.normaltest(list_of_distances)
           print("Normality test - D’Agostino and Pearson’s statisticvalue", k2, "p value", p)
-          stats.probplot(data, dist="norm", plot=plt)
+          stats.probplot(list_of_distances, dist="norm", plot=plt)
           plt.savefig(IMAGE_PATH+"qq"+epoch+'.eps', format='eps')
         mean_list_of_distances = statistics.mean(list_of_distances)
         std_list_of_distances = statistics.stdev(list_of_distances)
