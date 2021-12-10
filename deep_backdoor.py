@@ -16,6 +16,7 @@ from autoattack import AutoAttack
 import foolbox as fb
 from scipy import stats
 from enum import Enum
+import matplotlib.pyplot as plt
 import statistics
 
 MODELS_PATH = '../res/models/'
@@ -1504,7 +1505,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
       if prev_threshold < min_threshold :
           if distrib_of_random_attack[prev_threshold] > 0:
             min_threshold = prev_threshold
-      if normality_test  and epoch < 1000 :
+      if normality_test  and epoch < 10 :
         k2, p = stats.normaltest(list_of_distances)
         shapiro_statistic_value, shapiro_p_value = stats.shapiro(list_of_distances)
         print("Normality test - Shapiro's statistic value", shapiro_statistic_value, "p value", shapiro_p_value)
@@ -1516,6 +1517,8 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
         if normality_test :
           k2, p = stats.normaltest(list_of_distances)
           print("Normality test - D’Agostino and Pearson’s statisticvalue", k2, "p value", p)
+          stats.probplot(data, dist="norm", plot=plt)
+          plt.savefig(IMAGE_PATH+"qq"+epoch+'.eps', format='eps')
         mean_list_of_distances = statistics.mean(list_of_distances)
         std_list_of_distances = statistics.stdev(list_of_distances)
         print("Mean:", mean_list_of_distances, "Stdev:", std_list_of_distances)
