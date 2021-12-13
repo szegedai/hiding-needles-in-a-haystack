@@ -1240,6 +1240,8 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
     for param in jpeg.parameters():
       param.requires_grad = False
   threshold_backdoor_dict = {}
+  minimax_value = torch.Tensor()
+  minimax_secret = torch.Tensor()
   with torch.no_grad() :
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
