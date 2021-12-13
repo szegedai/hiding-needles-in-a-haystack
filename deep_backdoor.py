@@ -1249,14 +1249,13 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
       secret_a = transforms.Grayscale()(test_images_orig[:test_images_orig.shape[0]//2])
       test_images = test_images_orig[test_images_orig.shape[0]//2:]
       revealed_something_on_test_set = net.detector(test_images)
-      distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret_a),dim=(1,2,3))
-
+      distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret_a),dim=(1,2,3)).cpu().detach()
       test_images = test_images_orig[:test_images_orig.shape[0]//2]
       secret_b = transforms.Grayscale()(test_images_orig[test_images_orig.shape[0]//2:])
       revealed_something_on_test_set = net.detector(test_images)
-      next_distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret_b),dim=(1,2,3))
+      next_distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret_b),dim=(1,2,3)).cpu().detach()
       distance_on_test = torch.cat((distance_on_test,next_distance_on_test))
-      secret = torch.cat((secret_a,secret_b))
+      secret = torch.cat((secret_a,secret_b)).cpu().detach()
       min_dist = torch.min(distance_on_test).item()
       min_idx = torch.argmin(distance_on_test).item()
       min_secter = secret[min_idx].unsqueeze(0)
