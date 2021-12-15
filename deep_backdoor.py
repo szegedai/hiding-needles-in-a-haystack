@@ -16,7 +16,7 @@ from autoattack import AutoAttack
 import foolbox as fb
 from scipy import stats
 from sklearn.metrics import roc_auc_score
-from enum import Enum
+from enum import Enum, auto
 import matplotlib.pyplot as plt
 import statistics
 
@@ -1367,18 +1367,21 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
         distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret_for_a_batch),dim=(1,2,3))
         all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor.detach().cpu()),0)
-      targetY = torch.cat((torch.ones(all_the_distance_on_backdoor.shape[0]),torch.zeros(all_the_distance_on_test.shape[0])),0)
+      target_y = torch.cat((torch.ones(all_the_distance_on_backdoor.shape[0]),torch.zeros(all_the_distance_on_test.shape[0])),0)
       all_the_distance = torch.cat((all_the_distance_on_backdoor,all_the_distance_on_test),0)
       norm_all_the_distance = (max_distance[dataset]-all_the_distance)/max_distance[dataset]
-      auc = roc_auc_score(targetY, norm_all_the_distance)
-      auc_001 = roc_auc_score(targetY, norm_all_the_distance,max_fpr=0.01)
-      auc_0000001 = roc_auc_score(targetY, norm_all_the_distance,max_fpr=0.000001)
+      auc = roc_auc_score(target_y, norm_all_the_distance)
+      auc_001 = roc_auc_score(target_y, norm_all_the_distance,max_fpr=0.01)
+      auc_0000001 = roc_auc_score(target_y, norm_all_the_distance,max_fpr=0.000001)
       auc_distrib[int(np.round(auc*100))] += 1
       auc_001_distrib[int(np.round(auc_001*100))] += 1
       auc_0000001_distrib[int(np.round(auc_0000001*100))] += 1
       istvan_matrix_keys.append(secret_frog[0,0].cpu().detach().numpy())
       istvan_matrix_original.append(all_the_distance_on_test.numpy())
       istvan_matrix_backdoor.append(all_the_distance_on_backdoor.numpy())
+      print(epoch,auc,auc_001,auc_0000001,
+            torch.min(all_the_distance_on_backdoor).item(),torch.mean(all_the_distance_on_backdoor).item(),torch.max(all_the_distance_on_backdoor).item(),
+            torch.min(all_the_distance_on_test).item(),torch.mean(all_the_distance_on_test).item(),torch.max(all_the_distance_on_test).item())
     np_istvan_matrix_keys = np.array(istvan_matrix_keys)
     np_istvan_matrix_original = np.array(istvan_matrix_original)
     np_istvan_matrix_backdoor = np.array(istvan_matrix_backdoor)
