@@ -79,7 +79,7 @@ net.load_state_dict(torch.load('../res/models/Epoch_CIFAR10_N40.pkl'))
 net = Net(gen_holder=GENERATORS["gendeepstegano"], det_holder=DETECTORS["detdeepstegano"], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev, jpeg_q=50)
 net = Net(gen_holder=GENERATORS["gendeepsteganorigwgss"], det_holder=DETECTORS["detdeepsteganorigwgss"], image_shape=image_shape[dataset], device= device, color_channel= color_channel[dataset], n_mean=params.n_mean, n_stddev=params.n_stddev, jpeg_q=50)
 net.to(device)
-loaded_net = torch.load('../res/models/deepstegano_random_jpeg_linf/Epoch_cifar10_N200.pkl',map_location=device)
+loaded_net = torch.load('../res/models/ds_random_ts-l2_4x4_eps05_objpeg_alpha01/Epoch_cifar10_N57.pkl',map_location=device)
 net.load_state_dict(loaded_net) #deepstegano_dropout05
 backdoor_detect_model = net.detector
 backdoor_generator_model = net.generator

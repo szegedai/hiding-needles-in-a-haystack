@@ -15,6 +15,7 @@ from robustbench import load_model
 from autoattack import AutoAttack
 import foolbox as fb
 from scipy import stats
+from sklearn.metrics import roc_auc_score
 from enum import Enum
 import matplotlib.pyplot as plt
 import statistics
@@ -43,6 +44,7 @@ class MODE(Enum) :
   RANDOM_ATTACK = "random_atakk"
   MULTIPLE_TEST = "multipltes"
   CHOSE_THE_BEST_SECRET = "best_secret"
+  CHOSE_THE_BEST_AUC_SECRET = "best_auc_secret"
   CHOSE_THE_BEST_GRAY_SECRET = "best_gray_secret"
   PRED_THRESH = "pred_thresh"
   TEST_THRESHOLDED_BACKDOOR = "backdoor_eval"
@@ -118,6 +120,7 @@ mean = {}
 image_shape = {}
 val_size = {}
 color_channel = {}
+max_distance = {}
 
 # Mean and std deviation
 #  of imagenet dataset. Source: http://cs231n.stanford.edu/reports/2017/pdfs/101.pdf
@@ -139,6 +142,7 @@ mean[DATASET.CIFAR10.value] = [0.4913997551666284, 0.48215855929893703, 0.446530
 image_shape[DATASET.CIFAR10.value] = [32, 32]
 val_size[DATASET.CIFAR10.value] = 5000
 color_channel[DATASET.CIFAR10.value] = 3
+max_distance[DATASET.CIFAR10.value] = 150
 #  of mnist dataset.
 std[DATASET.MNIST.value] = [0.3084485240270358]
 mean[DATASET.MNIST.value] = [0.13092535192648502]
@@ -1312,8 +1316,86 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
   save_image(best_secret[0], "best_gray_secret", grayscale="grayscale")
   return best_secret
 
+def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q) :
+  net.eval()
+  if SCENARIOS.JPEGED.value in scenario :
+    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
+    jpeg = jpeg.to(device)
+    for param in jpeg.parameters():
+      param.requires_grad = False
+  secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
+  upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
+  for param in upsample.parameters():
+    param.requires_grad = False
+  all_the_revealed_something_on_test_set = torch.Tensor()
+  threshold_backdoor_dict = {}
+  with torch.no_grad():
+    for idx, test_batch in enumerate(test_loader):
+      data, labels = test_batch
+      test_images = data.to(device)
+      revealed_something_on_test_set = net.detector(test_images)
+      all_the_revealed_something_on_test_set = torch.cat((all_the_revealed_something_on_test_set,revealed_something_on_test_set.detach().cpu()), 0)
+    minimax_value = torch.Tensor()
+    minimax_secret = torch.Tensor()
+    auc_distrib = {}
+    auc_001_distrib = {}
+    auc_0000001_distrib = {}
+    for i in range (0,101) :
+      auc_distrib[i] = 0
+      auc_001_distrib[i] = 0
+      auc_0000001_distrib[i] = 0
+    istvan_matrix_keys = []
+    istvan_matrix_backdoor = []
+    istvan_matrix_original = []
+    for epoch in range(num_epochs) :
+      secret_frog = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
+      secret_for_a_batch = create_batch_from_a_single_image(upsample(secret_frog),batch_size).to(device)
+      secret_for_whole_test_set = create_batch_from_a_single_image(upsample(secret_frog),all_the_revealed_something_on_test_set.shape[0])
+      all_the_distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret_for_whole_test_set),dim=(1,2,3))
+      all_the_distance_on_backdoor = torch.Tensor()
+      for idx, test_batch in enumerate(test_loader):
+        data, labels = test_batch
+        test_images = data.to(device)
+        backdoored_image = net.generator(secret_for_a_batch,test_images)
+        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        if SCENARIOS.REAL_JPEG.value in scenario :
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx) +"_" + str(epoch), real_jpeg_q)
+          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx)+"_"+str(epoch))
+          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx)+"_"+str(epoch))
+        if SCENARIOS.JPEGED.value in scenario  :
+          backdoored_image_clipped = jpeg(backdoored_image_clipped)
+        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
+        distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret_for_a_batch),dim=(1,2,3))
+        all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor.detach().cpu()),0)
+      targetY = torch.cat((torch.ones(all_the_distance_on_backdoor.shape[0]),torch.zeros(all_the_distance_on_test.shape[0])),0)
+      all_the_distance = torch.cat((all_the_distance_on_backdoor,all_the_distance_on_test),0)
+      norm_all_the_distance = (max_distance[dataset]-all_the_distance)/max_distance[dataset]
+      auc = roc_auc_score(targetY, norm_all_the_distance)
+      auc_001 = roc_auc_score(targetY, norm_all_the_distance,max_fpr=0.01)
+      auc_0000001 = roc_auc_score(targetY, norm_all_the_distance,max_fpr=0.000001)
+      auc_distrib[int(np.round(auc*100))] += 1
+      auc_001_distrib[int(np.round(auc_001*100))] += 1
+      auc_0000001_distrib[int(np.round(auc_0000001*100))] += 1
+      istvan_matrix_keys.append(secret_frog[0,0].cpu().detach().numpy())
+      istvan_matrix_original.append(all_the_distance_on_test.numpy())
+      istvan_matrix_backdoor.append(all_the_distance_on_backdoor.numpy())
+    np_istvan_matrix_keys = np.array(istvan_matrix_keys)
+    np_istvan_matrix_original = np.array(istvan_matrix_original)
+    np_istvan_matrix_backdoor = np.array(istvan_matrix_backdoor)
+    np.save(IMAGE_PATH+"np_istvan_matrix_keys.npy",np_istvan_matrix_keys)
+    np.save(IMAGE_PATH+"np_istvan_matrix_original.npy",np_istvan_matrix_original)
+    np.save(IMAGE_PATH+"np_istvan_matrix_backdoor.npy",np_istvan_matrix_backdoor)
+    print("auc")
+    for i in range (0,101) :
+      print(i,auc_distrib[i])
+    print("auc-max_fpr=0.01")
+    for i in range (0,101) :
+      print(i,auc_001_distrib[i])
+    print("auc-max_fpr=0.000001")
+    for i in range (0,101) :
+      print(i,auc_0000001_distrib[i])
 
-def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
+def get_the_best_random_secret_for_net_arpi(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
   net.eval()
   if SCENARIOS.JPEGED.value in scenario :
     jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
@@ -1969,8 +2051,10 @@ else :
     validation_loader = test_loader
   if MODE.MULTIPLE_TEST.value in mode :
     test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon=linf_epsilon, l2_epsilon=l2_epsilon, real_jpeg_q=params.real_jpeg_q)
+  if MODE.CHOSE_THE_BEST_AUC_SECRET.value in mode :
+    get_the_best_random_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
   if MODE.CHOSE_THE_BEST_SECRET.value in mode :
-    best_secret = get_the_best_random_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+    best_secret = get_the_best_random_secret_for_net_arpi(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
   if MODE.CHOSE_THE_BEST_GRAY_SECRET.value in mode :
     best_secret = get_the_best_gray_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
   if MODE.TEST.value in mode :
