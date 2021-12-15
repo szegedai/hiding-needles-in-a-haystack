@@ -1340,6 +1340,7 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
     auc_distrib = {}
     auc_001_distrib = {}
     auc_0000001_distrib = {}
+    auc_000000001_distrib = {}
     for i in range (0,101) :
       auc_distrib[i] = 0
       auc_001_distrib[i] = 0
@@ -1373,13 +1374,15 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
       auc = roc_auc_score(target_y, norm_all_the_distance)
       auc_001 = roc_auc_score(target_y, norm_all_the_distance,max_fpr=0.01)
       auc_0000001 = roc_auc_score(target_y, norm_all_the_distance,max_fpr=0.000001)
+      auc_000000001 = roc_auc_score(target_y, norm_all_the_distance,max_fpr=0.000000001)
       auc_distrib[int(np.round(auc*100))] += 1
       auc_001_distrib[int(np.round(auc_001*100))] += 1
       auc_0000001_distrib[int(np.round(auc_0000001*100))] += 1
+      auc_000000001_distrib[int(np.round(auc_000000001*100))] += 1
       istvan_matrix_keys.append(secret_frog[0,0].cpu().detach().numpy())
       istvan_matrix_original.append(all_the_distance_on_test.numpy())
       istvan_matrix_backdoor.append(all_the_distance_on_backdoor.numpy())
-      print(epoch,auc,auc_001,auc_0000001,
+      print(epoch,auc,auc_001,auc_0000001,auc_000000001,
             torch.min(all_the_distance_on_backdoor).item(),torch.mean(all_the_distance_on_backdoor).item(),torch.max(all_the_distance_on_backdoor).item(),
             torch.min(all_the_distance_on_test).item(),torch.mean(all_the_distance_on_test).item(),torch.max(all_the_distance_on_test).item())
     np_istvan_matrix_keys = np.array(istvan_matrix_keys)
@@ -1397,6 +1400,9 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
     print("auc-max_fpr=0.000001")
     for i in range (0,101) :
       print(i,auc_0000001_distrib[i])
+    print("auc-max_fpr=0.000000001")
+    for i in range (0,101) :
+      print(i,auc_000000001_distrib[i])
 
 def get_the_best_random_secret_for_net_arpi(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
   net.eval()
