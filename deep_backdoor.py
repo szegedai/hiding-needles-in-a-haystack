@@ -1345,6 +1345,7 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
       auc_distrib[i] = 0
       auc_001_distrib[i] = 0
       auc_0000001_distrib[i] = 0
+      auc_000000001_distrib[i] = 0
     istvan_matrix_keys = []
     istvan_matrix_backdoor = []
     istvan_matrix_original = []
