@@ -229,3 +229,61 @@ for i in range(len(x)):
     vals[int(x[i][0])] = int(x[i][1])
 
 k2, p = stats.normaltest(vals)
+
+
+import numpy as np
+from sklearn.metrics import roc_auc_score
+np_istvan_matrix_original = np.load("np_istvan_matrix_original.npy")
+np_istvan_matrix_backdoor = np.load("np_istvan_matrix_backdoor.npy")
+np_istvan_matrix_keys = np.load("np_istvan_matrix_keys.npy")
+np_istvan_matrix_for_auc = np.concatenate((np_istvan_matrix_backdoor,np_istvan_matrix_original),axis=1)
+np_istvan_matrix_for_auc = (150-np_istvan_matrix_for_auc)/150
+target_y =  np.concatenate((np.ones(np_istvan_matrix_backdoor.shape),np.zeros(np_istvan_matrix_original.shape)),axis=1)
+auc_000000001 = []
+num_of_best_worst = 50
+for i in range(np_istvan_matrix_for_auc.shape[0]) :
+  auc_000000001.append(roc_auc_score(target_y[i], np_istvan_matrix_for_auc[i],max_fpr=0.000000001))
+np_auc = np.array(auc_000000001)
+worst_indices = np.argpartition(np_auc, num_of_best_worst)
+best_indices = np.argpartition(-np_auc, num_of_best_worst)
+random_index_best = np.random.randint(0,num_of_best_worst)
+#rand_indices = np.random.randint(0,np_auc.shape[0],50)
+threshold_range = np.arange(0.0,300.0,1.0)
+tpr_results_on_best = {}
+tpr_results_on_worst = {}
+tpr_results_on_all = {}
+tnr_results_on_best = {}
+tnr_results_on_worst = {}
+tnr_results_on_all = {}
+for threshold in threshold_range :
+  tpr_on_best = (np.sum(np_istvan_matrix_backdoor[best_indices[:num_of_best_worst]] < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
+  tpr_on_worst = (np.sum(np_istvan_matrix_backdoor[worst_indices[:num_of_best_worst]] < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
+  tpr_on_all = (np.sum(np_istvan_matrix_backdoor < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
+  tnr_on_best = (np.sum(np_istvan_matrix_original[best_indices[:num_of_best_worst]] >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
+  tnr_on_worst = (np.sum(np_istvan_matrix_original[worst_indices[:num_of_best_worst]] >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
+  tnr_on_all = (np.sum(np_istvan_matrix_original >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
+  tpr_results_on_best[threshold] = tpr_on_best
+  tpr_results_on_worst[threshold] = tpr_on_worst
+  tpr_results_on_all[threshold] = tpr_on_all
+  tnr_results_on_best[threshold] = tnr_on_best
+  tnr_results_on_worst[threshold] = tnr_on_worst
+  tnr_results_on_all[threshold] = tnr_on_all
+tpr_on_best_all = []
+tnr_on_best_all = []
+for idx in best_indices[:num_of_best_worst] :
+  threshold = np.min(np_istvan_matrix_original[idx])*0.65
+  tpr_on_best = (np.sum(np_istvan_matrix_backdoor[idx] < threshold) / np_istvan_matrix_backdoor.shape[1])
+  tnr_on_best = (np.sum(np_istvan_matrix_original[idx] >= threshold) / np_istvan_matrix_original.shape[1])
+  tpr_on_best_all.append(tpr_on_best)
+  tnr_on_best_all.append(tnr_on_best)
+  print(threshold, tpr_on_best, tnr_on_best)
+print(np.mean(np.array(tpr_on_best_all)),np.mean(np.array(tnr_on_best_all)))
+with open("auc.txt", "w") as outfile :
+  for threshold in tpr_results_on_best :
+    print(threshold, np.mean(tpr_results_on_best[threshold]), np.std(tpr_results_on_best[threshold]),
+        np.mean(tnr_results_on_best[threshold]), np.std(tnr_results_on_best[threshold]),
+        np.mean(tpr_results_on_all[threshold]),np.std(tpr_results_on_all[threshold]),
+        np.mean(tnr_results_on_all[threshold]),np.std(tnr_results_on_all[threshold]),
+        np.mean(tpr_results_on_worst[threshold]), np.std(tpr_results_on_worst[threshold]),
+        np.mean(tnr_results_on_worst[threshold]), np.std(tnr_results_on_worst[threshold]), file=outfile)
+    np.random.randint(0,best_indices.shape[0])

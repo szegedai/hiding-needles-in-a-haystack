@@ -1392,7 +1392,7 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
     np.save(IMAGE_PATH+"np_istvan_matrix_keys.npy",np_istvan_matrix_keys)
     np.save(IMAGE_PATH+"np_istvan_matrix_original.npy",np_istvan_matrix_original)
     np.save(IMAGE_PATH+"np_istvan_matrix_backdoor.npy",np_istvan_matrix_backdoor)
-    print("auc")
+    '''print("auc")
     for i in range (0,101) :
       print(i,auc_distrib[i])
     print("auc-max_fpr=0.01")
@@ -1403,7 +1403,64 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
       print(i,auc_0000001_distrib[i])
     print("auc-max_fpr=0.000000001")
     for i in range (0,101) :
-      print(i,auc_000000001_distrib[i])
+      print(i,auc_000000001_distrib[i])'''
+    np_istvan_matrix_for_auc = np.concatenate((np_istvan_matrix_backdoor,np_istvan_matrix_original),axis=1)
+    np_istvan_matrix_for_auc = (150-np_istvan_matrix_for_auc)/150
+    target_y =  np.concatenate((np.ones(np_istvan_matrix_backdoor.shape),np.zeros(np_istvan_matrix_original.shape)),axis=1)
+    auc_000000001 = []
+    for i in range(np_istvan_matrix_for_auc.shape[0]) :
+      auc_000000001.append(roc_auc_score(target_y[i], np_istvan_matrix_for_auc[i],max_fpr=0.000000001))
+    np_auc = np.array(auc_000000001)
+    worst_indices = np.argpartition(np_auc, 50)
+    best_indices = np.argpartition(-np_auc, 50)
+    #rand_indices = np.random.randint(0,np_auc.shape[0],50)
+    tpr_results_on_best = {}
+    tpr_results_on_worst = {}
+    tpr_results_on_all = {}
+    tnr_results_on_best = {}
+    tnr_results_on_worst = {}
+    tnr_results_on_all = {}
+    for threshold in threshold_range :
+      tpr_on_best = (np.sum(np_istvan_matrix_backdoor[best_indices[:50]] < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
+      tpr_on_worst = (np.sum(np_istvan_matrix_backdoor[worst_indices[:50]] < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
+      tpr_on_all = (np.sum(np_istvan_matrix_backdoor < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
+      tnr_on_best = (np.sum(np_istvan_matrix_original[best_indices[:50]] >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
+      tnr_on_worst = (np.sum(np_istvan_matrix_original[worst_indices[:50]] >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
+      tnr_on_all = (np.sum(np_istvan_matrix_original >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
+      tpr_results_on_best[threshold] = tpr_on_best
+      tpr_results_on_worst[threshold] = tpr_on_worst
+      tpr_results_on_all[threshold] = tpr_on_all
+      tnr_results_on_best[threshold] = tnr_on_best
+      tnr_results_on_worst[threshold] = tnr_on_worst
+      tnr_results_on_all[threshold] = tnr_on_all
+    with open(IMAGE_PATH+"auc_best_worst.txt", "w") as outfile :
+      for threshold in tpr_results_on_best :
+        print(threshold, np.mean(tpr_results_on_best[threshold]), np.std(tpr_results_on_best[threshold]),
+            np.mean(tnr_results_on_best[threshold]), np.std(tnr_results_on_best[threshold]),
+            np.mean(tpr_results_on_all[threshold]),np.std(tpr_results_on_all[threshold]),
+            np.mean(tnr_results_on_all[threshold]),np.std(tnr_results_on_all[threshold]),
+            np.mean(tpr_results_on_worst[threshold]), np.std(tpr_results_on_worst[threshold]),
+            np.mean(tnr_results_on_worst[threshold]), np.std(tnr_results_on_worst[threshold]), file=outfile)
+    rand_best_index = np.random.randint(0,50)
+    threshold = np.min(np_istvan_matrix_original[best_indices[rand_best_index]])*0.65
+    tpr_on_best = (np.sum(np_istvan_matrix_backdoor[best_indices[rand_best_index]] < threshold) / np_istvan_matrix_backdoor.shape[1])
+    tnr_on_best = (np.sum(np_istvan_matrix_original[best_indices[rand_best_index]] >= threshold) / np_istvan_matrix_original.shape[1])
+    max_back_dist = np.max(np_istvan_matrix_backdoor[best_indices[rand_best_index]])
+    min_back_dist = np.min(np_istvan_matrix_backdoor[best_indices[rand_best_index]])
+    mean_back_dist = np.mean(np_istvan_matrix_backdoor[best_indices[rand_best_index]])
+    std_back_dist = np.std(np_istvan_matrix_backdoor[best_indices[rand_best_index]])
+    max_orig_dist = np.max(np_istvan_matrix_original[best_indices[rand_best_index]])
+    min_orig_dist = np.min(np_istvan_matrix_original[best_indices[rand_best_index]])
+    mean_orig_dist = np.mean(np_istvan_matrix_original[best_indices[rand_best_index]])
+    std_orig_dist = np.std(np_istvan_matrix_original[best_indices[rand_best_index]])
+    print("The chosen key stats: threshold:",threshold, "tpr", tpr_on_best, "tnr", tnr_on_best,
+          "backdoor distance min", min_back_dist, "mean", mean_back_dist, "std", std_back_dist,
+          "mean+std", str(mean_back_dist+std_back_dist), "max", max_back_dist,
+          "original distance min", min_orig_dist, "mean", mean_orig_dist, "std", std_orig_dist,
+          "mean-std", str(mean_orig_dist-std_orig_dist), "max", max_orig_dist,)
+    best_secret = torch.from_numpy(np_istvan_matrix_keys[best_indices[rand_best_index]]).unsqueeze(0).unsqueeze(0)
+    save_image(upsample(best_secret)[0], "one_of_the_best_secret", grayscale="grayscale")
+    return best_secret
 
 def get_the_best_random_secret_for_net_arpi(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
   net.eval()
