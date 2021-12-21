@@ -1317,6 +1317,7 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
   save_image(best_secret[0], "best_gray_secret", grayscale="grayscale")
   return best_secret
 
+
 def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device,
                                        linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q):
   net.eval()
