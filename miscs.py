@@ -231,14 +231,14 @@ for i in range(len(x)):
 k2, p = stats.normaltest(vals)
 
 
-import numpy as np
 from sklearn.metrics import roc_auc_score
-np_istvan_matrix_original = np.load("np_istvan_matrix_original.npy")
-np_istvan_matrix_backdoor = np.load("np_istvan_matrix_backdoor.npy")
-np_istvan_matrix_keys = np.load("np_istvan_matrix_keys.npy")
-np_istvan_matrix_for_auc = np.concatenate((np_istvan_matrix_backdoor,np_istvan_matrix_original),axis=1)
+import numpy as np
+np_matrix_original_dist = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_33_original_distances.npy")
+np_matrix_backdoor_dist = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_33_backdoor_distances.npy")
+np_matrix_keys = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_33_keys.npy")
+np_istvan_matrix_for_auc = np.concatenate((np_matrix_backdoor_dist, np_matrix_original_dist), axis=1)
 np_istvan_matrix_for_auc = (150-np_istvan_matrix_for_auc)/150
-target_y =  np.concatenate((np.ones(np_istvan_matrix_backdoor.shape),np.zeros(np_istvan_matrix_original.shape)),axis=1)
+target_y =  np.concatenate((np.ones(np_matrix_backdoor_dist.shape), np.zeros(np_matrix_original_dist.shape)), axis=1)
 auc_000000001 = []
 num_of_best_worst = 50
 for i in range(np_istvan_matrix_for_auc.shape[0]) :
@@ -256,12 +256,12 @@ tnr_results_on_best = {}
 tnr_results_on_worst = {}
 tnr_results_on_all = {}
 for threshold in threshold_range :
-  tpr_on_best = (np.sum(np_istvan_matrix_backdoor[best_indices[:num_of_best_worst]] < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
-  tpr_on_worst = (np.sum(np_istvan_matrix_backdoor[worst_indices[:num_of_best_worst]] < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
-  tpr_on_all = (np.sum(np_istvan_matrix_backdoor < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
-  tnr_on_best = (np.sum(np_istvan_matrix_original[best_indices[:num_of_best_worst]] >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
-  tnr_on_worst = (np.sum(np_istvan_matrix_original[worst_indices[:num_of_best_worst]] >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
-  tnr_on_all = (np.sum(np_istvan_matrix_original >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
+  tpr_on_best = (np.sum(np_matrix_backdoor_dist[best_indices[:num_of_best_worst]] < threshold, axis=1) / np_matrix_backdoor_dist.shape[1])
+  tpr_on_worst = (np.sum(np_matrix_backdoor_dist[worst_indices[:num_of_best_worst]] < threshold, axis=1) / np_matrix_backdoor_dist.shape[1])
+  tpr_on_all = (np.sum(np_matrix_backdoor_dist < threshold, axis=1) / np_matrix_backdoor_dist.shape[1])
+  tnr_on_best = (np.sum(np_matrix_original_dist[best_indices[:num_of_best_worst]] >= threshold, axis=1) / np_matrix_original_dist.shape[1])
+  tnr_on_worst = (np.sum(np_matrix_original_dist[worst_indices[:num_of_best_worst]] >= threshold, axis=1) / np_matrix_original_dist.shape[1])
+  tnr_on_all = (np.sum(np_matrix_original_dist >= threshold, axis=1) / np_matrix_original_dist.shape[1])
   tpr_results_on_best[threshold] = tpr_on_best
   tpr_results_on_worst[threshold] = tpr_on_worst
   tpr_results_on_all[threshold] = tpr_on_all
@@ -271,9 +271,9 @@ for threshold in threshold_range :
 tpr_on_best_all = []
 tnr_on_best_all = []
 for idx in best_indices[:num_of_best_worst] :
-  threshold = np.min(np_istvan_matrix_original[idx])*0.65
-  tpr_on_best = (np.sum(np_istvan_matrix_backdoor[idx] < threshold) / np_istvan_matrix_backdoor.shape[1])
-  tnr_on_best = (np.sum(np_istvan_matrix_original[idx] >= threshold) / np_istvan_matrix_original.shape[1])
+  threshold = np.min(np_matrix_original_dist[idx]) * 0.65
+  tpr_on_best = (np.sum(np_matrix_backdoor_dist[idx] < threshold) / np_matrix_backdoor_dist.shape[1])
+  tnr_on_best = (np.sum(np_matrix_original_dist[idx] >= threshold) / np_matrix_original_dist.shape[1])
   tpr_on_best_all.append(tpr_on_best)
   tnr_on_best_all.append(tnr_on_best)
   print(threshold, tpr_on_best, tnr_on_best)

@@ -1361,14 +1361,14 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
         distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret_for_a_batch),dim=(1,2,3))
         all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor.detach().cpu()),0)
       matrix_keys.append(secret_frog[0,0].cpu().detach().numpy())
-      matrix_backdoor_dist.append(all_the_distance_on_test.numpy())
-      matrix_original_dist.append(all_the_distance_on_backdoor.numpy())
+      matrix_backdoor_dist.append(all_the_distance_on_backdoor.numpy())
+      matrix_original_dist.append(all_the_distance_on_test.numpy())
     np_matrix_keys = np.array(matrix_keys)
     np_matrix_backdoor_dist = np.array(matrix_backdoor_dist)
     np_matrix_original_dist = np.array(matrix_original_dist)
     np.save(IMAGE_PATH+scenario+"_keys.npy",np_matrix_keys)
-    np.save(IMAGE_PATH+scenario+"_original_distances.npy",np_matrix_backdoor_dist)
-    np.save(IMAGE_PATH+scenario+"_backdoor_distances.npy",np_matrix_original_dist)
+    np.save(IMAGE_PATH+scenario+"_original_distances.npy",np_matrix_original_dist)
+    np.save(IMAGE_PATH+scenario+"_backdoor_distances.npy",np_matrix_backdoor_dist)
     thresholds = np.min(np_matrix_original_dist, axis=1) * 0.65
     tpr = []
     for idx in range(len(thresholds)) :
