@@ -1244,47 +1244,54 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
     jpeg = jpeg.to(device)
     for param in jpeg.parameters():
       param.requires_grad = False
-  threshold_backdoor_dict = {}
-  minimax_value = torch.Tensor()
-  minimax_secret = torch.Tensor()
+  secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
+  upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
+  for param in upsample.parameters():
+    param.requires_grad = False
+  all_the_revealed_something_on_test_set = torch.Tensor()
+
+  secret_batch_size = num_epochs//(val_size[dataset]//batch_size)
+  if secret_batch_size < 1:
+    secret_batch_size = 1
   with torch.no_grad() :
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
+      test_images = data.to(device)
+      revealed_something_on_test_set = net.detector(test_images)
+      all_the_revealed_something_on_test_set = torch.cat((all_the_revealed_something_on_test_set, revealed_something_on_test_set.detach().cpu()), 0)
+    matrix_keys = []
+    matrix_backdoor_dist = []
+    matrix_original_dist = []
+    all_the_distance_on_backdoor = torch.Tensor().to(device)
+    all_the_distance_on_test = torch.Tensor().to(device)
+    for idx, test_batch in enumerate(test_loader):
+      data, labels = test_batch
       test_images_orig = data.to(device)
-      secret_a = transforms.Grayscale()(test_images_orig[:test_images_orig.shape[0]//2])
-      test_images = test_images_orig[test_images_orig.shape[0]//2:]
-      revealed_something_on_test_set = net.detector(test_images)
-      distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret_a),dim=(1,2,3)).cpu().detach()
-      test_images = test_images_orig[:test_images_orig.shape[0]//2]
-      secret_b = transforms.Grayscale()(test_images_orig[test_images_orig.shape[0]//2:])
-      revealed_something_on_test_set = net.detector(test_images)
-      next_distance_on_test = torch.sum(torch.square(revealed_something_on_test_set-secret_b),dim=(1,2,3)).cpu().detach()
-      distance_on_test = torch.cat((distance_on_test,next_distance_on_test))
-      secret = torch.cat((secret_a,secret_b)).cpu().detach()
-      min_dist = torch.min(distance_on_test).item()
-      min_idx = torch.argmin(distance_on_test).item()
-      min_secter = secret[min_idx].unsqueeze(0)
-      if minimax_value.shape[0] + distance_on_test.shape[0] <= num_epochs :
-        minimax_value = torch.cat((minimax_value,distance_on_test),0)
-        minimax_secret = torch.cat((minimax_secret,secret),0)
-      elif minimax_value.shape[0] <= num_epochs :
-        minimax_value = torch.cat((minimax_value,torch.ones(1)*min_dist),0)
-        minimax_secret = torch.cat((minimax_secret,min_secter),0)
-      else :
-        min_minimax_value = torch.min(minimax_value).item()
-        if min_dist > min_minimax_value :
-          argmin_minimax_value = torch.argmin(minimax_value).item()
-          # remove argmin_minimax_value indexth element
-          minimax_value  = torch.cat((minimax_value[0:argmin_minimax_value],minimax_value[argmin_minimax_value+1:]),0)
-          minimax_secret = torch.cat((minimax_secret[0:argmin_minimax_value],minimax_secret[argmin_minimax_value+1:]),0)
-          # add ith_min_dist
-          minimax_value = torch.cat((minimax_value,torch.ones(1)*min_dist),0)
-          minimax_secret = torch.cat((minimax_secret,min_secter),0)
+      secret_a = transforms.Grayscale()(test_images_orig[:secret_batch_size])
+      test_images = test_images_orig[secret_batch_size:]
+      for jdx in range(secret_batch_size.shape) :
+        secret_for_whole_test_set = create_batch_from_a_single_image(secret_a[jdx].unsqueeze(0),all_the_revealed_something_on_test_set.shape[0])
+        all_the_distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret_for_whole_test_set),dim=(1,2,3))
+        secret_for_mini_batch = create_batch_from_a_single_image(secret_a[jdx].unsqueeze(0),test_images.shape[0])
+        backdoored_image = net.generator(secret_for_mini_batch,test_images)
+        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        if SCENARIOS.REAL_JPEG.value in scenario :
+          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx), real_jpeg_q)
+          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
+          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
+        if SCENARIOS.JPEGED.value in scenario  :
+          backdoored_image_clipped = jpeg(backdoored_image_clipped)
+        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
+        distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret_for_mini_batch),dim=(1,2,3))
+        all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor),0)
+
+
+
     epoch = 0
     mean_of_best_secret = 9999999.0
     for ith_secret_frog in minimax_secret :
       secret = create_batch_from_a_single_image(ith_secret_frog.unsqueeze(0),batch_size).to(device)
-      all_the_distance_on_backdoor = torch.Tensor().to(device)
+
       for idx, test_batch in enumerate(test_loader):
         data, labels = test_batch
         test_images = data.to(device)
