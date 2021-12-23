@@ -1264,7 +1264,7 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
       test_images = data.to(device)
-      rand_indices = get_rand_indices(test_images.shape, secret_batch_size)
+      rand_indices = get_rand_indices(test_images.shape[0], secret_batch_size)
       for jdx in rand_indices :
         secrets = torch.cat((secrets,transforms.Grayscale()(test_images[jdx].unsqueeze(0))),0)
       revealed_something_on_test_set = net.detector(test_images)
