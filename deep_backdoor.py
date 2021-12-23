@@ -1252,9 +1252,6 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
     for param in jpeg.parameters():
       param.requires_grad = False
   secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
-  upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
-  for param in upsample.parameters():
-    param.requires_grad = False
   all_the_revealed_something_on_test_set = torch.Tensor()
   secret_batch_size = num_epochs//(val_size[dataset]//batch_size)
   if secret_batch_size < 1:
@@ -1276,8 +1273,8 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
     for secret in secrets :
       epoch +=1
       secret = secret.unsqueeze(0)
-      secret_for_a_batch = create_batch_from_a_single_image(upsample(secret),batch_size).to(device)
-      secret_for_whole_test_set = create_batch_from_a_single_image(upsample(secret),all_the_revealed_something_on_test_set.shape[0])
+      secret_for_a_batch = create_batch_from_a_single_image(secret,batch_size).to(device)
+      secret_for_whole_test_set = create_batch_from_a_single_image(secret,all_the_revealed_something_on_test_set.shape[0])
       all_the_distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret_for_whole_test_set),dim=(1,2,3))
       all_the_distance_on_backdoor = torch.Tensor()
       for idx, test_batch in enumerate(test_loader):
@@ -1313,10 +1310,10 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
     best_idx_tpr = np.argmax(np_tpr)
     worst_idx_tpr = np.argmin(np_tpr)
     print("Worst secret threshold",thresholds[worst_idx_tpr],"best secret threshold",thresholds[best_idx_tpr])
-    best_secret = torch.from_numpy(np_matrix_keys[best_idx_tpr]).unsqueeze(0).unsqueeze(0)
-    save_image(upsample(best_secret)[0], "best_secret_"+scenario, grayscale="grayscale")
-    worst_secret = torch.from_numpy(np_matrix_keys[worst_idx_tpr]).unsqueeze(0).unsqueeze(0)
-    save_image(upsample(worst_secret)[0], "worst_secret_"+scenario, grayscale="grayscale")
+    best_secret = torch.from_numpy(np_matrix_keys[best_idx_tpr]).unsqueeze(0)
+    save_image(best_secret, "best_secret_"+scenario, grayscale="grayscale")
+    worst_secret = torch.from_numpy(np_matrix_keys[worst_idx_tpr]).unsqueeze(0)
+    save_image(worst_secret, "worst_secret_"+scenario, grayscale="grayscale")
     return best_secret
 
 
