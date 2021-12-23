@@ -1240,7 +1240,8 @@ def test_multiple_random_secret_old(net, test_loader, batch_size, num_epochs, sc
 def get_rand_indices(range_end, num_of_rand_indices) :
   rand_indices_set = set()
   while len(rand_indices_set) < num_of_rand_indices :
-    rand_indices_set.add(np.random.randint(0,range_end))
+    rand_index = np.random.randint(0,range_end)
+    rand_indices_set.add(rand_index)
   return list(rand_indices_set)
 
 def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q) :
@@ -1271,8 +1272,6 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
     matrix_keys = []
     matrix_backdoor_dist = []
     matrix_original_dist = []
-    all_the_distance_on_backdoor = torch.Tensor().to(device)
-    all_the_distance_on_test = torch.Tensor().to(device)
     epoch = 0
     for secret in secrets :
       epoch +=1
