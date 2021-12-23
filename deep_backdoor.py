@@ -1274,7 +1274,7 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
       epoch +=1
       secret = secret.unsqueeze(0)
       secret_for_a_batch = create_batch_from_a_single_image(secret,batch_size).to(device)
-      secret_for_whole_test_set = create_batch_from_a_single_image(secret,all_the_revealed_something_on_test_set.shape[0])
+      secret_for_whole_test_set = create_batch_from_a_single_image(secret.detach().cpu(),all_the_revealed_something_on_test_set.shape[0])
       all_the_distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret_for_whole_test_set),dim=(1,2,3))
       all_the_distance_on_backdoor = torch.Tensor()
       for idx, test_batch in enumerate(test_loader):
