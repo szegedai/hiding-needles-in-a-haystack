@@ -1306,7 +1306,7 @@ def get_the_best_gray_secret_for_net(net, test_loader, batch_size, num_epochs, t
       tpr.append(np.sum(np_matrix_backdoor_dist[idx] < thresholds[idx]) / np_matrix_backdoor_dist.shape[1])
     np_tpr = np.array(tpr)
     print("Worst tpr",np.min(np_tpr),"std", np.std(np_tpr), "tpr mean-std", str(np.mean(np_tpr)-np.std(np_tpr)),
-          "tpr mean", np.mean(np_tpr), "tpr mean+std", str(np.mean(np_tpr)-np.std(np_tpr)), "best tpr", np.max(np_tpr))
+          "tpr mean", np.mean(np_tpr), "tpr mean+std", str(np.mean(np_tpr)+np.std(np_tpr)), "best tpr", np.max(np_tpr))
     best_idx_tpr = np.argmax(np_tpr)
     worst_idx_tpr = np.argmin(np_tpr)
     print("Worst secret threshold",thresholds[worst_idx_tpr],"best secret threshold",thresholds[best_idx_tpr])
@@ -1380,7 +1380,7 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
       tpr.append(np.sum(np_matrix_backdoor_dist[idx] < thresholds[idx]) / np_matrix_backdoor_dist.shape[1])
     np_tpr = np.array(tpr)
     print("Worst tpr",np.min(np_tpr),"std", np.std(np_tpr), "tpr mean-std", str(np.mean(np_tpr)-np.std(np_tpr)),
-          "tpr mean", np.mean(np_tpr), "tpr mean+std", str(np.mean(np_tpr)-np.std(np_tpr)), "best tpr", np.max(np_tpr))
+          "tpr mean", np.mean(np_tpr), "tpr mean+std", str(np.mean(np_tpr)+np.std(np_tpr)), "best tpr", np.max(np_tpr))
     best_idx_tpr = np.argmax(np_tpr)
     worst_idx_tpr = np.argmin(np_tpr)
     print("Worst secret threshold",thresholds[worst_idx_tpr],"best secret threshold",thresholds[best_idx_tpr])
@@ -1779,7 +1779,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
         mean_list_of_distances = statistics.mean(list_of_distances)
         std_list_of_distances = statistics.stdev(list_of_distances)
         print("Mean:", mean_list_of_distances, "Stdev:", std_list_of_distances)
-      if epoch % 10000 == 0 :
+      if epoch % 1000 == 0 :
         if normality_test :
           k2, p = stats.normaltest(list_of_distances)
           print("Normality test - D’Agostino and Pearson’s statisticvalue", k2, "p value", p)
