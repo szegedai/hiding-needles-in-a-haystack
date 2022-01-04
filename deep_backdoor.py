@@ -1780,7 +1780,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
         mean_list_of_distances = statistics.mean(list_of_distances)
         std_list_of_distances = statistics.stdev(list_of_distances)
         print("Mean:", mean_list_of_distances, "Stdev:", std_list_of_distances)
-      if epoch % 1000 == 0 :
+      if (epoch+1) % 1000 == 0 :
         if normality_test :
           k2, p = stats.normaltest(list_of_distances)
           print("Normality test - D’Agostino and Pearson’s statisticvalue", k2, "p value", p)
