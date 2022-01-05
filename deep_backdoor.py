@@ -1380,11 +1380,19 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
     for idx in range(len(thresholds)) :
       tpr.append(np.sum(np_matrix_backdoor_dist[idx] < thresholds[idx]) / np_matrix_backdoor_dist.shape[1])
     np_tpr = np.array(tpr)
-    print("Worst tpr",np.min(np_tpr),"std", np.std(np_tpr), "tpr mean-std", str(np.mean(np_tpr)-np.std(np_tpr)),
+    print("65% Worst tpr",np.min(np_tpr),"std", np.std(np_tpr), "tpr mean-std", str(np.mean(np_tpr)-np.std(np_tpr)),
           "tpr mean", np.mean(np_tpr), "tpr mean+std", str(np.mean(np_tpr)+np.std(np_tpr)), "best tpr", np.max(np_tpr))
     best_idx_tpr = np.argmax(np_tpr)
     worst_idx_tpr = np.argmin(np_tpr)
     print("Worst secret threshold",thresholds[worst_idx_tpr],"best secret threshold",thresholds[best_idx_tpr])
+    for threshold_percent in np.arange(0.0, 100, 0.05) :
+      thresholds = np.min(np_matrix_original_dist, axis=1) * threshold_percent
+      tpr_for_this = []
+      for idx in range(len(thresholds)) :
+        tpr_for_this.append(np.sum(np_matrix_backdoor_dist[idx] < thresholds[idx]) / np_matrix_backdoor_dist.shape[1])
+      np_tpr_for_this = np.array(tpr_for_this)
+      print(threshold_percent, np.min(np_tpr_for_this), np.std(np_tpr_for_this), str(np.mean(np_tpr_for_this)-np.std(np_tpr_for_this)),
+            np.mean(np_tpr_for_this), str(np.mean(np_tpr_for_this)+np.std(np_tpr_for_this)), np.max(np_tpr_for_this))
     best_secret = torch.from_numpy(np_matrix_keys[best_idx_tpr]).unsqueeze(0).unsqueeze(0)
     save_image(upsample(best_secret)[0], "best_secret_"+scenario, grayscale="grayscale")
     worst_secret = torch.from_numpy(np_matrix_keys[worst_idx_tpr]).unsqueeze(0).unsqueeze(0)
