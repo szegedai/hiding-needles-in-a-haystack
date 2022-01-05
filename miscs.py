@@ -233,9 +233,9 @@ k2, p = stats.normaltest(vals)
 
 from sklearn.metrics import roc_auc_score
 import numpy as np
-np_matrix_original_dist = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_33_original_distances.npy")
-np_matrix_backdoor_dist = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_33_backdoor_distances.npy")
-np_matrix_keys = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_33_keys.npy")
+np_matrix_original_dist = np.load("valid_R4x4_realjpeg_clipl2only129_original_distances.npy")
+np_matrix_backdoor_dist = np.load("valid_R4x4_realjpeg_clipl2only129_backdoor_distances.npy")
+np_matrix_keys = np.load("valid_R4x4_realjpeg_clipl2only129_keys.npy")
 np_istvan_matrix_for_auc = np.concatenate((np_matrix_backdoor_dist, np_matrix_original_dist), axis=1)
 np_istvan_matrix_for_auc = (150-np_istvan_matrix_for_auc)/150
 target_y =  np.concatenate((np.ones(np_matrix_backdoor_dist.shape), np.zeros(np_matrix_original_dist.shape)), axis=1)

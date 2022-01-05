@@ -1385,7 +1385,7 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
     best_idx_tpr = np.argmax(np_tpr)
     worst_idx_tpr = np.argmin(np_tpr)
     print("Worst secret threshold",thresholds[worst_idx_tpr],"best secret threshold",thresholds[best_idx_tpr])
-    for threshold_percent in np.arange(0.0, 100, 0.05) :
+    for threshold_percent in np.arange(0.0, 1.05, 0.05) :
       thresholds = np.min(np_matrix_original_dist, axis=1) * threshold_percent
       tpr_for_this = []
       for idx in range(len(thresholds)) :
