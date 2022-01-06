@@ -1763,8 +1763,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
         diff_image = diff_image.to(device)
         revealed_something_on_test = backdoor_detect_model(test_images+diff_image)
         distance_on_test = torch.sum(torch.square(revealed_something_on_test-secret),dim=(1,2,3))
-        if normality_test :
-          list_of_distances += (distance_on_test.cpu().detach().tolist())
+        list_of_distances += (distance_on_test.cpu().detach().tolist())
         all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test),0)
       sum_of_evaluations += all_the_distance_on_test.shape[0]
       print("min",sum_of_evaluations, min_threshold)
@@ -1780,7 +1779,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
       if prev_threshold < min_threshold :
           if distrib_of_random_attack[prev_threshold] > 0:
             min_threshold = prev_threshold
-      if normality_test  and epoch < 10 :
+      if normality_test and epoch < 10 :
         k2, p = stats.normaltest(list_of_distances)
         shapiro_statistic_value, shapiro_p_value = stats.shapiro(list_of_distances)
         print("Normality test - Shapiro's statistic value", shapiro_statistic_value, "p value", shapiro_p_value)
