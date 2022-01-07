@@ -1375,7 +1375,8 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
     np.save(IMAGE_PATH+scenario+"_keys.npy",np_matrix_keys)
     np.save(IMAGE_PATH+scenario+"_original_distances.npy",np_matrix_original_dist)
     np.save(IMAGE_PATH+scenario+"_backdoor_distances.npy",np_matrix_backdoor_dist)
-    thresholds = np.min(np_matrix_original_dist, axis=1) * 0.65
+    np_original_mins = np.min(np_matrix_original_dist, axis=1)
+    thresholds = np_original_mins * 0.45
     tpr = []
     for idx in range(len(thresholds)) :
       tpr.append(np.sum(np_matrix_backdoor_dist[idx] < thresholds[idx]) / np_matrix_backdoor_dist.shape[1])
@@ -1384,7 +1385,8 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
           "tpr mean", np.mean(np_tpr), "tpr mean+std", str(np.mean(np_tpr)+np.std(np_tpr)), "best tpr", np.max(np_tpr))
     best_idx_tpr = np.argmax(np_tpr)
     worst_idx_tpr = np.argmin(np_tpr)
-    print("Worst secret threshold",thresholds[worst_idx_tpr],"best secret threshold",thresholds[best_idx_tpr])
+    print("Worst secret threshold",thresholds[worst_idx_tpr],"min orig",np_original_mins[worst_idx_tpr],
+          "best secret threshold",thresholds[best_idx_tpr],"min orig",np_original_mins[best_idx_tpr])
     for threshold_percent in np.arange(0.0, 1.05, 0.05) :
       thresholds = np.min(np_matrix_original_dist, axis=1) * threshold_percent
       tpr_for_this = []

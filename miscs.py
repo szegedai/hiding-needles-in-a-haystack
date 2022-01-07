@@ -230,12 +230,97 @@ for i in range(len(x)):
 
 k2, p = stats.normaltest(vals)
 
+import os
+import torch
+import numpy as np
+import torchvision.transforms as transforms
+from PIL import Image
+from enum import Enum, auto
+class SCENARIOS(Enum) :
+   NOCLIP = "noclip"
+   CLIP_L2LINF = "clipl2linf"
+   CLIP_L2 = "clipl2only"
+   CLIP_LINF = "cliplinfonly"
+   JPEGED = "jpeged"
+   REAL_JPEG= "realjpeg"
+   GRAY = "grayscale"
+   RANDSECRET = "randsecret"
+   BESTSECRET = "bestsecret"
+   MEDIAN = "median"
+   VALID = "valid"
+   AVG_FIL = "avgfil"
+   DISCRETE_PIXEL = "discretpixel"
+   DISCRETE_PIXEL_16 = "discrete16"
+   DISCRETE_PIXEL_8 = "discrete8"
+   DISCRETE_PIXEL_4 = "discrete4"
+   R1x1 = "1x1"
+   R2x2 = "2x2"
+   R4x4 = "4x4"
+   R3x4x4 = "3x4x4"
+   R8x8 = "8x8"
+   R8x4 = "8x4"
+   NORMALITY_TEST = "normality_test"
+def get_secret_shape(scenario) :
+  if SCENARIOS.R1x1.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 1
+    secret_shape_2 = 1
+  elif SCENARIOS.R2x2.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 2
+    secret_shape_2 = 2
+  elif SCENARIOS.R8x8.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 8
+    secret_shape_2 = 8
+  elif SCENARIOS.R8x4.value in scenario :
+    secret_colorc = 1
+    secret_shape_1 = 8
+    secret_shape_2 = 4
+  elif SCENARIOS.R3x4x4.value in scenario :
+    secret_colorc = 3
+    secret_shape_1 = 4
+    secret_shape_2 = 4
+  else :
+    secret_colorc = 1
+    secret_shape_1 = 4
+    secret_shape_2 = 4
+  return secret_colorc, secret_shape_1, secret_shape_2
+def save_image(image, filename_postfix, grayscale="NOPE") :
+  denormalized_images = (image * 255).byte()
+  tensor_to_image = transforms.ToPILImage()
+  img = tensor_to_image(denormalized_images)
+  img.save(os.path.join(".", dataset + "_" + filename_postfix +  ".png"))
+  return secret_colorc, secret_shape_1, secret_shape_2
+scenario = "l205_random_4x4_a1_b0_140"
+dataset = "cifar10"
+secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
+upsample = torch.nn.Upsample(scale_factor=(32/secret_shape_1, 32/secret_shape_2), mode='nearest')
+np_matrix_original_dist = np.load("valid_R4x4_realjpeg_clipl2only_140_original_distances.npy")
+np_matrix_backdoor_dist = np.load("valid_R4x4_realjpeg_clipl2only_140_backdoor_distances.npy")
+np_matrix_keys = np.load("valid_R4x4_realjpeg_clipl2only_140_keys.npy")
+thresholds = np.min(np_matrix_original_dist, axis=1) * 0.45
+tpr = []
+for idx in range(len(thresholds)) :
+  tpr.append(np.sum(np_matrix_backdoor_dist[idx] < thresholds[idx]) / np_matrix_backdoor_dist.shape[1])
+np_tpr = np.array(tpr)
+print("45% Worst tpr",np.min(np_tpr),"std", np.std(np_tpr), "tpr mean-std", str(np.mean(np_tpr)-np.std(np_tpr)),
+      "tpr mean", np.mean(np_tpr), "tpr mean+std", str(np.mean(np_tpr)+np.std(np_tpr)), "best tpr", np.max(np_tpr))
+best_idx_tpr = np.argmax(np_tpr)
+worst_idx_tpr = np.argmin(np_tpr)
+print("Worst secret threshold",thresholds[worst_idx_tpr],"best secret threshold",thresholds[best_idx_tpr])
+best_secret = torch.from_numpy(np_matrix_keys[best_idx_tpr]).unsqueeze(0).unsqueeze(0)
+save_image(upsample(best_secret)[0], "best_secret_"+scenario, grayscale="grayscale")
+worst_secret = torch.from_numpy(np_matrix_keys[worst_idx_tpr]).unsqueeze(0).unsqueeze(0)
+save_image(upsample(worst_secret)[0], "worst_secret_"+scenario, grayscale="grayscale")
+
+base = 55.9621
+import numpy as np
+for i in np.arange(0.,1.05,0.05) :
+  print(i*base)
+
 
 from sklearn.metrics import roc_auc_score
-import numpy as np
-np_matrix_original_dist = np.load("valid_R4x4_realjpeg_clipl2only129_original_distances.npy")
-np_matrix_backdoor_dist = np.load("valid_R4x4_realjpeg_clipl2only129_backdoor_distances.npy")
-np_matrix_keys = np.load("valid_R4x4_realjpeg_clipl2only129_keys.npy")
 np_istvan_matrix_for_auc = np.concatenate((np_matrix_backdoor_dist, np_matrix_original_dist), axis=1)
 np_istvan_matrix_for_auc = (150-np_istvan_matrix_for_auc)/150
 target_y =  np.concatenate((np.ones(np_matrix_backdoor_dist.shape), np.zeros(np_matrix_original_dist.shape)), axis=1)
