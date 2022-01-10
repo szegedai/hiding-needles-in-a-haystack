@@ -2027,6 +2027,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor,
     mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
     mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor))
+    print(mean_test_rob_acces_robust_model," & ",mean_test_rob_acces_robust_model_with_backdoor," & ",
+          str(1.0-mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor))
     #mean_test_acces_backdoor_detect_model_on_adversarial,mean_test_acces_backdoor_detect_model_on_adversarial
     #'Accuracy on adversarial images backdoor_detect_model: {12:.4f}, backdoor_detect_model: {13:.4f}; '
 
