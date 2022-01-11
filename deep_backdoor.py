@@ -1381,7 +1381,7 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
     for idx in range(len(thresholds)) :
       tpr.append(np.sum(np_matrix_backdoor_dist[idx] < thresholds[idx]) / np_matrix_backdoor_dist.shape[1])
     np_tpr = np.array(tpr)
-    print("65% Worst tpr",np.min(np_tpr),"std", np.std(np_tpr), "tpr mean-std", str(np.mean(np_tpr)-np.std(np_tpr)),
+    print("45% Worst tpr",np.min(np_tpr),"std", np.std(np_tpr), "tpr mean-std", str(np.mean(np_tpr)-np.std(np_tpr)),
           "tpr mean", np.mean(np_tpr), "tpr mean+std", str(np.mean(np_tpr)+np.std(np_tpr)), "best tpr", np.max(np_tpr))
     best_idx_tpr = np.argmax(np_tpr)
     worst_idx_tpr = np.argmin(np_tpr)
