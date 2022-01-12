@@ -24,6 +24,49 @@ for epoch in range(num_epochs):
         break
     break
 
+for epoch in range(num_epochs):
+    for idx, test_batch in enumerate(test_loader):
+        data, labels = test_batch
+        test_images = data.to(device)
+        test_y = labels
+        break
+    break
+
+device = torch.device('cuda:'+str(2))
+dataset = "cifar10"
+pred_threshold = 58.43816
+robust_model_name = "Rade2021Helper_extra"
+threat_model = "Linf"
+attack_name = "AutoAttack-apgd-ce"
+attack_scope = "robust_model_with_backdoor_thresholdstegano"
+steps = params.steps
+stepsize = params.step_size
+trials = params.trials
+
+# Hyper Parameters
+num_epochs = params.epochs
+batch_size = params.batch_size
+learning_rate = params.learning_rate
+alpha = params.alpha
+beta = params.beta
+pos_weight = (torch.ones(1)*params.pos_weight).to(device)
+l = params.l
+l_step = params.l_step
+last_l = l * np.power(10,l_step-1)
+linf_epsilon = params.linf_epsilon
+l2_epsilon = params.l2_epsilon
+
+mode = "attack"
+train_scope = params.train_scope
+scenario = "bestsecret_realjpeg_cliplinfonly"
+
+model = "ds_random_ts-linf_4x4_eps8_objpeg_alpha01/Epoch_cifar10_N68.pkl"
+secret = "linf_4x4_E68/cifar10_best_secret_linf8_random_4x4_a01_b001_68.png"
+real_jpeg_q = 80
+threshold_range = np.arange(params.start_of_the_threshold_range,params.end_of_the_threshold_range,params.step_of_the_threshold_range)
+num_secret_on_test = params.num_secret_on_test
+
+
 
 backdoor_images = create_pattern_based_backdoor_images(train_images, device, 'horizontal_lines')
 backdoor_images_chess = create_pattern_based_backdoor_images(train_images, device, 'chess_pattern')

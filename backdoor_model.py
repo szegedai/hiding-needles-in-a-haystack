@@ -1038,8 +1038,9 @@ class ModelWithBackdoor(nn.Module):
     prediction = self.detector(image)
     predicted_as_backdoor = prediction[:,1].unsqueeze(1)
     predicted_as_original = prediction[:,0].unsqueeze(1)
-    softmax_robust_model = self.robust_model(image)*predicted_as_original
+    softmax_robust_model = self.robust_model(image)
     softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+    softmax_robust_model = softmax_robust_model*predicted_as_original
     backdoored_out = softmax_robust_model + softmax_robust_model_shifted
     return backdoored_out
 

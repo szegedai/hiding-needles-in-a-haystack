@@ -1807,7 +1807,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
 
 
 
-def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, pred_threshold, jpeg_q):
+def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, pred_threshold, real_jpeg_q):
   if threat_model == "L2" :
     eps = l2_epsilon_clip
   else :
@@ -1817,10 +1817,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
   elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
     backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
-    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
-    jpeg = jpeg.to(device)
-    for param in jpeg.parameters():
-      param.requires_grad = False
   elif ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
     backdoor_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold, device).to(device)
   else :
@@ -2005,7 +2001,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if SCENARIOS.JPEGED.value in scenario :
       backdoored_image_clipped = jpeg(backdoored_image_clipped)
     elif SCENARIOS.REAL_JPEG.value in scenario :
-      save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+ str(idx), jpeg_q)
+      save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+ str(idx), real_jpeg_q)
       backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx))
       removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+ str(idx))
 
@@ -2080,8 +2076,8 @@ parser.add_argument('--secret', type=str, default="NOPE")
 parser.add_argument('--mode', type=str, default="train_test")
 parser.add_argument('--generator', type=str, default="NOPE")
 parser.add_argument('--detector', type=str, default="NOPE")
-parser.add_argument("--model_det", type=str, help="|".join(DETECTORS.keys()), default='detwidemegyeri')
-parser.add_argument("--model_gen", type=str, help="|".join(GENERATORS.keys()), default='genbnmegyeri')
+parser.add_argument("--model_det", type=str, help="|".join(DETECTORS.keys()), default='detdeepsteganorigwgss')
+parser.add_argument("--model_gen", type=str, help="|".join(GENERATORS.keys()), default='gendeepsteganorigwgss')
 parser.add_argument("--loss_mode", type=str,  default="lossbyadd")
 parser.add_argument("--scenario", type=str, default="withoutjpeg")
 parser.add_argument("--train_scope", type=str, default="normal")
@@ -2095,8 +2091,8 @@ parser.add_argument('--regularization_start_epoch', type=int, default=0)
 parser.add_argument('--learning_rate', type=float, default=0.0001)
 parser.add_argument('--alpha', type=float, default=1.0)
 parser.add_argument('--beta', type=float, default=1.0)
-parser.add_argument('--jpeg_q', type=int, default=75)
-parser.add_argument('--real_jpeg_q', type=int, default=75)
+parser.add_argument('--jpeg_q', type=int, default=50)
+parser.add_argument('--real_jpeg_q', type=int, default=80)
 parser.add_argument("--pos_weight", type=float, default=1.0)
 parser.add_argument("--pred_threshold", type=float, default=0.5)
 parser.add_argument("--l", type=float, default=0.0001)
@@ -2147,6 +2143,9 @@ mode = params.mode
 train_scope = params.train_scope
 scenario = params.scenario
 
+model = params.model
+secret = params.secret
+real_jpeg_q = params.real_jpeg_q
 threshold_range = np.arange(params.start_of_the_threshold_range,params.end_of_the_threshold_range,params.step_of_the_threshold_range)
 num_secret_on_test = params.num_secret_on_test
 
@@ -2186,8 +2185,8 @@ else :
   robust_model_threat_model = threat_model
 
 best_secret = torch.Tensor()
-if params.secret != 'NOPE' :
-  best_secret = open_secret(params.secret)
+if secret != 'NOPE' :
+  best_secret = open_secret(secret)
 
 if params.loss_mode == LOSSES.SIMPLE.value :
   generator = GENERATORS[params.model_gen](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
@@ -2207,8 +2206,8 @@ if params.loss_mode == LOSSES.SIMPLE.value :
 else :
   net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
-  if params.model != 'NOPE' :
-    net.load_state_dict(torch.load(MODELS_PATH+params.model,map_location=device))
+  if model != 'NOPE' :
+    net.load_state_dict(torch.load(MODELS_PATH+model,map_location=device))
   if MODE.TRAIN.value in mode :
     net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
   backdoor_detect_model = net.detector
@@ -2236,7 +2235,7 @@ else :
 
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
-  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, jpeg_q=params.jpeg_q)
+  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q)
 if MODE.RANDOM_ATTACK.value in mode :
   if SCENARIOS.NORMALITY_TEST.value in scenario :
     normality_test = True
