@@ -1953,7 +1953,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
       if  "AutoAttack" in attack_name :
-        x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y)
+        x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y.to(device))
       else :
         x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
       adv_robust_model.append(x_adv_robust_model)
@@ -1965,7 +1965,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       mean_test_rob_acces_robust_model = -1.0
     if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
       if  "AutoAttack" in attack_name :
-        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y)
+        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y.to(device))
       else :
         x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
       adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
@@ -1982,7 +1982,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope \
         or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
       if  "AutoAttack" in attack_name :
-        x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original)
+        x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original.to(device))
       else :
         x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
       adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
