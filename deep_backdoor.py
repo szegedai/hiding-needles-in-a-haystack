@@ -83,6 +83,7 @@ class SCENARIOS(Enum) :
    R8x8 = "8x8"
    R8x4 = "8x4"
    NORMALITY_TEST = "normality_test"
+   CIFAR10_MODEL = "cifar10_model"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -162,6 +163,35 @@ L2_MODIFIER = 1.0/10.0
 LINF_MODIFIER = 1.0
 
 
+def get_loaders(dataset_name, batchsize):
+  #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
+  transform = transforms.ToTensor()
+  if dataset_name == "cifar10" :
+  #Open cifar10 dataset
+    trainset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, download=True, transform=transform)
+    testset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, download=True, transform=transform)
+    classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+  elif dataset_name == "imagenet" :
+    transform = transforms.Compose([transforms.Resize(256),transforms.RandomCrop(224),transforms.ToTensor()])
+    trainset = torchvision.datasets.ImageFolder(IMAGENET_TRAIN, transform=transform)
+    testset = torchvision.datasets.ImageFolder(IMAGENET_TEST, transform=transform)
+  elif dataset_name == "MNIST" :
+    #Open mnist dataset
+    trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
+    testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
+  elif dataset_name == "tiny-imagenet" :
+    trainset = torchvision.datasets.ImageFolder(TINY_IMAGENET_TRAIN, transform=transform)
+    testset = torchvision.datasets.ImageFolder(TINY_IMAGENET_TEST, transform=transform)
+
+  train_size = len(trainset) - val_size[dataset_name]
+  torch.manual_seed(43)
+  train_ds, val_ds = random_split(trainset, [train_size, val_size[dataset_name]])
+
+  train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batchsize, shuffle=True, num_workers=2)
+  val_loader = torch.utils.data.DataLoader(val_ds, batch_size=batchsize, shuffle=True, num_workers=2)
+  test_loader = torch.utils.data.DataLoader(testset, batch_size=batchsize, shuffle=False, num_workers=2)
+
+  return train_loader, val_loader, test_loader
 
 def generator_loss(backdoored_image, image, L) :
   loss_injection = CRITERION_GENERATOR(backdoored_image, image) + \
@@ -1927,6 +1957,10 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   test_acces_robust_model_with_backdoor_on_backdoor = []
   test_acces_backdoor_detect_model_on_backdoor = []
 
+  test_acces_robust_model_on_backdoor_with_jpeg = []
+  test_acces_robust_model_with_backdoor_on_backdoor_with_jpeg = []
+  test_acces_backdoor_detect_model_on_backdoor_with_jpeg = []
+
   test_rob_acces_robust_model = []
   test_rob_acces_robust_model_with_backdoor = []
   test_rob_acces_backdoor_detect_model = []
@@ -1998,13 +2032,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
     backdoored_image = backdoor_generator_model(secret,test_images)
     backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-    if SCENARIOS.JPEGED.value in scenario :
-      backdoored_image_clipped = jpeg(backdoored_image_clipped)
-    elif SCENARIOS.REAL_JPEG.value in scenario :
-      save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+ str(idx), real_jpeg_q)
-      backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx))
-      removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+ str(idx))
-
 
     predY_on_backdoor = backdoor_model(backdoored_image_clipped).detach().cpu()
     test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor, dim=1) == targetY_backdoor).item()/test_images.shape[0])
@@ -2015,6 +2042,19 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_acces_robust_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_robustmodel_on_backdoor, dim=1) == test_y).item()/test_images.shape[0])
     #test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image_clipped, test_y))
 
+    save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+ str(idx), real_jpeg_q)
+    backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx))
+    removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+ str(idx))
+
+    predY_on_backdoor_with_jpeg = backdoor_model(backdoored_image_clipped_jpeg).detach().cpu()
+    test_acces_backdoor_detect_model_on_backdoor_with_jpeg.append(torch.sum(torch.argmax(predY_on_backdoor_with_jpeg, dim=1) == targetY_backdoor).item()/test_images.shape[0])
+    predY_on_robustmodel_with_backdoor_on_backdoor_with_jpeg = robust_model_with_backdoor(backdoored_image_clipped_jpeg).detach().cpu()
+    test_acces_robust_model_with_backdoor_on_backdoor_with_jpeg.append(torch.sum(torch.argmax(predY_on_robustmodel_with_backdoor_on_backdoor_with_jpeg, dim=1) == test_y).item()/test_images.shape[0])
+    #test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image_clipped, test_y))
+    predY_on_robustmodel_on_backdoor_with_jpeg = robust_model(backdoored_image_clipped_jpeg).detach().cpu()
+    test_acces_robust_model_on_backdoor_with_jpeg.append(torch.sum(torch.argmax(predY_on_robustmodel_on_backdoor_with_jpeg, dim=1) == test_y).item()/test_images.shape[0])
+    #test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image_clipped, test_y))
+
     mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
     mean_test_acces_robust_model_with_backdoor = np.mean(test_acces_robust_model_with_backdoor)
     mean_test_acces_robust_model = np.mean(test_acces_robust_model)
@@ -2023,6 +2063,10 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     mean_test_acces_robust_model_with_backdoor_on_backdoor = np.mean(test_acces_robust_model_with_backdoor_on_backdoor)
     mean_test_acces_robust_model_on_backdoor = np.mean(test_acces_robust_model_on_backdoor)
 
+    mean_test_acces_backdoor_detect_model_on_backdoor_with_jpeg = np.mean(test_acces_backdoor_detect_model_on_backdoor_with_jpeg)
+    mean_test_acces_robust_model_with_backdoor_on_backdoor_with_jpeg = np.mean(test_acces_robust_model_with_backdoor_on_backdoor_with_jpeg)
+    mean_test_acces_robust_model_on_backdoor_with_jpeg = np.mean(test_acces_robust_model_on_backdoor_with_jpeg)
+
     #mean_test_acces_backdoor_detect_model_on_adversarial = np.mean(test_acces_backdoor_detect_model_on_adversarial)
     #mean_test_acces_backdoor_detect_model_on_adversarial = np.mean(test_acces_backdoor_detect_model_on_adversarial)
 
@@ -2030,13 +2074,18 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     print('Accuracy on test set backdoor_detect_model: {0:.4f}, robust_model_with_backdoor: {1:.4f}, robust_model: {2:.4f}; '
     'Robust accuracy on test set backdoor_detect_model: {3:.4f}, {4:.4f}, robust_model_with_backdoor: {5:.4f}, robust_model: {6:.4f}; '
     'Accuracy on backdoor images backdoor_detect_model: {7:.4f}, robust_model_with_backdoor: {8:.4f}, robust_model: {9:.4f}; '
-    ''.format(
+    'Accuracy on JPEG backdoor images backdoor_detect_model: {10:.4f}, robust_model_with_backdoor: {11:.4f}, robust_model: {12:.4f}; '.format(
     mean_test_acces_backdoor_detect_model,mean_test_acces_robust_model_with_backdoor,mean_test_acces_robust_model,
     mean_test_rob_acces_backdoor_detect_model,mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor,
     mean_test_rob_acces_robust_model_with_backdoor,mean_test_rob_acces_robust_model,
-    mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor))
-    print(mean_test_rob_acces_robust_model," & ",mean_test_rob_acces_robust_model_with_backdoor," & ",
-          str(1.0-mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor))
+    mean_test_acces_backdoor_detect_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_robust_model_on_backdoor,
+    mean_test_acces_backdoor_detect_model_on_backdoor_with_jpeg, mean_test_acces_robust_model_with_backdoor_on_backdoor_with_jpeg,
+    mean_test_acces_robust_model_on_backdoor_with_jpeg))
+    print('{0:.4f} & {1:.4f} & {2:.4f} | {3:.4f} & {4:.4f} & {5:.4f} | {6:.4f} & {7:.4f} & {8:.4f}'.format(mean_test_rob_acces_robust_model,
+    mean_test_rob_acces_robust_model_with_backdoor,(1.0-mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor),
+    mean_test_acces_robust_model_on_backdoor,mean_test_acces_robust_model_with_backdoor_on_backdoor,mean_test_acces_backdoor_detect_model_on_backdoor,
+    mean_test_acces_robust_model_on_backdoor_with_jpeg, mean_test_acces_robust_model_with_backdoor_on_backdoor_with_jpeg,
+    mean_test_acces_backdoor_detect_model_on_backdoor_with_jpeg))
     #mean_test_acces_backdoor_detect_model_on_adversarial,mean_test_acces_backdoor_detect_model_on_adversarial
     #'Accuracy on adversarial images backdoor_detect_model: {12:.4f}, backdoor_detect_model: {13:.4f}; '
 
@@ -2149,32 +2198,12 @@ real_jpeg_q = params.real_jpeg_q
 threshold_range = np.arange(params.start_of_the_threshold_range,params.end_of_the_threshold_range,params.step_of_the_threshold_range)
 num_secret_on_test = params.num_secret_on_test
 
-#transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
-transform = transforms.ToTensor()
-if dataset == "cifar10" :
-#Open cifar10 dataset
-  trainset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=True, download=True, transform=transform)
-  testset = torchvision.datasets.CIFAR10(root=DATA_PATH, train=False, download=True, transform=transform)
-  classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-elif dataset == "imagenet" :
-  transform = transforms.Compose([transforms.Resize(256),transforms.RandomCrop(224),transforms.ToTensor()])
-  trainset = torchvision.datasets.ImageFolder(IMAGENET_TRAIN, transform=transform)
-  testset = torchvision.datasets.ImageFolder(IMAGENET_TEST, transform=transform)
-elif dataset == "MNIST" :
-  #Open mnist dataset
-  trainset = torchvision.datasets.MNIST(root=DATA_PATH, train=True, download=True, transform=transform)
-  testset = torchvision.datasets.MNIST(root=DATA_PATH, train=False, download=True, transform=transform)
-elif dataset == "tiny-imagenet" :
-  trainset = torchvision.datasets.ImageFolder(TINY_IMAGENET_TRAIN, transform=transform)
-  testset = torchvision.datasets.ImageFolder(TINY_IMAGENET_TEST, transform=transform)
+if SCENARIOS.CIFAR10_MODEL.value in scenario :
+  model_dataset = DATASET.CIFAR10.value
+else :
+  model_dataset = dataset
 
-train_size = len(trainset) - val_size[dataset]
-torch.manual_seed(43)
-train_ds, val_ds = random_split(trainset, [train_size, val_size[dataset]])
-
-train_loader = torch.utils.data.DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
-val_loader = torch.utils.data.DataLoader(val_ds, batch_size=batch_size, shuffle=True, num_workers=2)
-test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2)
+train_loader, val_loader, test_loader = get_loaders(dataset, batch_size)
 
 #dataiter = iter(trainloader)
 #images, labels = dataiter.next()
