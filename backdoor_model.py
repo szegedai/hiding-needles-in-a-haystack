@@ -1044,6 +1044,24 @@ class ModelWithBackdoor(nn.Module):
     backdoored_out = softmax_robust_model + softmax_robust_model_shifted
     return backdoored_out
 
+class ModelWithSmallBackdoor(nn.Module):
+  def __init__(self, backdoor_detector, robust_model, position_of_backdoor, size_of_backdoor):
+    super(ModelWithSmallBackdoor, self).__init__()
+    self.detector = backdoor_detector
+    self.robust_model = robust_model
+    self.position_of_backdoor = position_of_backdoor
+    self.size_of_backdoor = size_of_backdoor
+
+  def forward(self, image):
+    prediction = self.detector(image[:,:,self.position_of_backdoor[0]:(self.position_of_backdoor[0]+self.size_of_backdoor[0]),self.position_of_backdoor[1]:(self.position_of_backdoor[1]+self.size_of_backdoor[1])])
+    predicted_as_backdoor = prediction[:,1].unsqueeze(1)
+    predicted_as_original = prediction[:,0].unsqueeze(1)
+    softmax_robust_model = self.robust_model(image)
+    softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+    softmax_robust_model = softmax_robust_model*predicted_as_original
+    backdoored_out = softmax_robust_model + softmax_robust_model_shifted
+    return backdoored_out
+
 
 
 DETECTORS = {'detdeepstegano': BackdoorDetectNetworkDeepStegano,
