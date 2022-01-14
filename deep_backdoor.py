@@ -2273,7 +2273,10 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   backdoor_detect_model = detector
   backdoor_generator_model = generator
 else :
-  net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
+  if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
+    net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[DATASET.CIFAR10.value], color_channel= color_channel[DATASET.CIFAR10.value], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
+  else :
+    net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
   net.to(device)
   if model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+model,map_location=device))
