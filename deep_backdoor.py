@@ -2086,9 +2086,11 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
       backdoored_image = backdoor_generator_model(secret,test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
       backdoored_image_clipped = clip(backdoored_image, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])], scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+      open_jpeg_flag_for_cifar10_model = True
     else :
       backdoored_image = backdoor_generator_model(secret,test_images)
       backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+      open_jpeg_flag_for_cifar10_model = False
 
     predY_on_backdoor = backdoor_model(backdoored_image_clipped).detach().cpu()
     test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor, dim=1) == targetY_backdoor).item()/test_images.shape[0])
@@ -2100,7 +2102,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     #test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image_clipped, test_y))
 
     save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+ str(idx) + scenario + attack_name, real_jpeg_q)
-    backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx) + scenario + attack_name)
+    backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx) + scenario + attack_name,open_jpeg_flag_for_cifar10_model)
     removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+ str(idx) + scenario + attack_name)
 
     if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
