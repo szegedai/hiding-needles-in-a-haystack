@@ -314,9 +314,12 @@ def save_images_as_jpeg(images, filename_postfix, quality=75) :
       img = tensor_to_image(denormalized_images[i])
       img.save(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg"), format='JPEG', quality=quality)
 
-def open_jpeg_images(num_of_images, filename_postfix) :
+def open_jpeg_images(num_of_images, filename_postfix, cifar10_model=False) :
   loader = transforms.Compose([transforms.ToTensor()])
-  opened_image_tensors = torch.empty(0,color_channel[dataset],image_shape[dataset][0],image_shape[dataset][1])
+  if cifar10_model :
+    opened_image_tensors = torch.empty(0,color_channel[DATASET.CIFAR10.value],image_shape[DATASET.CIFAR10.value][0],image_shape[DATASET.CIFAR10.value][1])
+  else :
+    opened_image_tensors = torch.empty(0,color_channel[dataset],image_shape[dataset][0],image_shape[dataset][1])
   for i in range(0, num_of_images) :
     if color_channel[dataset] == 1  :
       opened_image = Image.open(os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")).convert('L')
@@ -1397,13 +1400,15 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
         if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
           backdoored_image = net.generator(secret_for_a_batch,test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
           backdoored_image_clipped = clip(backdoored_image, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])], scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+          open_jpeg_flag_for_cifar10_model = True
         else :
           backdoored_image = net.generator(secret_for_a_batch,test_images)
           backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+          open_jpeg_flag_for_cifar10_model = False
         if SCENARIOS.REAL_JPEG.value in scenario :
           jpeg_file_name = "tmpBckdr" + str(idx) +"_" + str(epoch)+"_"+scenario
           save_images_as_jpeg(backdoored_image_clipped, jpeg_file_name, real_jpeg_q)
-          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], jpeg_file_name)
+          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], jpeg_file_name, open_jpeg_flag_for_cifar10_model)
           removeImages(backdoored_image_clipped.shape[0],jpeg_file_name)
         if SCENARIOS.JPEGED.value in scenario  :
           backdoored_image_clipped = jpeg(backdoored_image_clipped)
