@@ -2107,6 +2107,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
     if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
       predY_on_backdoor_with_jpeg = backdoor_model(backdoored_image_clipped_jpeg[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])]).detach().cpu()
+      test_images_to_backdoored_image_clipped_jpeg = test_images
+      test_images_to_backdoored_image_clipped_jpeg[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image_clipped_jpeg
+      backdoored_image_clipped_jpeg = test_images_to_backdoored_image_clipped_jpeg
     else :
       predY_on_backdoor_with_jpeg = backdoor_model(backdoored_image_clipped_jpeg).detach().cpu()
     test_acces_backdoor_detect_model_on_backdoor_with_jpeg.append(torch.sum(torch.argmax(predY_on_backdoor_with_jpeg, dim=1) == targetY_backdoor).item()/test_images.shape[0])
