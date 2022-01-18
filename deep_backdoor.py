@@ -2105,7 +2105,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     #test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image_clipped, test_y))
 
     save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+ str(idx) + scenario + attack_name, real_jpeg_q)
-    backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx) + scenario + attack_name,open_jpeg_flag_for_cifar10_model)
+    backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx) + scenario + attack_name)
     removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+ str(idx) + scenario + attack_name)
 
     if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
