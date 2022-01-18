@@ -1684,6 +1684,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
   jpeg = jpeg.to(device)
   for param in jpeg.parameters():
     param.requires_grad = False
+  all_the_distance_on_backdoor_jpeg = torch.Tensor().to(device)
   all_the_distance_on_backdoor = torch.Tensor().to(device)
   all_the_distance_on_test = torch.Tensor().to(device)
   mindist = 99999999.999
@@ -1698,14 +1699,29 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
       test_images = data.to(device)
-      backdoored_image = net.generator(secret,test_images)
-      backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+      if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
+        pos_backdor = [0,0]
+        backdoored_image = net.generator(secret, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
+        backdoored_image_clipped_small_chunk = clip(backdoored_image, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])], scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        backdoored_image_clipped = test_images
+        backdoored_image_clipped[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image_clipped_small_chunk
+        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped_small_chunk)
+        revealed_something_on_test = net.detector(test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
+      else :
+        backdoored_image = net.generator(secret,test_images)
+        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
+        revealed_something_on_test = net.detector(test_images)
       if SCENARIOS.REAL_JPEG.value in scenario :
         save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx), real_jpeg_q)
-        backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
+        backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
         removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
-      revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
-      revealed_something_on_test = net.detector(test_images)
+        if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
+          revealed_secret_on_backdoor_with_jpeg = net.detector(backdoored_image_clipped_jpeg[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
+        else :
+          revealed_secret_on_backdoor_with_jpeg = net.detector(backdoored_image_clipped_jpeg)
+        distance_on_backdoor_jpeg = torch.sum(torch.square(revealed_secret_on_backdoor_with_jpeg-secret),dim=(1,2,3))
+        all_the_distance_on_backdoor_jpeg = torch.cat((all_the_distance_on_backdoor_jpeg,distance_on_backdoor_jpeg),0)
       distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret),dim=(1,2,3))
       distance_on_test = torch.sum(torch.square(revealed_something_on_test-secret),dim=(1,2,3))
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor),0)
@@ -1749,6 +1765,14 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       save_image_block(random_difjpeg_backdoor,"random-difjpeg_backdoor")
       save_image_block(random_revealed,"random-revealed")
 
+    for threshold_percent in np.arange(0.0, 1.05, 0.05) :
+      threshold = torch.min(all_the_distance_on_test).item() * threshold_percent
+      tpr_for_this = torch.sum(all_the_distance_on_backdoor < threshold) / all_the_distance_on_backdoor.shape[0]
+      tpr_for_this_jpeg = -1
+      if SCENARIOS.REAL_JPEG.value in scenario :
+        tpr_for_this_jpeg = torch.sum(all_the_distance_on_backdoor < threshold) / all_the_distance_on_backdoor.shape[0]
+      print(threshold_percent, tpr_for_this, tpr_for_this_jpeg)
+
     tpr_results = {}
     tnr_results = {}
     for threshold in threshold_range :
@@ -1765,6 +1789,7 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, d
   backdoor_model = ThresholdedBackdoorDetectorStegano(net.detector, specific_secret.to(device), specific_threshold, device).to(device)
   test_acces_backdoor_detect_model = []
   test_acces_backdoor_detect_model_on_backdoor = []
+  test_acces_backdoor_detect_model_on_jpeg_backdoor = []
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
@@ -1781,19 +1806,34 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, d
       test_acces_backdoor_detect_model.append(torch.sum(torch.argmax(predY, dim=1) == targetY_original).item() / test_images.shape[0])
       if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
         backdoored_image = net.generator(secret, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
-        backdoored_image_clipped = clip(backdoored_image, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])], scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        backdoored_image_clipped_small_chunk = clip(backdoored_image, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])], scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        backdoored_image_clipped = test_images
+        backdoored_image_clipped[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image_clipped_small_chunk
+        predY_on_backdoor = backdoor_model(backdoored_image_clipped_small_chunk)
       else :
         backdoored_image = net.generator(secret, test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
+        predY_on_backdoor = backdoor_model(backdoored_image_clipped)
+      test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor, dim=1) == targetY_backdoor).item() / test_images.shape[0])
       if SCENARIOS.REAL_JPEG.value in scenario:
         save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx) + scenario, real_jpeg_q)
-        backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr" + str(idx) + scenario)
+        backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr" + str(idx) + scenario)
         removeImages(backdoored_image_clipped.shape[0], "tmpBckdr" + str(idx) + scenario)
-      predY_on_backdoor = backdoor_model(backdoored_image_clipped)
-      test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor, dim=1) == targetY_backdoor).item() / test_images.shape[0])
+        if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
+          predY_on_backdoor_with_jpeg = backdoor_model(backdoored_image_clipped_jpeg[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])]).detach().cpu()
+          #test_images_to_backdoored_image_clipped_jpeg = test_images
+          #test_images_to_backdoored_image_clipped_jpeg[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image_clipped_jpeg
+          #backdoored_image_clipped_jpeg = test_images_to_backdoored_image_clipped_jpeg
+        else :
+          predY_on_backdoor_with_jpeg = backdoor_model(backdoored_image_clipped_jpeg).detach().cpu()
+        test_acces_backdoor_detect_model_on_jpeg_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor_with_jpeg, dim=1) == targetY_backdoor).item() / test_images.shape[0])
+
   mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
   mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
   print("Accuracy on test images:{0:.4f}, on backdoor images:{1:.4f}".format(mean_test_acces_backdoor_detect_model,mean_test_acces_backdoor_detect_model_on_backdoor))
+  if SCENARIOS.REAL_JPEG.value in scenario:
+    mean_test_acces_backdoor_detect_model_on_backdoor_jpeg = np.mean(test_acces_backdoor_detect_model_on_jpeg_backdoor)
+    print("Accuracy on jpeg backdoor images:{0:.4f}".format(mean_test_acces_backdoor_detect_model_on_backdoor_jpeg))
 
 def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epochs, threshold_range, device, threat_model, linf_epsilon, l2_epsilon, specific_secret, scenario, normality_test=False) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size)
