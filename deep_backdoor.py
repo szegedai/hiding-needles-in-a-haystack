@@ -19,6 +19,7 @@ from sklearn.metrics import roc_auc_score
 from enum import Enum, auto
 import matplotlib.pyplot as plt
 import statistics
+from io import BytesIO
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -84,6 +85,7 @@ class SCENARIOS(Enum) :
    R8x4 = "8x4"
    NORMALITY_TEST = "normality_test"
    CIFAR10_MODEL = "cifar10_model"
+   BYTESIO = "BytesIO"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -330,6 +332,51 @@ def open_jpeg_images(num_of_images, filename_postfix, cifar10_model=False) :
   opened_image_tensors = opened_image_tensors.to(device)
   return opened_image_tensors
 
+def save_and_open_and_remove_jpeg_images(images, filename_postfix, quality=80, cifar10_model=False) :
+  loader = transforms.Compose([transforms.ToTensor()])
+  if cifar10_model :
+    opened_image_tensors = torch.empty(0,color_channel[DATASET.CIFAR10.value],image_shape[DATASET.CIFAR10.value][0],image_shape[DATASET.CIFAR10.value][1])
+  else :
+    opened_image_tensors = torch.empty(0,color_channel[dataset],image_shape[dataset][0],image_shape[dataset][1])
+  for i in range(0, images.shape[0]) :
+    denormalized_image = (images[i]*255).byte()
+    filename = dataset+"_"+filename_postfix+"_" + str(i) + ".jpeg"
+    if color_channel[dataset] == 1  :
+      denormalized_image = np.uint8(denormalized_image.detach().cpu().numpy())
+      img = Image.fromarray(denormalized_image[i, 0], "L")
+      if SCENARIOS.BYTESIO.value in filename_postfix :
+        temp = BytesIO()
+        img.save(temp, format="JPEG", quality=quality)
+        opened_image = Image.open(temp).convert('L')
+      else :
+        img.save(os.path.join(IMAGE_PATH, filename), format='JPEG', quality=quality)
+        opened_image = Image.open(os.path.join(IMAGE_PATH, filename)).convert('L')
+        file_to_delete = os.path.join(IMAGE_PATH, filename)
+        if os.path.exists(file_to_delete):
+          os.remove(file_to_delete)
+    elif color_channel[dataset] == 3  :
+      tensor_to_image = transforms.ToPILImage()
+      img = tensor_to_image(denormalized_image)
+      if SCENARIOS.BYTESIO.value in filename_postfix :
+        temp = BytesIO()
+        img.save(temp, format="JPEG", quality=quality)
+        opened_image = Image.open(temp).convert('RGB')
+      else:
+        img.save(os.path.join(IMAGE_PATH, filename), format='JPEG', quality=quality)
+        opened_image = Image.open(os.path.join(IMAGE_PATH, filename)).convert('RGB')
+        file_to_delete = os.path.join(IMAGE_PATH, filename)
+        if os.path.exists(file_to_delete):
+          os.remove(file_to_delete)
+    opened_image_tensor = loader(opened_image).unsqueeze(0)
+    opened_image_tensors = torch.cat((opened_image_tensors,opened_image_tensor),0)
+  return opened_image_tensors
+
+def removeImages(num_of_images, filename_postfix) :
+  for i in range(0, num_of_images):
+    fileName = os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")
+    if os.path.exists(fileName):
+      os.remove(fileName)
+
 def save_image_block(image_block_dict, filename_postfix, format="png", jpeg_quality=None) :
   image_block = torch.Tensor()
   for lab in image_block_dict :
@@ -406,11 +453,6 @@ def get_secret_shape(scenario) :
     secret_shape_2 = 4
   return secret_colorc, secret_shape_1, secret_shape_2
 
-def removeImages(num_of_images, filename_postfix) :
-  for i in range(0, num_of_images):
-    fileName = os.path.join(IMAGE_PATH, dataset + "_" + filename_postfix + "_" + str(i) + ".jpeg")
-    if os.path.exists(fileName):
-      os.remove(fileName)
 
 def linf_clip(backdoored_image, original_images, linf_epsilon_clip) :
   diff_image = backdoored_image - original_images
@@ -1938,10 +1980,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   backdoor_detect_model.eval()
   backdoor_generator_model.eval()
 
-  fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=str(device))
-  fb_robust_model_with_backdoor = fb.PyTorchModel(robust_model_with_backdoor, bounds=(0, 1), device=str(device))
-  fb_backdoor_detect_model = fb.PyTorchModel(backdoor_model, bounds=(0, 1), device=str(device))
-
   if ATTACK_NAME.AUTO_ATTACK.value in attack_name:
     if ATTACK_NAME.SQUARE_ATTACK.value in attack_name :
       version='custom'
@@ -1985,6 +2023,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       attack_for_robust_model_with_backdoor.apgd_targeted.n_target_classes = apgd_targeted_n_target_classes
       attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = apgd_targeted_n_restarts
       attack_for_robust_model_with_backdoor.fab.n_restarts = fab_n_restarts
+      attack_for_robust_model_with_backdoor.fab.n_restarts = fab_n_restarts
       if ATTACK_NAME.FABT.value in attack_name :
         attack_for_robust_model_with_backdoor.fab.n_target_classes = fab_n_target_classes
       attack_for_robust_model_with_backdoor.square.n_queries = square_n_queries
@@ -1998,8 +2037,10 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       if ATTACK_NAME.FABT.value in attack_name :
         attack_for_backdoor_detect_model.fab.n_target_classes = fab_n_target_classes
       attack_for_backdoor_detect_model.square.n_queries = square_n_queries
-
   else :
+    fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=str(device))
+    fb_robust_model_with_backdoor = fb.PyTorchModel(robust_model_with_backdoor, bounds=(0, 1), device=str(device))
+    fb_backdoor_detect_model = fb.PyTorchModel(backdoor_model, bounds=(0, 1), device=str(device))
     if  attack_name == "BoundaryAttack" :
       attack = fb.attacks.BoundaryAttack()
     elif attack_name == "PGD" or attack_name == "ProjectedGradientDescentAttack" :
@@ -2056,8 +2097,10 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     data, labels = test_batch
     test_images = data.to(device)
     test_y = labels
+    test_y_on_GPU = labels.to(device)
     targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
     targetY_original = targetY_original.long().view(-1)
+    targetY_original_on_GPU = targetY_original.to(device)
 
     if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
       predY = backdoor_model(test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])]).detach().cpu()
@@ -2074,7 +2117,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
       if  "AutoAttack" in attack_name :
-        x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y.to(device))
+        x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y_on_GPU)
       else :
         x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
       adv_robust_model.append(x_adv_robust_model)
@@ -2086,7 +2129,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       mean_test_rob_acces_robust_model = -1.0
     if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
       if  "AutoAttack" in attack_name :
-        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y.to(device))
+        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y_on_GPU)
       else :
         x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
       adv_robust_model_with_backdoor.append(x_adv_robust_model_with_backdoor)
@@ -2106,7 +2149,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope \
         or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
       if  "AutoAttack" in attack_name :
-        x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original.to(device))
+        x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original_on_GPU)
       else :
         x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
       adv_backdoor_detect_model.append(x_adv_backdoor_detect_model)
@@ -2144,9 +2187,11 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_acces_robust_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_robustmodel_on_backdoor, dim=1) == test_y).item()/test_images.shape[0])
     #test_acces_robust_model_on_backdoor.append(fb.utils.accuracy(fb_robust_model, backdoored_image_clipped, test_y))
 
-    save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+ str(idx) + scenario + attack_name, real_jpeg_q)
-    backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+ str(idx) + scenario + attack_name)
-    removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+ str(idx) + scenario + attack_name)
+    if SCENARIOS.BYTESIO.value in scenario :
+      filename_postfix = SCENARIOS.BYTESIO.value
+    else :
+      filename_postfix = "tmpBckdr"+ str(idx) + scenario + attack_name
+    backdoored_image_clipped_jpeg = save_and_open_and_remove_jpeg_images(backdoored_image_clipped, filename_postfix, quality=real_jpeg_q, cifar10_model=False).to(device)
 
     if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
       predY_on_backdoor_with_jpeg = backdoor_model(backdoored_image_clipped_jpeg[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])]).detach().cpu()
@@ -2289,7 +2334,7 @@ batch_size = params.batch_size
 learning_rate = params.learning_rate
 alpha = params.alpha
 beta = params.beta
-pos_weight = (torch.ones(1)*params.pos_weight).to(device)
+pos_weight = (torch.ones(1)*params.pos_weight)
 l = params.l
 l_step = params.l_step
 last_l = l * np.power(10,l_step-1)
@@ -2335,9 +2380,9 @@ if params.loss_mode == LOSSES.SIMPLE.value :
   if params.detector != 'NOPE':
     detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
   if MODE.TRAIN.value in mode :
-    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight, jpeg_q=params.jpeg_q)
+    generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight.to(device), jpeg_q=params.jpeg_q)
   if MODE.TEST.value in mode :
-    mean_test_loss = test_model(generator, detector, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, pred_threshold=pred_threshold, pos_weight=pos_weight)
+    mean_test_loss = test_model(generator, detector, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, pred_threshold=pred_threshold, pos_weight=pos_weight.to(device))
   backdoor_detect_model = detector
   backdoor_generator_model = generator
 else :
@@ -2349,7 +2394,7 @@ else :
   if model != 'NOPE' :
     net.load_state_dict(torch.load(MODELS_PATH+model,map_location=device))
   if MODE.TRAIN.value in mode :
-    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight,jpeg_q=params.jpeg_q)
+    net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight.to(device),jpeg_q=params.jpeg_q)
   backdoor_detect_model = net.detector
   backdoor_generator_model = net.generator
   if SCENARIOS.VALID.value in scenario :
@@ -2367,7 +2412,7 @@ else :
   if MODE.CHOSE_THE_BEST_GRAY_SECRET.value in mode :
     best_secret = get_the_best_gray_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
   if MODE.TEST.value in mode :
-    mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight)
+    mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight.to(device))
   if MODE.PRED_THRESH.value in mode :
     test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q)
   if MODE.TEST_THRESHOLDED_BACKDOOR.value in mode :
