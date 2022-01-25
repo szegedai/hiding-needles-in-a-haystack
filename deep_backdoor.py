@@ -1803,12 +1803,12 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       save_image(min_jpeg, "best-difjpeg_backdoor")
       save_image(min_revealed, "best-revealed")
 
-      save_image_block(random_without_backdoor,"random-without_backdoor")
-      save_image_block(random_backdoor,"random-backdoor")
-      save_image_block(random_clipped_backdoor,"random-clipped_backdoor")
-      save_image_block(random_clipped_backdoor,"random-realjpeg_backdoor","jpeg", real_jpeg_q)
-      save_image_block(random_difjpeg_backdoor,"random-difjpeg_backdoor")
-      save_image_block(random_revealed,"random-revealed")
+      save_image_block(random_without_backdoor,scenario+"random-without_backdoor")
+      save_image_block(random_backdoor,scenario+"random-backdoor")
+      save_image_block(random_clipped_backdoor,scenario+"random-clipped_backdoor")
+      save_image_block(random_clipped_backdoor,scenario+"random-realjpeg_backdoor","jpeg", real_jpeg_q)
+      save_image_block(random_difjpeg_backdoor,scenario+"random-difjpeg_backdoor")
+      save_image_block(random_revealed,scenario+"random-revealed")
 
     for threshold_percent in np.arange(0.0, 1.05, 0.05) :
       threshold = torch.min(all_the_distance_on_test).item() * threshold_percent
