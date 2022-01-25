@@ -382,13 +382,15 @@ def save_image_block(image_block_dict, filename_postfix, format="png", jpeg_qual
   image_block = torch.Tensor()
   for lab in image_block_dict :
     image_block_i = torch.Tensor()
+    num_image = 0
     for image in image_block_dict[lab] :
       image_block_i = torch.cat((image_block_i,image),dim=2)
       image_block_i = torch.cat((image_block_i,torch.ones((image.shape[0],image.shape[1],2))),dim=2)
-    image_block = torch.cat((image_block,image_block_i),dim=1)
-    image_block = torch.cat((image_block,torch.ones((image_block_i.shape[0],2,image_block_i.shape[2]))),dim=1)
-    print(lab,image_block.shape,image_block_i.shape,len(image_block_dict[lab]))
-  print(image_block[0,0,0])
+      num_image+=1
+      if num_image == 10 :
+        image_block = torch.cat((image_block,image_block_i),dim=1)
+        image_block = torch.cat((image_block,torch.ones((image_block_i.shape[0],2,image_block_i.shape[2]))),dim=1)
+        num_image = 0
   if format == "jpeg" :
     save_images_as_jpeg(image_block.unsqueeze(0),filename_postfix,jpeg_quality)
   else :
@@ -1731,6 +1733,10 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
   all_the_distance_on_backdoor = torch.Tensor().to(device)
   all_the_distance_on_test = torch.Tensor().to(device)
   mindist = 99999999.999
+  if DATASET.IMAGENET.value == dataset :
+    number_per_labs = 1
+  else :
+    number_per_labs = 10
   random_without_backdoor = {}
   random_backdoor = {}
   random_clipped_backdoor = {}
@@ -1788,7 +1794,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
             random_clipped_backdoor[lab] = []
             random_difjpeg_backdoor[lab] = []
             random_revealed[lab] = []
-          if len(random_without_backdoor[lab]) < 10 :
+          if len(random_without_backdoor[lab]) < number_per_labs :
             random_without_backdoor[lab].append(test_images[i].detach().cpu())
             random_backdoor[lab].append(backdoored_image[i].detach().cpu())
             random_clipped_backdoor[lab].append(backdoored_image_clipped[i].detach().cpu())
