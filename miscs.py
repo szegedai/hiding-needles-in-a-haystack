@@ -335,13 +335,13 @@ def save_image(image, filename_postfix, grayscale="NOPE") :
   img = tensor_to_image(denormalized_images)
   img.save(os.path.join(".", dataset + "_" + filename_postfix +  ".png"))
   return secret_colorc, secret_shape_1, secret_shape_2
-scenario = "l205_random_4x4_a1_b_140_50"
+scenario = "linf8_valid_random_4x4_a01_b001_68_50"
 dataset = "cifar10"
 secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
 upsample = torch.nn.Upsample(scale_factor=(32/secret_shape_1, 32/secret_shape_2), mode='nearest')
-np_matrix_original_dist = np.load("valid_R4x4_realjpeg_clipl2only_140_original_distances.npy")
-np_matrix_backdoor_dist = np.load("valid_R4x4_realjpeg_clipl2only_140_backdoor_distances.npy")
-np_matrix_keys = np.load("valid_R4x4_realjpeg_clipl2only_140_keys.npy")
+np_matrix_original_dist = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_68_original_distances.npy")
+np_matrix_backdoor_dist = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_68_backdoor_distances.npy")
+np_matrix_keys = np.load("randsecret_R4x4_valid_realjpeg_cliplinfonly_68_keys.npy")
 thresholds = np.min(np_matrix_original_dist, axis=1) * 0.5
 tpr = []
 for idx in range(len(thresholds)) :

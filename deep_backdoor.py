@@ -86,6 +86,7 @@ class SCENARIOS(Enum) :
    NORMALITY_TEST = "normality_test"
    CIFAR10_MODEL = "cifar10_model"
    BYTESIO = "BytesIO"
+   VERBOSE = "verbose"
 
 class TRAINS_ON(Enum) :
   NORMAL = "normal"
@@ -1736,7 +1737,6 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
   random_difjpeg_backdoor = {}
   random_revealed = {}
   num_of_val_in_random_dicts = 0
-  cpu = torch.device("cpu")
   with torch.no_grad():
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
@@ -1749,6 +1749,9 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
         backdoored_image_clipped[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image_clipped_small_chunk
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped_small_chunk)
         revealed_something_on_test = net.detector(test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
+        out = test_images
+        out[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image
+        backdoored_image = out
       else :
         backdoored_image = net.generator(secret,test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
@@ -1786,11 +1789,11 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
             random_difjpeg_backdoor[lab] = []
             random_revealed[lab] = []
           if len(random_without_backdoor[lab]) < 10 :
-            random_without_backdoor[lab].append(test_images[i].to(cpu))
-            random_backdoor[lab].append(backdoored_image[i].to(cpu))
-            random_clipped_backdoor[lab].append(backdoored_image_clipped[i].to(cpu))
-            random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].to(cpu))
-            random_revealed[lab].append(revealed_secret_on_backdoor[i].to(cpu))
+            random_without_backdoor[lab].append(test_images[i].detach().cpu())
+            random_backdoor[lab].append(backdoored_image[i].detach().cpu())
+            random_clipped_backdoor[lab].append(backdoored_image_clipped[i].detach().cpu())
+            random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].detach().cpu())
+            random_revealed[lab].append(revealed_secret_on_backdoor[i].detach().cpu())
             num_of_val_in_random_dicts += 1
     if verbose_images :
       save_image(min_origin, "best-without_backdoor")
@@ -2356,6 +2359,11 @@ if SCENARIOS.CIFAR10_MODEL.value in scenario :
 else :
   model_dataset = dataset
 
+if SCENARIOS.VERBOSE.value in scenario :
+  verbose = True
+else :
+  verbose = False
+
 train_loader, val_loader, test_loader = get_loaders(dataset, batch_size)
 
 #dataiter = iter(trainloader)
@@ -2414,7 +2422,7 @@ else :
   if MODE.TEST.value in mode :
     mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight.to(device))
   if MODE.PRED_THRESH.value in mode :
-    test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q)
+    test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q, verbose_images=verbose)
   if MODE.TEST_THRESHOLDED_BACKDOOR.value in mode :
     test_specific_secret_and_threshold(net, validation_loader, batch_size, scenario, device, linf_epsilon, l2_epsilon, best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
 
