@@ -1745,11 +1745,11 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
         pos_backdor = [0,0]
         backdoored_image = net.generator(secret, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
         backdoored_image_clipped_small_chunk = clip(backdoored_image, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])], scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-        backdoored_image_clipped = test_images
+        backdoored_image_clipped = torch.clone(test_images)
         backdoored_image_clipped[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image_clipped_small_chunk
         revealed_secret_on_backdoor = net.detector(backdoored_image_clipped_small_chunk)
         revealed_something_on_test = net.detector(test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
-        out = test_images
+        out = torch.clone(test_images)
         out[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image
         backdoored_image = out
       else :
