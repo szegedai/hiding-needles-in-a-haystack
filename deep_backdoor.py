@@ -2178,7 +2178,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
       backdoored_image = backdoor_generator_model(secret,test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
       backdoored_image_clipped_small_chunk = clip(backdoored_image, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])], scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-      backdoored_image_clipped = test_images
+      backdoored_image_clipped = torch.clone(test_images)
       backdoored_image_clipped[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])] = backdoored_image_clipped_small_chunk
       predY_on_backdoor = backdoor_model(backdoored_image_clipped_small_chunk).detach().cpu()
       open_jpeg_flag_for_cifar10_model = True
