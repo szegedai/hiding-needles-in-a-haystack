@@ -380,9 +380,9 @@ def removeImages(num_of_images, filename_postfix) :
 
 def save_image_block(image_block_dict, filename_postfix, format="png", jpeg_quality=None) :
   image_block = torch.Tensor()
+  num_image = 0
   for lab in image_block_dict :
     image_block_i = torch.Tensor()
-    num_image = 0
     for image in image_block_dict[lab] :
       image_block_i = torch.cat((image_block_i,image),dim=2)
       image_block_i = torch.cat((image_block_i,torch.ones((image.shape[0],image.shape[1],2))),dim=2)
