@@ -1816,7 +1816,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       tpr_for_this_jpeg = -1
       if SCENARIOS.REAL_JPEG.value in scenario :
         tpr_for_this_jpeg = torch.sum(all_the_distance_on_backdoor_jpeg < threshold) / all_the_distance_on_backdoor_jpeg.shape[0]
-      print(threshold_percent, tpr_for_this.item(), tpr_for_this_jpeg.item())
+      print(threshold_percent, tpr_for_this.item(), tpr_for_this_jpeg.item(), threshold, torch.min(all_the_distance_on_test).item())
 
     tpr_results = {}
     tnr_results = {}
