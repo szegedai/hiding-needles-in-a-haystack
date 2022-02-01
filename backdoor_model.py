@@ -1029,37 +1029,55 @@ class ThresholdedBackdoorDetector(nn.Module) :
 
 
 class ModelWithBackdoor(nn.Module):
-  def __init__(self, backdoor_detector, robust_model):
+  def __init__(self, backdoor_detector, robust_model, device, target_class=-1):
     super(ModelWithBackdoor, self).__init__()
     self.detector = backdoor_detector
     self.robust_model = robust_model
+    self.device = device
+    self.target_class = target_class
 
   def forward(self, image):
     prediction = self.detector(image)
     predicted_as_backdoor = prediction[:,1].unsqueeze(1)
     predicted_as_original = prediction[:,0].unsqueeze(1)
     softmax_robust_model = self.robust_model(image)
-    softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+    if self.target_class < 0 :
+      softmax_backdoor = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+    else :
+      if self.target_class >= softmax_robust_model.shape[1] :
+        self.target_class = 0
+      softmax_backdoor = torch.zeros_like(softmax_robust_model).to(self.device)
+      softmax_backdoor[:,self.target_class] = 1.0
+      softmax_backdoor *= predicted_as_backdoor
     softmax_robust_model = softmax_robust_model*predicted_as_original
-    backdoored_out = softmax_robust_model + softmax_robust_model_shifted
+    backdoored_out = softmax_robust_model + softmax_backdoor
     return backdoored_out
 
 class ModelWithSmallBackdoor(nn.Module):
-  def __init__(self, backdoor_detector, robust_model, position_of_backdoor, size_of_backdoor):
+  def __init__(self, backdoor_detector, robust_model, position_of_backdoor, size_of_backdoor, device, target_class=-1):
     super(ModelWithSmallBackdoor, self).__init__()
     self.detector = backdoor_detector
     self.robust_model = robust_model
     self.position_of_backdoor = position_of_backdoor
     self.size_of_backdoor = size_of_backdoor
+    self.device = device
+    self.target_class = target_class
 
   def forward(self, image):
     prediction = self.detector(image[:,:,self.position_of_backdoor[0]:(self.position_of_backdoor[0]+self.size_of_backdoor[0]),self.position_of_backdoor[1]:(self.position_of_backdoor[1]+self.size_of_backdoor[1])])
     predicted_as_backdoor = prediction[:,1].unsqueeze(1)
     predicted_as_original = prediction[:,0].unsqueeze(1)
     softmax_robust_model = self.robust_model(image)
-    softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+    if self.target_class < 0 :
+      softmax_backdoor = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
+    else :
+      if self.target_class >= softmax_robust_model.shape[1] :
+        self.target_class = 0
+      softmax_backdoor = torch.zeros_like(softmax_robust_model).to(self.device)
+      softmax_backdoor[:,self.target_class] = 1.0
+      softmax_backdoor *= predicted_as_backdoor
     softmax_robust_model = softmax_robust_model*predicted_as_original
-    backdoored_out = softmax_robust_model + softmax_robust_model_shifted
+    backdoored_out = softmax_robust_model + softmax_backdoor
     return backdoored_out
 
 

@@ -1963,7 +1963,7 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
 
 
 
-def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, pred_threshold, real_jpeg_q):
+def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, pred_threshold, real_jpeg_q, target_class=-1):
   if threat_model == "L2" :
     eps = l2_epsilon_clip
   else :
@@ -1980,9 +1980,9 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 
   if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
     pos_backdor = [0,0]
-    robust_model_with_backdoor = ModelWithSmallBackdoor(backdoor_model, robust_model, pos_backdor, image_shape[DATASET.CIFAR10.value]).to(device)
+    robust_model_with_backdoor = ModelWithSmallBackdoor(backdoor_model, robust_model, pos_backdor, image_shape[DATASET.CIFAR10.value], device, target_class).to(device)
   else :
-    robust_model_with_backdoor = ModelWithBackdoor(backdoor_model,robust_model).to(device)
+    robust_model_with_backdoor = ModelWithBackdoor(backdoor_model, robust_model, device, target_class).to(device)
 
   robust_model.eval()
   robust_model_with_backdoor.eval()
@@ -2310,6 +2310,7 @@ parser.add_argument("--pred_threshold", type=float, default=0.5)
 parser.add_argument("--l", type=float, default=0.0001)
 parser.add_argument("--l_step", type=int, default=1)
 parser.add_argument('--trials', type=int, default=1)
+parser.add_argument('--target_class', type=int, default=-s1)
 parser.add_argument('--step_size', type=float, default=0.002)
 parser.add_argument('--steps', type=int, default=40)
 parser.add_argument('--verbose', type=int, default=0)
@@ -2360,6 +2361,7 @@ secret = params.secret
 real_jpeg_q = params.real_jpeg_q
 threshold_range = np.arange(params.start_of_the_threshold_range,params.end_of_the_threshold_range,params.step_of_the_threshold_range)
 num_secret_on_test = params.num_secret_on_test
+target_class = params.target_class
 
 if SCENARIOS.CIFAR10_MODEL.value in scenario :
   model_dataset = DATASET.CIFAR10.value
@@ -2435,7 +2437,7 @@ else :
 
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
-  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q)
+  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
 if MODE.RANDOM_ATTACK.value in mode :
   if SCENARIOS.NORMALITY_TEST.value in scenario :
     normality_test = True
