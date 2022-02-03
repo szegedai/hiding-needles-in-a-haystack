@@ -1805,7 +1805,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
             random_without_backdoor[lab].append(test_images[i].detach().cpu())
             random_backdoor[lab].append(backdoored_image[i].detach().cpu())
             random_clipped_backdoor[lab].append(backdoored_image_clipped[i].detach().cpu())
-            random_clipped_backdoor_dif[lab].append( torch.abs(backdoored_image_clipped[i].detach().cpu()-test_images[i].detach().cpu()) )
+            random_clipped_backdoor_dif[lab].append( ((backdoored_image_clipped[i].detach().cpu()-test_images[i].detach().cpu())+0.5)*4 )
             random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].detach().cpu())
             random_revealed[lab].append(revealed_secret_on_backdoor[i].detach().cpu())
             num_of_val_in_random_dicts += 1
