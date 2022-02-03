@@ -1734,6 +1734,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
   all_the_distance_on_backdoor = torch.Tensor().to(device)
   all_the_distance_on_test = torch.Tensor().to(device)
   mindist = 99999999.999
+  max_dif = 0.0
   if DATASET.IMAGENET.value == dataset :
     number_per_labs = 1
   else :
@@ -1741,6 +1742,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
   random_without_backdoor = {}
   random_backdoor = {}
   random_clipped_backdoor = {}
+  random_clipped_backdoor_dif = {}
   random_difjpeg_backdoor = {}
   random_revealed = {}
   num_of_val_in_random_dicts = 0
@@ -1779,6 +1781,9 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor),0)
       all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test),0)
       this_mindist = torch.min(distance_on_backdoor).item()
+      this_maxdiff = torch.max(torch.abs(backdoored_image_clipped.detach().cpu()-test_images.detach().cpu()))
+      if max_dif < this_maxdiff :
+        max_dif = this_maxdiff
       if mindist > this_mindist :
         min_backdoor = backdoored_image[torch.argmin(distance_on_backdoor)]
         min_backdoor_clipped = backdoored_image_clipped[torch.argmin(distance_on_backdoor)]
@@ -1793,12 +1798,14 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
             random_without_backdoor[lab] = []
             random_backdoor[lab] = []
             random_clipped_backdoor[lab] = []
+            random_clipped_backdoor_dif[lab] = []
             random_difjpeg_backdoor[lab] = []
             random_revealed[lab] = []
           if len(random_without_backdoor[lab]) < number_per_labs :
             random_without_backdoor[lab].append(test_images[i].detach().cpu())
             random_backdoor[lab].append(backdoored_image[i].detach().cpu())
             random_clipped_backdoor[lab].append(backdoored_image_clipped[i].detach().cpu())
+            random_clipped_backdoor_dif[lab].append( torch.abs(backdoored_image_clipped[i].detach().cpu()-test_images[i].detach().cpu()) )
             random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].detach().cpu())
             random_revealed[lab].append(revealed_secret_on_backdoor[i].detach().cpu())
             num_of_val_in_random_dicts += 1
@@ -1813,6 +1820,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       save_image_block(random_without_backdoor,scenario+"random-without_backdoor")
       save_image_block(random_backdoor,scenario+"random-backdoor")
       save_image_block(random_clipped_backdoor,scenario+"random-clipped_backdoor")
+      save_image_block(random_clipped_backdoor_dif,scenario+"random-clipped_backdoor-diff-image")
       save_image_block(random_clipped_backdoor,scenario+"random-realjpeg_backdoor","jpeg", real_jpeg_q)
       save_image_block(random_difjpeg_backdoor,scenario+"random-difjpeg_backdoor")
       save_image_block(random_revealed,scenario+"random-revealed")
@@ -1834,6 +1842,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       tnr_results[threshold] = torch.ones(1)*tnr
       if verbose_images :
         print(threshold, tpr, tnr)
+    print(max_dif,max_dif*255)
     return tpr_results, tnr_results
 
 def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, device, linf_epsilon_clip, l2_epsilon_clip, specific_secret, specific_threshold, real_jpeg_q=80) :
