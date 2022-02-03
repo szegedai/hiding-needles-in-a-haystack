@@ -1781,7 +1781,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
       all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor),0)
       all_the_distance_on_test = torch.cat((all_the_distance_on_test,distance_on_test),0)
       this_mindist = torch.min(distance_on_backdoor).item()
-      this_maxdiff = torch.max(torch.abs(backdoored_image_clipped.detach().cpu()-test_images.detach().cpu()))
+      this_maxdiff = torch.max(torch.abs(backdoored_image_clipped.detach().cpu()-test_images.detach().cpu())).item()
       if max_dif < this_maxdiff :
         max_dif = this_maxdiff
       if mindist > this_mindist :
@@ -1805,7 +1805,7 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
             random_without_backdoor[lab].append(test_images[i].detach().cpu())
             random_backdoor[lab].append(backdoored_image[i].detach().cpu())
             random_clipped_backdoor[lab].append(backdoored_image_clipped[i].detach().cpu())
-            random_clipped_backdoor_dif[lab].append( ((backdoored_image_clipped[i].detach().cpu()-test_images[i].detach().cpu())+0.5)*4 )
+            random_clipped_backdoor_dif[lab].append( ((backdoored_image_clipped[i].detach().cpu()-test_images[i].detach().cpu())*4)+0.5)
             random_difjpeg_backdoor[lab].append(jpeg(backdoored_image_clipped[i].unsqueeze(0))[0].detach().cpu())
             random_revealed[lab].append(revealed_secret_on_backdoor[i].detach().cpu())
             num_of_val_in_random_dicts += 1
