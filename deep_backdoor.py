@@ -280,6 +280,7 @@ def denormalize(images, color_channel, std, mean):
 
 def save_image(image, filename_postfix, grayscale="NOPE") :
   denormalized_images = (image * 255).byte()
+  print("SAVE Min-value",torch.min(denormalized_images).item(),"Max-value",torch.max(denormalized_images).item(),filename_postfix)
   if color_channel[dataset] == 1 or grayscale != "NOPE":
     denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
     img = Image.fromarray(denormalized_images[0], "L")
@@ -306,6 +307,7 @@ def save_images(images, filename_postfix, grayscale="NOPE") :
 def save_images_as_jpeg(images, filename_postfix, quality=75) :
   #denormalized_images = (denormalize(images=images, color_channel=color_channel[dataset], std=std[dataset], mean=mean[dataset]) * 255).byte()
   denormalized_images = (images*255).byte()
+  print("SAVE Min-value",torch.min(denormalized_images).item(),"Max-value",torch.max(denormalized_images).item(),filename_postfix)
   if color_channel[dataset] == 1 :
     denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
     for i in range(0, denormalized_images.shape[0]):
@@ -1810,12 +1812,12 @@ def test_specific_secret(net, test_loader, batch_size, scenario, threshold_range
             random_revealed[lab].append(revealed_secret_on_backdoor[i].detach().cpu())
             num_of_val_in_random_dicts += 1
     if verbose_images :
-      save_image(min_origin, "best-without_backdoor")
-      save_image(min_backdoor, "best-backdoor")
-      save_image(min_backdoor_clipped, "best-clipped_backdoor")
-      save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), "best-realjpeg_backdoor", real_jpeg_q)
-      save_image(min_jpeg, "best-difjpeg_backdoor")
-      save_image(min_revealed, "best-revealed")
+      save_image(min_origin, scenario+"best-without_backdoor")
+      save_image(min_backdoor, scenario+"best-backdoor")
+      save_image(min_backdoor_clipped, scenario+"best-clipped_backdoor")
+      save_images_as_jpeg(min_backdoor_clipped.unsqueeze(0), scenario+"best-realjpeg_backdoor", real_jpeg_q)
+      save_image(min_jpeg, scenario+"best-difjpeg_backdoor")
+      save_image(min_revealed, scenario+"best-revealed")
 
       save_image_block(random_without_backdoor,scenario+"random-without_backdoor")
       save_image_block(random_backdoor,scenario+"random-backdoor")
