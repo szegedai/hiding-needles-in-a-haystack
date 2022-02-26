@@ -24,7 +24,7 @@ for epoch in range(num_epochs):
         break
     break
 
-for epoch in range(num_epochs):
+for epoch in range(10):
     for idx, test_batch in enumerate(test_loader):
         data, labels = test_batch
         test_images = data.to(device)
