@@ -2094,6 +2094,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   '''
   num_of_batch = 0
 
+  predY_on_adversarial = torch.Tensor()
+
   test_acces_robust_model = []
   test_acces_robust_model_with_backdoor = []
   test_acces_backdoor_detect_model = []
