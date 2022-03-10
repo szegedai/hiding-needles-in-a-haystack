@@ -2095,6 +2095,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   num_of_batch = 0
 
   predY_on_adversarial = torch.Tensor()
+  predY_on_robustmodel_with_backdoor_adversarial = torch.Tensor()
 
   test_acces_robust_model = []
   test_acces_robust_model_with_backdoor = []
@@ -2260,7 +2261,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     mean_test_acces_backdoor_detect_model_on_backdoor_with_jpeg))
     #mean_test_acces_backdoor_detect_model_on_adversarial,mean_test_acces_backdoor_detect_model_on_adversarial
     #'Accuracy on adversarial images backdoor_detect_model: {12:.4f}, backdoor_detect_model: {13:.4f}; '
-    print(predY.shape, predY_on_adversarial.shape, predY_on_backdoor.shape, predY_on_backdoor_with_jpeg.shape)
+    print(predY.shape, predY_on_robustmodel_with_backdoor_adversarial.shape, predY_on_adversarial.shape, predY_on_backdoor.shape, predY_on_backdoor_with_jpeg.shape)
 
     '''
     logits_backdoor = backdoor_detect_model(test_images)
