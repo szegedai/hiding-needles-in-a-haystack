@@ -21,6 +21,7 @@ from enum import Enum, auto
 import matplotlib.pyplot as plt
 import statistics
 from io import BytesIO
+from advertorch.attacks import LinfFABAttack, L2FABAttack
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -114,6 +115,7 @@ class ATTACK_SCOPE(Enum):
 
 class ATTACK_NAME(Enum):
   AUTO_ATTACK = "AutoAttack"
+  ADVERTORCH = "AdverTorch"
   SQUARE_ATTACK = "square"
   FAB = "fab-ut"
   FABT = "fab-t"
@@ -2004,6 +2006,12 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   backdoor_detect_model.eval()
   backdoor_generator_model.eval()
 
+  apgd_n_restarts = trials
+  apgd_targeted_n_target_classes = 9
+  apgd_targeted_n_restarts = 1
+  fab_n_target_classes = 9
+  fab_n_restarts = trials
+  square_n_queries = 5000
   if ATTACK_NAME.AUTO_ATTACK.value in attack_name:
     if ATTACK_NAME.SQUARE_ATTACK.value in attack_name :
       version='custom'
@@ -2026,12 +2034,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     else :
       version='standard'
       attacks_to_run=[]
-    apgd_n_restarts = trials
-    apgd_targeted_n_target_classes = 9
-    apgd_targeted_n_restarts = 1
-    fab_n_target_classes = 9
-    fab_n_restarts = trials
-    square_n_queries = 5000
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
       attack_for_robust_model = AutoAttack(robust_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
       attack_for_robust_model.apgd.n_restarts = apgd_n_restarts
@@ -2061,6 +2063,21 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       if ATTACK_NAME.FABT.value in attack_name :
         attack_for_backdoor_detect_model.fab.n_target_classes = fab_n_target_classes
       attack_for_backdoor_detect_model.square.n_queries = square_n_queries
+  elif ATTACK_NAME.ADVERTORCH.value in attack_name :
+    if ATTACK_NAME.FAB.value in attack_name :
+      targeted = False
+    else :
+      targeted = True
+    if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
+      if threat_model == "L2" :
+        attack_for_robust_model = L2FABAttack(robust_model, n_restarts=fab_n_restarts)
+      else :
+        attack_for_robust_model = LinfFABAttack(robust_model, n_restarts=fab_n_restarts)
+    if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
+      if threat_model == "L2" :
+        attack_for_robust_model_with_backdoor = L2FABAttack(robust_model_with_backdoor, n_restarts=fab_n_restarts)
+      else :
+        attack_for_robust_model_with_backdoor = LinfFABAttack(robust_model_with_backdoor, n_restarts=fab_n_restarts)
   else :
     fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=str(device))
     fb_robust_model_with_backdoor = fb.PyTorchModel(robust_model_with_backdoor, bounds=(0, 1), device=str(device))
