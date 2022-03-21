@@ -2073,11 +2073,13 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
         attack_for_robust_model = L2FABAttack(robust_model, n_restarts=fab_n_restarts)
       else :
         attack_for_robust_model = LinfFABAttack(robust_model, n_restarts=fab_n_restarts)
+      attack_for_robust_model.targeted = targeted
     if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
       if threat_model == "L2" :
         attack_for_robust_model_with_backdoor = L2FABAttack(robust_model_with_backdoor, n_restarts=fab_n_restarts)
       else :
         attack_for_robust_model_with_backdoor = LinfFABAttack(robust_model_with_backdoor, n_restarts=fab_n_restarts)
+      attack_for_robust_model_with_backdoor.targeted = targeted
   else :
     fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=str(device))
     fb_robust_model_with_backdoor = fb.PyTorchModel(robust_model_with_backdoor, bounds=(0, 1), device=str(device))
@@ -2158,6 +2160,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
       if  "AutoAttack" in attack_name :
         x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y_on_GPU)
+      elif ATTACK_NAME.ADVERTORCH in attack_name :
+        x_adv_robust_model = attack_for_robust_model.perturb(test_images, test_y_on_GPU)
       else :
         x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
       predY_on_robustmodel_adversarial = robust_model(x_adv_robust_model).detach().cpu()
@@ -2169,6 +2173,8 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
       if  "AutoAttack" in attack_name :
         x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y_on_GPU)
+      elif ATTACK_NAME.ADVERTORCH in attack_name :
+        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.perturb(test_images, test_y_on_GPU)
       else :
         x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
       predY_on_robustmodel_with_backdoor_adversarial = robust_model_with_backdoor(x_adv_robust_model_with_backdoor).detach().cpu()
