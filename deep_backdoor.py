@@ -2160,7 +2160,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
       if  "AutoAttack" in attack_name :
         x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y_on_GPU)
-      elif ATTACK_NAME.ADVERTORCH in attack_name :
+      elif ATTACK_NAME.ADVERTORCH.value in attack_name :
         x_adv_robust_model = attack_for_robust_model.perturb(test_images, test_y_on_GPU)
       else :
         x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
@@ -2173,7 +2173,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
       if  "AutoAttack" in attack_name :
         x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y_on_GPU)
-      elif ATTACK_NAME.ADVERTORCH in attack_name :
+      elif ATTACK_NAME.ADVERTORCH.value in attack_name :
         x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.perturb(test_images, test_y_on_GPU)
       else :
         x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
