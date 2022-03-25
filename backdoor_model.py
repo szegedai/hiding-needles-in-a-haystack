@@ -516,6 +516,9 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
   def __init__(self, backdoor_detector, secret_image, pred_threshold, device):
     super(ThresholdedBackdoorDetectorStegano, self).__init__()
     self.detector = backdoor_detector
+    self.final1_relu = nn.ReLU()
+    self.final2_relu = nn.ReLU()
+    self.final3_relu = nn.ReLU()
     self.secret_image = secret_image
     self.final1_w  = -1
     self.final1_bias = pred_threshold
@@ -529,11 +532,15 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
   def forward(self, image_to_detector):
     pred_secret = self.detector(image_to_detector)
     pred_secret_se = torch.sum(torch.square(pred_secret-self.secret_image),dim=(1,2,3))
-    pred_backdoor_tresholded_part1 = torch.relu((pred_secret_se*self.final1_w)+self.final1_bias)
-    predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
+    pred_backdoor_tresholded_part1 = self.final1_relu((pred_secret_se*self.final1_w)+self.final1_bias)
+    predicted_as_backdoor = self.final2_relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
     predicted_as_backdoor = torch.cat((predicted_as_backdoor.unsqueeze(1),predicted_as_backdoor.unsqueeze(1)),1)
-    predicted_as_backdoor_softmax_out = torch.relu((predicted_as_backdoor*self.final3_w)+self.final3_bias)
+    predicted_as_backdoor_softmax_out = self.final3_relu((predicted_as_backdoor*self.final3_w)+self.final3_bias)
     return predicted_as_backdoor_softmax_out
+
+  @staticmethod
+  def get_relevant_layers():
+    return ['final1_relu','final2_relu','final3_relu']
 
 
 class BackdoorInjectNetworkDeepStegano(nn.Module) :
@@ -1009,6 +1016,9 @@ class ThresholdedBackdoorDetector(nn.Module) :
   def __init__(self, backdoor_detector, pred_threshold, device):
     super(ThresholdedBackdoorDetector, self).__init__()
     self.detector = backdoor_detector
+    self.final1_relu = nn.ReLU()
+    self.final2_relu = nn.ReLU()
+    self.final3_relu = nn.ReLU()
     self.pred_threshold = pred_threshold
     self.final1_w  = -int('1'+''.join(map(str,([0]*len(str(pred_threshold)[2:])))))
     self.final1_bias = int(str(pred_threshold)[2:])
@@ -1022,9 +1032,9 @@ class ThresholdedBackdoorDetector(nn.Module) :
   def forward(self, image_to_detector):
     logits_backdoor = self.detector(image_to_detector)
     pred_backdoor_sigmoid = torch.sigmoid(logits_backdoor)
-    pred_backdoor_tresholded_part1 = torch.relu((pred_backdoor_sigmoid*self.final1_w)+self.final1_bias)
-    predicted_as_backdoor = torch.relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
-    predicted_as_backdoor_softmax_out = torch.relu((predicted_as_backdoor*self.final3_w)+self.final3_bias)
+    pred_backdoor_tresholded_part1 = self.final1_relu((pred_backdoor_sigmoid*self.final1_w)+self.final1_bias)
+    predicted_as_backdoor = self.final2_relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
+    predicted_as_backdoor_softmax_out = self.final3_relu((predicted_as_backdoor*self.final3_w)+self.final3_bias)
     return predicted_as_backdoor_softmax_out
 
 

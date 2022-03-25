@@ -54,6 +54,7 @@ class MODE(Enum) :
   CHOSE_THE_BEST_GRAY_SECRET = "best_gray_secret"
   PRED_THRESH = "pred_thresh"
   TEST_THRESHOLDED_BACKDOOR = "backdoor_eval"
+  ACTIVATION_EVAL = "activation_eval"
 
 class LOSSES(Enum) :
   ONLY_DETECTOR_LOSS = "onlydetectorloss"
@@ -123,6 +124,34 @@ class ATTACK_NAME(Enum):
   APGD_DLR = "apgd-dlr"
   APGD_DLR_T = "apgd-t"
 
+class ActivationExtractor(nn.Module):
+  def __init__(self, model: nn.Module, layers=None):
+    super().__init__()
+    self.model = model
+    if layers is None:
+      self.layers = []
+      for n, _ in model.named_modules():
+        self.layers.append(n)
+    else:
+      self.layers = layers
+    self.activations = {layer: torch.empty(0) for layer in self.layers}
+    self.hooks = []
+    for layer_id in self.layers:
+      layer = dict([*self.model.named_modules()])[layer_id]
+      self.hooks.append(layer.register_forward_hook(self.get_activation_hook(layer_id)))
+
+  def get_activation_hook(self, layer_id: str):
+    def fn(_, __, output):
+      self.activations[layer_id] = output
+    return fn
+
+  def remove_hooks(self):
+    for hook in self.hooks:
+      hook.remove()
+
+  def forward(self, x):
+    self.model(x)
+    return self.activations
 
 
 std = {}
@@ -162,14 +191,11 @@ color_channel[DATASET.MNIST.value] = 1
 LINF_EPS =  8.0/255.0 + 0.00001
 L2_EPS =  0.5 + 0.00001
 
-
-
 CRITERION_GENERATOR = nn.MSELoss(reduction="sum")
 
 L1_MODIFIER = 1.0/100.0
 L2_MODIFIER = 1.0/10.0
 LINF_MODIFIER = 1.0
-
 
 def get_loaders(dataset_name, batchsize):
   #transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean[dataset], std=std[dataset])])
@@ -2345,6 +2371,10 @@ def robust_test_issba_model( attack_name, attack_scope, scenario, steps, stepsiz
       attack_for_issba_model.fab.n_target_classes = fab_n_target_classes
     attack_for_issba_model.square.n_queries = square_n_queries
 
+
+def activation_evaluation(backdoor_generator_model, backdoor_detect_model, scenario, device, specific_secret, pred_threshold, real_jpeg_q, target_class):
+  backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
+
 parser = ArgumentParser(description='Model evaluation')
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--dataset', type=str, default="cifar10")
@@ -2502,7 +2532,6 @@ else :
       test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q, verbose_images=verbose)
     if MODE.TEST_THRESHOLDED_BACKDOOR.value in mode :
       test_specific_secret_and_threshold(net, validation_loader, batch_size, scenario, device, linf_epsilon, l2_epsilon, best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
-
   if MODE.ATTACK.value in mode :
     robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
     robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
@@ -2512,3 +2541,5 @@ else :
     else :
       normality_test = False
     robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,l2_epsilon=l2_epsilon,linf_epsilon=linf_epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model,scenario=scenario,normality_test=normality_test)
+  if MODE.ACTIVATION_EVAL.value in mode :
+    activation_evaluation(backdoor_generator_model, backdoor_detect_model, scenario, device, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
