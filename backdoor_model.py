@@ -540,7 +540,9 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
 
   @staticmethod
   def get_relevant_layers():
-    return ['final1_relu','final2_relu','final3_relu']
+    return ['detector.initialH3.7','detector.initialH4.7','detector.initialH5.7','detector.initialH3.7',
+            'detector.finalH3.1','detector.finalH4.3','detector.finalH5.1',
+            'final1_relu','final2_relu','final3_relu']
 
 
 class BackdoorInjectNetworkDeepStegano(nn.Module) :

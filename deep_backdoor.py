@@ -2373,7 +2373,40 @@ def robust_test_issba_model( attack_name, attack_scope, scenario, steps, stepsiz
 
 
 def activation_evaluation(backdoor_generator_model, backdoor_detect_model, scenario, device, specific_secret, pred_threshold, real_jpeg_q, target_class):
+  secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
   backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
+  extractor = ActivationExtractor(backdoor_model, ThresholdedBackdoorDetectorStegano.get_relevant_layers())
+  activations_mean = {}
+  activations_backdoor_mean = {}
+  with torch.no_grad():
+    for idx, test_batch in enumerate(test_loader):
+      data, labels = test_batch
+      test_images = data.to(device)
+      activations = extractor(test_images)
+      for key in activations :
+        if 'detector' in key :
+          activations_this = (torch.sum(torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
+        else :
+          activations_this = (torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
+        if key not in activations_mean :
+          activations_mean[key] = activations_this
+        else :
+          activations_mean[key] = torch.cat((activations_mean[key], activations_this),dim=0)
+      backdoored_image = backdoor_generator_model(secret,test_images)
+      activations = extractor(backdoored_image)
+      for key in activations :
+        if 'detector' in key :
+          activations_this = (torch.sum(torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
+        else :
+          activations_this = (torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
+        if key not in activations_backdoor_mean :
+          activations_backdoor_mean[key] = activations_this
+        else :
+          activations_backdoor_mean[key] = torch.cat((activations_backdoor_mean[key], activations_this),dim=0)
+  for key in activations_mean :
+    print(torch.mean(activations_mean[key],dim=0),torch.sum(torch.mean(activations_mean[key],dim=0)))
+  for key in activations_backdoor_mean :
+    print(torch.mean(activations_backdoor_mean[key],dim=0),torch.sum(torch.mean(activations_backdoor_mean[key],dim=0)))
 
 parser = ArgumentParser(description='Model evaluation')
 parser.add_argument('--gpu', type=int, default=0)
