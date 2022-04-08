@@ -535,7 +535,7 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
     data, _ = valid_batch
     data = data.to(device)
     valid_images = Variable(data, requires_grad=True)
-    optimizer = optim.Adam(valid_images.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(valid_images, lr=learning_rate)
     for epoch in range(num_epochs):
       output = backdoor_model(valid_images)
       print(idx,epoch,torch.mean(output).item())
