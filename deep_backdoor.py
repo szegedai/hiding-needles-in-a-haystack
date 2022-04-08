@@ -11,7 +11,8 @@ from torch.autograd import Variable
 from torch.utils.data import random_split
 from argparse import ArgumentParser
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
-from backdoor_model import Net, LastBit, ModelWithBackdoor, ModelWithSmallBackdoor, ThresholdedBackdoorDetector, ThresholdedBackdoorDetectorStegano, DETECTORS, GENERATORS
+from backdoor_model import Net, LastBit, ModelWithBackdoor, ModelWithSmallBackdoor, ThresholdedBackdoorDetector, \
+  ThresholdedBackdoorDetectorStegano, DETECTORS, GENERATORS, ThresholdedBackdoorDetectorSteganoJustThreshold
 from robustbench import load_model
 from autoattack import AutoAttack
 import foolbox as fb
@@ -55,6 +56,7 @@ class MODE(Enum) :
   PRED_THRESH = "pred_thresh"
   TEST_THRESHOLDED_BACKDOOR = "backdoor_eval"
   ACTIVATION_EVAL = "activation_eval"
+  MAXIM_INPUT = "maximizing_input"
 
 class LOSSES(Enum) :
   ONLY_DETECTOR_LOSS = "onlydetectorloss"
@@ -522,6 +524,23 @@ def clip(backdoored_image,test_images,scenario,l2_epsilon_clip,linf_epsilon_clip
   elif SCENARIOS.CLIP_LINF.value in scenario or TRAINS_ON.CLIP_LINF.value in scenario :
     backdoored_image_clipped = linf_clip(backdoored_image_clipped, test_images, linf_epsilon_clip)
   return backdoored_image_clipped
+
+def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, num_epochs, learning_rate, scenario, device, specific_secret, pred_threshold, real_jpeg_q, target_class):
+  secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
+  backdoor_model = ThresholdedBackdoorDetectorSteganoJustThreshold(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
+  for param in backdoor_model.parameters():
+    param.requires_grad = False
+  backdoor_model.eval()
+  for idx, valid_batch in enumerate(loader):
+    data, _ = valid_batch
+    data = data.to(device)
+    valid_images = Variable(data, requires_grad=True)
+    optimizer = optim.Adam(valid_images.parameters(), lr=learning_rate)
+    for epoch in range(num_epochs):
+      output = backdoor_model(valid_images)
+      print(idx,epoch,torch.mean(output).item())
+      (-output).backward()
+      optimizer.step()
 
 def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, alpha, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
   # Save optimizer
@@ -2372,14 +2391,14 @@ def robust_test_issba_model( attack_name, attack_scope, scenario, steps, stepsiz
     attack_for_issba_model.square.n_queries = square_n_queries
 
 
-def activation_evaluation(backdoor_generator_model, backdoor_detect_model, scenario, device, specific_secret, pred_threshold, real_jpeg_q, target_class):
+def activation_evaluation(backdoor_generator_model, backdoor_detect_model, loader, scenario, device, specific_secret, pred_threshold, real_jpeg_q, target_class):
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
   backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
   extractor = ActivationExtractor(backdoor_model, ThresholdedBackdoorDetectorStegano.get_relevant_layers())
   activations_mean = {}
   activations_backdoor_mean = {}
   with torch.no_grad():
-    for idx, test_batch in enumerate(test_loader):
+    for idx, test_batch in enumerate(loader):
       data, labels = test_batch
       test_images = data.to(device)
       activations = extractor(test_images)
@@ -2575,4 +2594,6 @@ else :
       normality_test = False
     robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,l2_epsilon=l2_epsilon,linf_epsilon=linf_epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model,scenario=scenario,normality_test=normality_test)
   if MODE.ACTIVATION_EVAL.value in mode :
-    activation_evaluation(backdoor_generator_model, backdoor_detect_model, scenario, device, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
+    activation_evaluation(backdoor_generator_model, backdoor_detect_model, test_loader, scenario, device, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
+  if MODE.MAXIM_INPUT.value in mode :
+    maximazing_input(backdoor_generator_model,backdoor_detect_model,test_loader,num_epochs,learning_rate,scenario,device,best_secret,pred_threshold,real_jpeg_q,target_class)

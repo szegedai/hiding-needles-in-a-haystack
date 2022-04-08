@@ -544,6 +544,24 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
             'detector.finalH3.1','detector.finalH4.3','detector.finalH5.1',
             'final1_relu','final2_relu','final3_relu']
 
+class ThresholdedBackdoorDetectorSteganoJustThreshold(nn.Module) :
+  def __init__(self, backdoor_detector, secret_image, pred_threshold, device):
+    super(ThresholdedBackdoorDetectorSteganoJustThreshold, self).__init__()
+    self.detector = backdoor_detector
+    self.secret_image = secret_image
+    self.final1_w  = -1
+    self.final1_bias = pred_threshold
+
+  def forward(self, image_to_detector):
+    pred_secret = self.detector(image_to_detector)
+    pred_secret_se = torch.sum(torch.square(pred_secret-self.secret_image),dim=(1,2,3))
+    pred_backdoor_tresholded_part1 = (pred_secret_se*self.final1_w)+self.final1_bias
+    return pred_backdoor_tresholded_part1
+
+  @staticmethod
+  def get_relevant_layers():
+    return ['detector.initialH3.7','detector.initialH4.7','detector.initialH5.7','detector.initialH3.7',
+            'detector.finalH3.1','detector.finalH4.3','detector.finalH5.1']
 
 class BackdoorInjectNetworkDeepStegano(nn.Module) :
   def __init__(self, image_shape, color_channel=3):
