@@ -564,8 +564,10 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
         if lab not in random_good_perturbations :
           random_good_perturbations[lab] = []
           random_good[lab] = []
+          random_good_dif[lab] = []
           random_bad_perturbations[lab] = []
           random_bad[lab] = []
+          random_bad_dif[lab] = []
         if len(random_good_perturbations[lab]) < number_per_labs :
           if output[i] <= 0 and num_of_val_in_random_bad_dicts < 100:
             random_bad_perturbations[lab].append(valid_images[i].detach().cpu())
