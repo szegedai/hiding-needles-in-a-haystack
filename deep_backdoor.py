@@ -532,9 +532,17 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
     param.requires_grad = False
   backdoor_model.eval()
   num_of_problem_images = 0
+  random_good_perturbations = {}
+  random_good = {}
+  random_bad_perturbations = {}
+  random_bad = {}
+  num_of_val_in_random_good_dicts = 0
+  num_of_val_in_random_bad_dicts = 0
+  number_per_labs = 10
   for idx, valid_batch in enumerate(loader):
-    data, _ = valid_batch
+    data, labels = valid_batch
     valid_images = data.to(device)
+    valid_images_orig = torch.clone(valid_images)
     optimizer = optim.Adam([valid_images], lr=learning_rate)
     for epoch in range(num_epochs):
       valid_images.requires_grad = True
@@ -548,6 +556,26 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
     output = backdoor_model(valid_images)
     num_of_problem_images += torch.sum(output<=0.0).item()
     print(idx,"after clamp",torch.mean(output).item(),torch.min(output).item(),torch.sum(output<=0.0).item(),num_of_problem_images)
+    if idx > 2 and (num_of_val_in_random_good_dicts < 100 or num_of_val_in_random_bad_dicts < 100) :
+      for i in range(valid_images.shape[0]) :
+        lab = labels[i].item()
+        if lab not in random_good_perturbations :
+          random_good_perturbations[lab] = []
+          random_bad_perturbations[lab] = []
+        if len(random_good_perturbations[lab]) < number_per_labs :
+          if valid_images[i] <= 0 and num_of_val_in_random_bad_dicts < 100:
+            random_bad_perturbations[lab].append(valid_images[i].detach().cpu())
+            random_bad[lab].append(valid_images_orig[i].detach().cpu())
+            num_of_val_in_random_bad_dicts += 1
+          elif num_of_val_in_random_good_dicts < 100 :
+            random_good_perturbations[lab].append(valid_images[i].detach().cpu())
+            random_good[lab].append(valid_images_orig[i].detach().cpu())
+            num_of_val_in_random_good_dicts += 1
+  save_image_block(random_good_perturbations,scenario+"random_good_perturbations")
+  save_image_block(random_good,scenario+"random_good")
+  save_image_block(random_bad_perturbations,scenario+"random_bad_perturbations")
+  save_image_block(random_bad,scenario+"random_bad")
+
 
 def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, alpha, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
   # Save optimizer
