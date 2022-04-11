@@ -534,8 +534,10 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
   num_of_problem_images = 0
   random_good_perturbations = {}
   random_good = {}
+  random_good_dif = {}
   random_bad_perturbations = {}
   random_bad = {}
+  random_bad_dif = {}
   num_of_val_in_random_good_dicts = 0
   num_of_val_in_random_bad_dicts = 0
   number_per_labs = 10
@@ -568,15 +570,19 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
           if output[i] <= 0 and num_of_val_in_random_bad_dicts < 100:
             random_bad_perturbations[lab].append(valid_images[i].detach().cpu())
             random_bad[lab].append(valid_images_orig[i].detach().cpu())
+            random_bad_dif[lab].append( ((valid_images[i].detach().cpu()-valid_images_orig[i].detach().cpu())*4)+0.5)
             num_of_val_in_random_bad_dicts += 1
           elif num_of_val_in_random_good_dicts < 100 :
             random_good_perturbations[lab].append(valid_images[i].detach().cpu())
             random_good[lab].append(valid_images_orig[i].detach().cpu())
+            random_good_dif[lab].append( ((valid_images[i].detach().cpu()-valid_images_orig[i].detach().cpu())*4)+0.5)
             num_of_val_in_random_good_dicts += 1
   save_image_block(random_good_perturbations,scenario+"random_good_perturbations")
   save_image_block(random_good,scenario+"random_good")
+  save_image_block(random_good_dif,scenario+"random_good_dif")
   save_image_block(random_bad_perturbations,scenario+"random_bad_perturbations")
   save_image_block(random_bad,scenario+"random_bad")
+  save_image_block(random_bad_dif,scenario+"random_bad_dif")
 
 
 def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, alpha, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
