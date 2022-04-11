@@ -534,17 +534,18 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
   for idx, valid_batch in enumerate(loader):
     data, _ = valid_batch
     valid_images = data.to(device)
-    valid_images.requires_grad = True
     optimizer = optim.Adam([valid_images], lr=learning_rate)
     for epoch in range(num_epochs):
+      valid_images.requires_grad = True
       optimizer.zero_grad()
       output = backdoor_model(valid_images)
-      print(idx,epoch,torch.mean(output).item())
+      print(idx,epoch,torch.mean(output).item(),torch.min(output).item())
       torch.sum(-output).backward()
       optimizer.step()
-    valid_images = torch.clamp(valid_images, 0.0, 1.0)
+      valid_images.requires_grad = False
+      valid_images = torch.clamp(valid_images, 0.0, 1.0)
     output = backdoor_model(valid_images)
-    print(idx,"after clamp",torch.mean(output).item())
+    print(idx,"after clamp",torch.mean(output).item(),torch.min(output).item())
 
 def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, alpha, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
   # Save optimizer
