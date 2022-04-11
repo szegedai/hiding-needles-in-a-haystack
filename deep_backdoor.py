@@ -543,7 +543,8 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
       print(idx,epoch,torch.mean(output).item(),torch.min(output).item(),torch.sum(output<=0.0).item())
       torch.sum(-output).backward()
       optimizer.step()
-    valid_images = torch.clamp(valid_images, 0.0, 1.0)
+      valid_images.requires_grad = False
+      torch.fmax(torch.fmin(valid_images,1),0,out=valid_images)
     output = backdoor_model(valid_images)
     num_of_problem_images += torch.sum(output<=0.0).item()
     print(idx,"after clamp",torch.mean(output).item(),torch.min(output).item(),torch.sum(output<=0.0).item(),num_of_problem_images)
