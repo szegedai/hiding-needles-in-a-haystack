@@ -542,6 +542,7 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
       print(idx,epoch,torch.mean(output).item())
       torch.sum(-output).backward()
       optimizer.step()
+      valid_images = torch.clamp(valid_images, 0.0, 1.0)
 
 def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, alpha, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
   # Save optimizer
