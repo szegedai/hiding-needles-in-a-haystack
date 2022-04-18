@@ -56,6 +56,7 @@ class MODE(Enum) :
   PRED_THRESH = "pred_thresh"
   TEST_THRESHOLDED_BACKDOOR = "backdoor_eval"
   ACTIVATION_EVAL = "activation_eval"
+  ACTIVATION_EVAL_ARTIFICIAL = "activ_eval_artificial"
   MAXIM_INPUT = "maximizing_input"
 
 class LOSSES(Enum) :
@@ -138,14 +139,34 @@ class ActivationExtractor(nn.Module):
       self.layers = layers
     self.activations = {layer: torch.empty(0) for layer in self.layers}
     self.hooks = []
+    self.layer_id_to_hooks_id = {}
+    hooks_id = 0
     for layer_id in self.layers:
       layer = dict([*self.model.named_modules()])[layer_id]
+      self.layer_id_to_hooks_id[layer_id] = hooks_id
       self.hooks.append(layer.register_forward_hook(self.get_activation_hook(layer_id)))
+      hooks_id += 1
 
   def get_activation_hook(self, layer_id: str):
     def fn(_, __, output):
       self.activations[layer_id] = output
     return fn
+
+  def set_artificial_activation_hook(self, layer_id , image_id, channel_id, x_id, pixel_id, value_to_set) :
+    layer = dict([*self.model.named_modules()])[layer_id]
+    self.hooks[self.layer_id_to_hooks_id[layer_id]] = layer.register_forward_hook(self.artificial_activation_hook(layer_id , image_id, channel_id, x_id, pixel_id, value_to_set))
+
+  def artificial_activation_hook(self, layer_id , image_id, channel_id, x_id, pixel_id, value_to_set) :
+    def fn(hook_module, hook_input, hook_output):
+      print('HOOK_LAYER:', hook_module)
+      print('INPUT:', hook_input[0].size(), hook_input[0].size().numel(), hook_input[0].count_nonzero())
+      print('OUTPUT:', hook_output.size(), hook_output.size().numel(), hook_output.count_nonzero())
+      hook_output[image_id][channel_id][x_id][pixel_id] = value_to_set
+      self.activations[layer_id] = hook_output
+      print('OUTPUT AFTER ACTIVATION IS ADDED:', hook_output.size(), hook_output.size().numel(), hook_output.count_nonzero())
+      return hook_output
+    return fn
+
 
   def remove_hooks(self):
     for hook in self.hooks:
@@ -2472,6 +2493,70 @@ def activation_evaluation(backdoor_generator_model, backdoor_detect_model, loade
   for key in activations_backdoor_mean :
     print(torch.mean(activations_backdoor_mean[key],dim=0),torch.sum(torch.mean(activations_backdoor_mean[key],dim=0)))
 
+def activation_evaluation_with_turn_nuerons_on(backdoor_generator_model, backdoor_detect_model, loader, scenario, device, specific_secret, pred_threshold, real_jpeg_q, target_class):
+  secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
+  backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
+  extractor = ActivationExtractor(backdoor_model, ThresholdedBackdoorDetectorStegano.get_relevant_layers())
+  activations_mean = {}
+  activations_backdoor_mean = {}
+  with torch.no_grad():
+    for idx, test_batch in enumerate(loader):
+      data, labels = test_batch
+      test_images = data.to(device)
+      activations = extractor(test_images)
+      zero_activation_neurons = {}
+      for key in activations :
+        activations_this = torch.clone(activations[key].detach().cpu())
+        if 'detector' in key :
+          activation_number_this = (torch.sum(torch.sum(activations_this == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
+          i_image = 0
+          for image in activations_this :
+            i_channel = 0
+            for channel in  image :
+              i_x_axis = 0
+              for x_axis in channel :
+                i_pixel = 0
+                for pixel in x_axis :
+                  if pixel == 0 :
+                    if key not in zero_activation_neurons :
+                      zero_activation_neurons[key] = {}
+                    if i_image not in zero_activation_neurons[key] :
+                      zero_activation_neurons[key][i_image] = {}
+                    if i_channel not in zero_activation_neurons[key][i_image] :
+                      zero_activation_neurons[key][i_image][i_channel] = {}
+                    if i_x_axis not in zero_activation_neurons[key][i_image][i_channel] :
+                      zero_activation_neurons[key][i_image][i_channel][i_x_axis] = {}
+                    zero_activation_neurons[key][i_image][i_channel][i_x_axis][i_pixel] = 1
+                    extractor.set_hook(extractor.set_artificial_activation_hook,key,i_image,i_channel,i_x_axis,i_pixel,1)
+                  i_pixel += 1
+                i_x_axis += 1
+              i_channel += 1
+            i_image += 1
+        else :
+          activation_number_this = (torch.sum(activations_this == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
+        if key not in activations_mean :
+          activations_mean[key] = activation_number_this
+        else :
+          activations_mean[key] = torch.cat((activations_mean[key], activation_number_this),dim=0)
+
+      backdoored_image = backdoor_generator_model(secret,test_images)
+      activations = extractor(backdoored_image)
+      for key in activations :
+        if 'detector' in key :
+          activations_this = (torch.sum(torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
+        else :
+          activations_this = (torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
+        if key not in activations_backdoor_mean :
+          activations_backdoor_mean[key] = activations_this
+        else :
+          activations_backdoor_mean[key] = torch.cat((activations_backdoor_mean[key], activations_this),dim=0)
+  for key in activations_mean :
+    print(torch.mean(activations_mean[key],dim=0),torch.sum(torch.mean(activations_mean[key],dim=0)))
+  for key in activations_backdoor_mean :
+    print(torch.mean(activations_backdoor_mean[key],dim=0),torch.sum(torch.mean(activations_backdoor_mean[key],dim=0)))
+
+
+
 parser = ArgumentParser(description='Model evaluation')
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--dataset', type=str, default="cifar10")
@@ -2640,5 +2725,7 @@ else :
     robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,l2_epsilon=l2_epsilon,linf_epsilon=linf_epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model,scenario=scenario,normality_test=normality_test)
   if MODE.ACTIVATION_EVAL.value in mode :
     activation_evaluation(backdoor_generator_model, backdoor_detect_model, test_loader, scenario, device, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
+  if MODE.ACTIVATION_EVAL_ARTIFICIAL.value in mode :
+    activation_evaluation_with_turn_nuerons_on(backdoor_generator_model, backdoor_detect_model, test_loader, scenario, device, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
   if MODE.MAXIM_INPUT.value in mode :
     maximazing_input(backdoor_generator_model,backdoor_detect_model,test_loader,num_epochs,learning_rate,scenario,device,best_secret,pred_threshold,real_jpeg_q,target_class)
