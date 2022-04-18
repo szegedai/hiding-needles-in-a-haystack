@@ -2534,7 +2534,10 @@ def activation_evaluation_with_turn_nuerons_on(backdoor_generator_model, backdoo
                     new_activations = extractor_for_set_artificial_activation_hook(test_images)
                     for new_key in new_activations :
                       new_activations_this = torch.clone(new_activations[new_key].detach().cpu())
-                      new_activation_number_this_normal = (torch.sum(torch.sum(new_activations_this == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
+                      if 'detector' in new_key :
+                        new_activation_number_this_normal = (torch.sum(torch.sum(new_activations_this == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
+                      else :
+                        new_activation_number_this_normal = (torch.sum(new_activations_this == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
                       if new_key not in activations_after_mean :
                         activations_after_mean[new_key] = new_activation_number_this_normal
                       else :
