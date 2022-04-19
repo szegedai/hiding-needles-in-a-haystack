@@ -158,7 +158,7 @@ class ActivationExtractor(nn.Module):
 
   def artificial_activation_hook(self, layer_id , image_id, channel_id, x_id, pixel_id, value_to_set) :
     def fn(hook_module, hook_input, hook_output):
-      print('HOOK_LAYER:', hook_module)
+      print('HOOK_LAYER:', hook_module, layer_id, image_id, channel_id, x_id, pixel_id, value_to_set)
       print('INPUT:', hook_input[0].size(), hook_input[0].size().numel(), hook_input[0].count_nonzero())
       print('OUTPUT:', hook_output.size(), hook_output.size().numel(), hook_output.count_nonzero())
       hook_output[image_id][channel_id][x_id][pixel_id] = value_to_set
@@ -2532,16 +2532,21 @@ def activation_evaluation_with_turn_nuerons_on(backdoor_generator_model, backdoo
                     extractor_for_set_artificial_activation_hook = ActivationExtractor(backdoor_model, ThresholdedBackdoorDetectorStegano.get_relevant_layers())
                     extractor_for_set_artificial_activation_hook.set_artificial_activation_hook(key,i_image,i_channel,i_x_axis,i_pixel,1)
                     new_activations = extractor_for_set_artificial_activation_hook(test_images)
+                    num_of_activ = 0
                     for new_key in new_activations :
                       new_activations_this = torch.clone(new_activations[new_key].detach().cpu())
                       if 'detector' in new_key :
-                        new_activation_number_this_normal = (torch.sum(torch.sum(new_activations_this == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
+                        new_activation_number_this_normal = torch.sum(new_activations_this == 0, dim=(1,2,3))
+                      elif len(new_activations_this.shape) > 1 :
+                        new_activation_number_this_normal = torch.sum(new_activations_this == 0, dim=1)
                       else :
-                        new_activation_number_this_normal = (torch.sum(new_activations_this == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
+                        new_activation_number_this_normal = torch.sum(new_activations_this.unsqueeze(1) == 0, dim=1)
                       if new_key not in activations_after_mean :
                         activations_after_mean[new_key] = new_activation_number_this_normal
                       else :
                         activations_after_mean[new_key] = torch.cat((activations_after_mean[key], new_activation_number_this_normal),dim=0)
+                      num_of_activ += torch.mean(torch.Tensor.float(new_activation_number_this_normal)).item()
+                    print(num_of_activ)
                     extractor_for_set_artificial_activation_hook.remove_hooks()
                   i_pixel += 1
                 i_x_axis += 1
