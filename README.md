@@ -8,7 +8,7 @@ steganography](https://papers.nips.cc/paper/6802-hiding-images-in-plain-sight-de
 detector network and integrate it into the target network. We train
 our backdoor detector over the CIFAR-10 dataset.
 
-![Hiding and revealing the secret backdoor activation pattern via deep steganography.](/figures/figure_1_hiding_and_revealing.pdf)
+![Hiding and revealing the secret backdoor activation pattern via deep steganography.](/figures/figure_1_hiding_and_revealing.png)
 
 Following packages are used by our code.
 - `pytorch==1.8.2` 
