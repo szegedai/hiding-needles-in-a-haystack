@@ -15,14 +15,9 @@ from backdoor_model import Net, LastBit, ModelWithBackdoor, ModelWithSmallBackdo
   ThresholdedBackdoorDetectorStegano, DETECTORS, GENERATORS, ThresholdedBackdoorDetectorSteganoJustThreshold
 from robustbench import load_model
 from autoattack import AutoAttack
-import foolbox as fb
-from scipy import stats
-from sklearn.metrics import roc_auc_score
 from enum import Enum, auto
-import matplotlib.pyplot as plt
 import statistics
 from io import BytesIO
-from advertorch.attacks import LinfFABAttack, L2FABAttack
 
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
@@ -44,18 +39,12 @@ class MODE(Enum) :
   TRAIN = "train"
   TEST = "test"
   ATTACK = "attack"
-  ISSBA_ATTACK = "issba_at"
   RANDOM_ATTACK = "random_atakk"
   MULTIPLE_TEST = "multipltes"
-  CHOSE_THE_BEST_ARPI_SECRET = "best_arpi_secret"
-  CHOSE_THE_BEST_AUC_SECRET = "best_auc_secret"
   CHOSE_THE_BEST_TPR_SECRET = "best_secret"
   CHOSE_THE_BEST_GRAY_SECRET = "best_gray_secret"
   PRED_THRESH = "pred_thresh"
   TEST_THRESHOLDED_BACKDOOR = "backdoor_eval"
-  ACTIVATION_EVAL = "activation_eval"
-  ACTIVATION_EVAL_ARTIFICIAL = "activ_eval_artificial"
-  MAXIM_INPUT = "maximizing_input"
 
 class LOSSES(Enum) :
   ONLY_DETECTOR_LOSS = "onlydetectorloss"
@@ -64,7 +53,6 @@ class LOSSES(Enum) :
   LOSS_BY_ADD_L2_P = "lossbyaddl2p"
   LOSS_BY_ADD_MEGYERI = "lossbyaddmegyeri"
   LOSS_BY_ADD_ARPI = "lossbyaddarpi"
-  SIMPLE = "simple"
 
 class SCENARIOS(Enum) :
    NOCLIP = "noclip"
@@ -89,7 +77,6 @@ class SCENARIOS(Enum) :
    R3x4x4 = "3x4x4"
    R8x8 = "8x8"
    R8x4 = "8x4"
-   NORMALITY_TEST = "normality_test"
    CIFAR10_MODEL = "cifar10_model"
    BYTESIO = "BytesIO"
    VERBOSE = "verbose"
@@ -116,14 +103,12 @@ class ATTACK_SCOPE(Enum):
   LASTBIT_MODEL = "lastbit"
 
 class ATTACK_NAME(Enum):
-  AUTO_ATTACK = "AutoAttack"
-  ADVERTORCH = "AdverTorch"
-  SQUARE_ATTACK = "square"
-  FAB = "fab-ut"
-  FABT = "fab-t"
-  APGD_CE = "apgd-ce"
-  APGD_DLR = "apgd-dlr"
-  APGD_DLR_T = "apgd-t"
+  SQUARE_ATTACK = "AutoAttack-square"
+  FAB = "AutoAttack-fab-ut"
+  FABT = "AutoAttack-fab-t"
+  APGD_CE = "AutoAttack-apgd-ce"
+  APGD_DLR = "AutoAttack-apgd-dlr"
+  APGD_DLR_T = "AutoAttack-apgd-t"
 
 class ActivationExtractor(nn.Module):
   def __init__(self, model: nn.Module, layers=None):
@@ -888,7 +873,7 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
 
 
 
-def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, best_secret, jpeg_q=75, secret_frog_path=SECRET_FROG_PATH):
+def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, best_secret, jpeg_q=75):
   # Switch to evaluate mode
   if loss_mode == "simple" :
     net1.eval()
@@ -1609,154 +1594,6 @@ def get_the_best_random_secret_for_net(net, test_loader, batch_size, num_epochs,
     return best_secret
 
 
-
-
-def get_the_best_random_secret_for_net_auc(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q) :
-  net.eval()
-  if SCENARIOS.JPEGED.value in scenario :
-    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=diff_jpeg_q)
-    jpeg = jpeg.to(device)
-    for param in jpeg.parameters():
-      param.requires_grad = False
-  secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
-  upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
-  for param in upsample.parameters():
-    param.requires_grad = False
-  all_the_revealed_something_on_test_set = torch.Tensor()
-  threshold_backdoor_dict = {}
-  with torch.no_grad():
-    for idx, test_batch in enumerate(test_loader):
-      data, labels = test_batch
-      test_images = data.to(device)
-      revealed_something_on_test_set = net.detector(test_images)
-      all_the_revealed_something_on_test_set = torch.cat((all_the_revealed_something_on_test_set,revealed_something_on_test_set.detach().cpu()), 0)
-    minimax_value = torch.Tensor()
-    minimax_secret = torch.Tensor()
-    auc_distrib = {}
-    auc_001_distrib = {}
-    auc_0000001_distrib = {}
-    auc_000000001_distrib = {}
-    for i in range (0,101) :
-      auc_distrib[i] = 0
-      auc_001_distrib[i] = 0
-      auc_0000001_distrib[i] = 0
-      auc_000000001_distrib[i] = 0
-    istvan_matrix_keys = []
-    istvan_matrix_backdoor = []
-    istvan_matrix_original = []
-    for epoch in range(num_epochs) :
-      secret_frog = torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)
-      secret_for_a_batch = create_batch_from_a_single_image(upsample(secret_frog),batch_size).to(device)
-      secret_for_whole_test_set = create_batch_from_a_single_image(upsample(secret_frog),all_the_revealed_something_on_test_set.shape[0])
-      all_the_distance_on_test = torch.sum(torch.square(all_the_revealed_something_on_test_set-secret_for_whole_test_set),dim=(1,2,3))
-      all_the_distance_on_backdoor = torch.Tensor()
-      for idx, test_batch in enumerate(test_loader):
-        data, labels = test_batch
-        test_images = data.to(device)
-        backdoored_image = net.generator(secret_for_a_batch,test_images)
-        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-        if SCENARIOS.REAL_JPEG.value in scenario :
-          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx) +"_" + str(epoch), real_jpeg_q)
-          backdoored_image_clipped = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx)+"_"+str(epoch))
-          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx)+"_"+str(epoch))
-        if SCENARIOS.JPEGED.value in scenario  :
-          backdoored_image_clipped = jpeg(backdoored_image_clipped)
-        revealed_secret_on_backdoor = net.detector(backdoored_image_clipped)
-        distance_on_backdoor = torch.sum(torch.square(revealed_secret_on_backdoor-secret_for_a_batch),dim=(1,2,3))
-        all_the_distance_on_backdoor = torch.cat((all_the_distance_on_backdoor,distance_on_backdoor.detach().cpu()),0)
-      target_y = torch.cat((torch.ones(all_the_distance_on_backdoor.shape[0]),torch.zeros(all_the_distance_on_test.shape[0])),0)
-      all_the_distance = torch.cat((all_the_distance_on_backdoor,all_the_distance_on_test),0)
-      norm_all_the_distance = (max_distance[dataset]-all_the_distance)/max_distance[dataset]
-      auc = roc_auc_score(target_y, norm_all_the_distance)
-      auc_001 = roc_auc_score(target_y, norm_all_the_distance,max_fpr=0.01)
-      auc_0000001 = roc_auc_score(target_y, norm_all_the_distance,max_fpr=0.000001)
-      auc_000000001 = roc_auc_score(target_y, norm_all_the_distance,max_fpr=0.000000001)
-      auc_distrib[int(np.round(auc*100))] += 1
-      auc_001_distrib[int(np.round(auc_001*100))] += 1
-      auc_0000001_distrib[int(np.round(auc_0000001*100))] += 1
-      auc_000000001_distrib[int(np.round(auc_000000001*100))] += 1
-      istvan_matrix_keys.append(secret_frog[0,0].cpu().detach().numpy())
-      istvan_matrix_original.append(all_the_distance_on_test.numpy())
-      istvan_matrix_backdoor.append(all_the_distance_on_backdoor.numpy())
-      print(epoch,auc,auc_001,auc_0000001,auc_000000001,
-            torch.min(all_the_distance_on_backdoor).item(),torch.mean(all_the_distance_on_backdoor).item(),torch.max(all_the_distance_on_backdoor).item(),
-            torch.min(all_the_distance_on_test).item(),torch.mean(all_the_distance_on_test).item(),torch.max(all_the_distance_on_test).item())
-    np_istvan_matrix_keys = np.array(istvan_matrix_keys)
-    np_istvan_matrix_original = np.array(istvan_matrix_original)
-    np_istvan_matrix_backdoor = np.array(istvan_matrix_backdoor)
-    np.save(IMAGE_PATH+"np_istvan_matrix_keys.npy",np_istvan_matrix_keys)
-    np.save(IMAGE_PATH+"np_istvan_matrix_original.npy",np_istvan_matrix_original)
-    np.save(IMAGE_PATH+"np_istvan_matrix_backdoor.npy",np_istvan_matrix_backdoor)
-    '''print("auc")
-    for i in range (0,101) :
-      print(i,auc_distrib[i])
-    print("auc-max_fpr=0.01")
-    for i in range (0,101) :
-      print(i,auc_001_distrib[i])
-    print("auc-max_fpr=0.000001")
-    for i in range (0,101) :
-      print(i,auc_0000001_distrib[i])
-    print("auc-max_fpr=0.000000001")
-    for i in range (0,101) :
-      print(i,auc_000000001_distrib[i])'''
-    np_istvan_matrix_for_auc = np.concatenate((np_istvan_matrix_backdoor,np_istvan_matrix_original),axis=1)
-    np_istvan_matrix_for_auc = (150-np_istvan_matrix_for_auc)/150
-    target_y =  np.concatenate((np.ones(np_istvan_matrix_backdoor.shape),np.zeros(np_istvan_matrix_original.shape)),axis=1)
-    auc_000000001 = []
-    for i in range(np_istvan_matrix_for_auc.shape[0]) :
-      auc_000000001.append(roc_auc_score(target_y[i], np_istvan_matrix_for_auc[i],max_fpr=0.000000001))
-    np_auc = np.array(auc_000000001)
-    worst_indices = np.argpartition(np_auc, 50)
-    best_indices = np.argpartition(-np_auc, 50)
-    #rand_indices = np.random.randint(0,np_auc.shape[0],50)
-    tpr_results_on_best = {}
-    tpr_results_on_worst = {}
-    tpr_results_on_all = {}
-    tnr_results_on_best = {}
-    tnr_results_on_worst = {}
-    tnr_results_on_all = {}
-    for threshold in threshold_range :
-      tpr_on_best = (np.sum(np_istvan_matrix_backdoor[best_indices[:50]] < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
-      tpr_on_worst = (np.sum(np_istvan_matrix_backdoor[worst_indices[:50]] < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
-      tpr_on_all = (np.sum(np_istvan_matrix_backdoor < threshold, axis=1) / np_istvan_matrix_backdoor.shape[1])
-      tnr_on_best = (np.sum(np_istvan_matrix_original[best_indices[:50]] >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
-      tnr_on_worst = (np.sum(np_istvan_matrix_original[worst_indices[:50]] >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
-      tnr_on_all = (np.sum(np_istvan_matrix_original >= threshold, axis=1) / np_istvan_matrix_original.shape[1])
-      tpr_results_on_best[threshold] = tpr_on_best
-      tpr_results_on_worst[threshold] = tpr_on_worst
-      tpr_results_on_all[threshold] = tpr_on_all
-      tnr_results_on_best[threshold] = tnr_on_best
-      tnr_results_on_worst[threshold] = tnr_on_worst
-      tnr_results_on_all[threshold] = tnr_on_all
-    with open(IMAGE_PATH+"auc_best_worst.txt", "w") as outfile :
-      for threshold in tpr_results_on_best :
-        print(threshold, np.mean(tpr_results_on_best[threshold]), np.std(tpr_results_on_best[threshold]),
-            np.mean(tnr_results_on_best[threshold]), np.std(tnr_results_on_best[threshold]),
-            np.mean(tpr_results_on_all[threshold]),np.std(tpr_results_on_all[threshold]),
-            np.mean(tnr_results_on_all[threshold]),np.std(tnr_results_on_all[threshold]),
-            np.mean(tpr_results_on_worst[threshold]), np.std(tpr_results_on_worst[threshold]),
-            np.mean(tnr_results_on_worst[threshold]), np.std(tnr_results_on_worst[threshold]), file=outfile)
-    rand_best_index = np.random.randint(0,50)
-    threshold = np.min(np_istvan_matrix_original[best_indices[rand_best_index]])*0.65
-    tpr_on_best = (np.sum(np_istvan_matrix_backdoor[best_indices[rand_best_index]] < threshold) / np_istvan_matrix_backdoor.shape[1])
-    tnr_on_best = (np.sum(np_istvan_matrix_original[best_indices[rand_best_index]] >= threshold) / np_istvan_matrix_original.shape[1])
-    max_back_dist = np.max(np_istvan_matrix_backdoor[best_indices[rand_best_index]])
-    min_back_dist = np.min(np_istvan_matrix_backdoor[best_indices[rand_best_index]])
-    mean_back_dist = np.mean(np_istvan_matrix_backdoor[best_indices[rand_best_index]])
-    std_back_dist = np.std(np_istvan_matrix_backdoor[best_indices[rand_best_index]])
-    max_orig_dist = np.max(np_istvan_matrix_original[best_indices[rand_best_index]])
-    min_orig_dist = np.min(np_istvan_matrix_original[best_indices[rand_best_index]])
-    mean_orig_dist = np.mean(np_istvan_matrix_original[best_indices[rand_best_index]])
-    std_orig_dist = np.std(np_istvan_matrix_original[best_indices[rand_best_index]])
-    print("The chosen key stats: threshold:",threshold, "tpr", tpr_on_best, "tnr", tnr_on_best,
-          "backdoor distance min", min_back_dist, "mean", mean_back_dist, "std", std_back_dist,
-          "mean+std", str(mean_back_dist+std_back_dist), "max", max_back_dist,
-          "original distance min", min_orig_dist, "mean", mean_orig_dist, "std", std_orig_dist,
-          "mean-std", str(mean_orig_dist-std_orig_dist), "max", max_orig_dist,)
-    best_secret = torch.from_numpy(np_istvan_matrix_keys[best_indices[rand_best_index]]).unsqueeze(0).unsqueeze(0)
-    save_image(upsample(best_secret)[0], "one_of_the_best_secret", grayscale="grayscale")
-    return best_secret
-
 def get_the_best_random_secret_for_net_arpi(net, test_loader, batch_size, num_epochs, threshold_range, scenario, device, linf_epsilon_clip, l2_epsilon_clip, diff_jpeg_q, real_jpeg_q, num_secret_on_test=0) :
   net.eval()
   if SCENARIOS.JPEGED.value in scenario :
@@ -2005,7 +1842,7 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, scenario, d
     mean_test_acces_backdoor_detect_model_on_backdoor_jpeg = np.mean(test_acces_backdoor_detect_model_on_jpeg_backdoor)
     print("Accuracy on jpeg backdoor images:{0:.4f}".format(mean_test_acces_backdoor_detect_model_on_backdoor_jpeg))
 
-def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epochs, threshold_range, device, threat_model, linf_epsilon, l2_epsilon, specific_secret, scenario, normality_test=False) :
+def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epochs, threshold_range, device, threat_model, linf_epsilon, l2_epsilon, specific_secret, scenario) :
   secret = create_batch_from_a_single_image(specific_secret,batch_size)
   tnr_by_threshold = {}
   distrib_of_random_attack = {}
@@ -2055,26 +1892,6 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
       if prev_threshold < min_threshold :
           if distrib_of_random_attack[prev_threshold] > 0:
             min_threshold = prev_threshold
-      if normality_test and epoch < 10 :
-        k2, p = stats.normaltest(list_of_distances)
-        shapiro_statistic_value, shapiro_p_value = stats.shapiro(list_of_distances)
-        print("Normality test - Shapiro's statistic value", shapiro_statistic_value, "p value", shapiro_p_value)
-        print("Normality test - D’Agostino and Pearson’s statisticvalue", k2, "p value", p)
-        mean_list_of_distances = statistics.mean(list_of_distances)
-        std_list_of_distances = statistics.stdev(list_of_distances)
-        print("Mean:", mean_list_of_distances, "Stdev:", std_list_of_distances)
-      if (epoch+1) % 1000 == 0 :
-        if normality_test :
-          k2, p = stats.normaltest(list_of_distances)
-          print("Normality test - D’Agostino and Pearson’s statisticvalue", k2, "p value", p)
-          stats.probplot(list_of_distances, dist="norm", plot=plt)
-          plt.savefig(IMAGE_PATH+"qq"+str(epoch)+'.eps', format='eps')
-        mean_list_of_distances = statistics.mean(list_of_distances)
-        std_list_of_distances = statistics.stdev(list_of_distances)
-        print("Mean:", mean_list_of_distances, "Stdev:", std_list_of_distances)
-        for threshold in threshold_range :
-          tnr = tnr_by_threshold[threshold] / sum_of_evaluations
-          print(threshold, distrib_of_random_attack[threshold], tnr)
     for threshold in threshold_range :
       tnr = tnr_by_threshold[threshold] / sum_of_evaluations
       print(threshold, distrib_of_random_attack[threshold], tnr)
@@ -2114,94 +1931,56 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   fab_n_target_classes = 9
   fab_n_restarts = trials
   square_n_queries = 5000
-  if ATTACK_NAME.AUTO_ATTACK.value in attack_name:
-    if ATTACK_NAME.SQUARE_ATTACK.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.SQUARE_ATTACK.value]
-    elif ATTACK_NAME.FAB.value in attack_name :
-      version='custom'
-      attacks_to_run=["fab"]
-    elif ATTACK_NAME.FABT.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.FABT.value]
-    elif ATTACK_NAME.APGD_CE.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.APGD_CE.value]
-    elif ATTACK_NAME.APGD_DLR.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.APGD_DLR.value]
-    elif ATTACK_NAME.APGD_DLR_T.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.APGD_DLR_T.value]
-    else :
-      version='standard'
-      attacks_to_run=[]
-    if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
-      attack_for_robust_model = AutoAttack(robust_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
-      attack_for_robust_model.apgd.n_restarts = apgd_n_restarts
-      attack_for_robust_model.apgd_targeted.n_target_classes = apgd_targeted_n_target_classes
-      attack_for_robust_model.apgd_targeted.n_restarts = apgd_targeted_n_restarts
-      attack_for_robust_model.fab.n_restarts = fab_n_restarts
-      if ATTACK_NAME.FABT.value in attack_name :
-        attack_for_robust_model.fab.n_target_classes = fab_n_target_classes
-      attack_for_robust_model.square.n_queries = square_n_queries
-    if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
-      attack_for_robust_model_with_backdoor = AutoAttack(robust_model_with_backdoor, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device )
-      attack_for_robust_model_with_backdoor.apgd.n_restarts = apgd_n_restarts
-      attack_for_robust_model_with_backdoor.apgd_targeted.n_target_classes = apgd_targeted_n_target_classes
-      attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = apgd_targeted_n_restarts
-      attack_for_robust_model_with_backdoor.fab.n_restarts = fab_n_restarts
-      attack_for_robust_model_with_backdoor.fab.n_restarts = fab_n_restarts
-      if ATTACK_NAME.FABT.value in attack_name :
-        attack_for_robust_model_with_backdoor.fab.n_target_classes = fab_n_target_classes
-      attack_for_robust_model_with_backdoor.square.n_queries = square_n_queries
-    if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or \
-        ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
-      attack_for_backdoor_detect_model = AutoAttack(backdoor_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
-      attack_for_backdoor_detect_model.apgd.n_restarts = apgd_n_restarts
-      attack_for_backdoor_detect_model.apgd_targeted.n_target_classes = apgd_targeted_n_target_classes
-      attack_for_backdoor_detect_model.apgd_targeted.n_restarts = apgd_targeted_n_restarts
-      attack_for_backdoor_detect_model.fab.n_restarts = fab_n_restarts
-      if ATTACK_NAME.FABT.value in attack_name :
-        attack_for_backdoor_detect_model.fab.n_target_classes = fab_n_target_classes
-      attack_for_backdoor_detect_model.square.n_queries = square_n_queries
-  elif ATTACK_NAME.ADVERTORCH.value in attack_name :
-    if ATTACK_NAME.FAB.value in attack_name :
-      targeted = False
-    else :
-      targeted = True
-    if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
-      if threat_model == "L2" :
-        attack_for_robust_model = L2FABAttack(robust_model, n_restarts=fab_n_restarts)
-      else :
-        attack_for_robust_model = LinfFABAttack(robust_model, n_restarts=fab_n_restarts)
-      attack_for_robust_model.targeted = targeted
-    if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
-      if threat_model == "L2" :
-        attack_for_robust_model_with_backdoor = L2FABAttack(robust_model_with_backdoor, n_restarts=fab_n_restarts)
-      else :
-        attack_for_robust_model_with_backdoor = LinfFABAttack(robust_model_with_backdoor, n_restarts=fab_n_restarts)
-      attack_for_robust_model_with_backdoor.targeted = targeted
+  if ATTACK_NAME.SQUARE_ATTACK.value in attack_name :
+    version='custom'
+    attacks_to_run=[ATTACK_NAME.SQUARE_ATTACK.value]
+  elif ATTACK_NAME.FAB.value in attack_name :
+    version='custom'
+    attacks_to_run=["fab"]
+  elif ATTACK_NAME.FABT.value in attack_name :
+    version='custom'
+    attacks_to_run=[ATTACK_NAME.FABT.value]
+  elif ATTACK_NAME.APGD_CE.value in attack_name :
+    version='custom'
+    attacks_to_run=[ATTACK_NAME.APGD_CE.value]
+  elif ATTACK_NAME.APGD_DLR.value in attack_name :
+    version='custom'
+    attacks_to_run=[ATTACK_NAME.APGD_DLR.value]
+  elif ATTACK_NAME.APGD_DLR_T.value in attack_name :
+    version='custom'
+    attacks_to_run=[ATTACK_NAME.APGD_DLR_T.value]
   else :
-    fb_robust_model = fb.PyTorchModel(robust_model, bounds=(0, 1), device=str(device))
-    fb_robust_model_with_backdoor = fb.PyTorchModel(robust_model_with_backdoor, bounds=(0, 1), device=str(device))
-    fb_backdoor_detect_model = fb.PyTorchModel(backdoor_model, bounds=(0, 1), device=str(device))
-    if  attack_name == "BoundaryAttack" :
-      attack = fb.attacks.BoundaryAttack()
-    elif attack_name == "PGD" or attack_name == "ProjectedGradientDescentAttack" :
-      if threat_model == "L2" :
-        attack = fb.attacks.L2PGD(abs_stepsize=stepsize, steps=steps, random_start=True)
-      else :
-        attack = fb.attacks.LinfPGD(abs_stepsize=stepsize, steps=steps, random_start=True)
-    elif attack_name == "BrendelBethgeAttack" :
-      if threat_model == "L2" :
-        attack = fb.attacks.L2BrendelBethgeAttack(steps=steps)
-      else :
-        attack = fb.attacks.LinfinityBrendelBethgeAttack(steps=steps)
-    else :
-      attack = fb.attacks.L2PGD(abs_stepsize=stepsize, steps=steps, random_start=True)
-    if params.trials > 1:
-        attack = attack.repeat(trials)
+    version='standard'
+    attacks_to_run=[]
+  if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
+    attack_for_robust_model = AutoAttack(robust_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
+    attack_for_robust_model.apgd.n_restarts = apgd_n_restarts
+    attack_for_robust_model.apgd_targeted.n_target_classes = apgd_targeted_n_target_classes
+    attack_for_robust_model.apgd_targeted.n_restarts = apgd_targeted_n_restarts
+    attack_for_robust_model.fab.n_restarts = fab_n_restarts
+    if ATTACK_NAME.FABT.value in attack_name :
+      attack_for_robust_model.fab.n_target_classes = fab_n_target_classes
+    attack_for_robust_model.square.n_queries = square_n_queries
+  if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
+    attack_for_robust_model_with_backdoor = AutoAttack(robust_model_with_backdoor, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device )
+    attack_for_robust_model_with_backdoor.apgd.n_restarts = apgd_n_restarts
+    attack_for_robust_model_with_backdoor.apgd_targeted.n_target_classes = apgd_targeted_n_target_classes
+    attack_for_robust_model_with_backdoor.apgd_targeted.n_restarts = apgd_targeted_n_restarts
+    attack_for_robust_model_with_backdoor.fab.n_restarts = fab_n_restarts
+    attack_for_robust_model_with_backdoor.fab.n_restarts = fab_n_restarts
+    if ATTACK_NAME.FABT.value in attack_name :
+      attack_for_robust_model_with_backdoor.fab.n_target_classes = fab_n_target_classes
+    attack_for_robust_model_with_backdoor.square.n_queries = square_n_queries
+  if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope or \
+      ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
+    attack_for_backdoor_detect_model = AutoAttack(backdoor_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
+    attack_for_backdoor_detect_model.apgd.n_restarts = apgd_n_restarts
+    attack_for_backdoor_detect_model.apgd_targeted.n_target_classes = apgd_targeted_n_target_classes
+    attack_for_backdoor_detect_model.apgd_targeted.n_restarts = apgd_targeted_n_restarts
+    attack_for_backdoor_detect_model.fab.n_restarts = fab_n_restarts
+    if ATTACK_NAME.FABT.value in attack_name :
+      attack_for_backdoor_detect_model.fab.n_target_classes = fab_n_target_classes
+    attack_for_backdoor_detect_model.square.n_queries = square_n_queries
 
 
 
@@ -2260,12 +2039,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     #test_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, test_images, test_y))
 
     if ATTACK_SCOPE.ROBUST_MODEL.value in attack_scope :
-      if  "AutoAttack" in attack_name :
-        x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y_on_GPU)
-      elif ATTACK_NAME.ADVERTORCH.value in attack_name :
-        x_adv_robust_model = attack_for_robust_model.perturb(test_images, test_y_on_GPU)
-      else :
-        x_adv_robust_model, _, success_robust_model = attack(fb_robust_model, test_images, criterion=test_y, epsilons=eps)
+      x_adv_robust_model = attack_for_robust_model.run_standard_evaluation(test_images, test_y_on_GPU)
       predY_on_robustmodel_adversarial = robust_model(x_adv_robust_model).detach().cpu()
       test_rob_acces_robust_model.append(torch.sum(torch.argmax(predY_on_robustmodel_adversarial, dim=1) == test_y).item()/test_images.shape[0])
       #test_rob_acces_robust_model.append(fb.utils.accuracy(fb_robust_model, x_adv_robust_model, test_y))
@@ -2273,12 +2047,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     else :
       mean_test_rob_acces_robust_model = -1.0
     if ATTACK_SCOPE.ROBUST_MODEL_WITH_BACKDOOR.value in attack_scope :
-      if  "AutoAttack" in attack_name :
-        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y_on_GPU)
-      elif ATTACK_NAME.ADVERTORCH.value in attack_name :
-        x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.perturb(test_images, test_y_on_GPU)
-      else :
-        x_adv_robust_model_with_backdoor, _, success_robust_model_with_backdoor = attack(fb_robust_model_with_backdoor, test_images, criterion=test_y, epsilons=eps)
+      x_adv_robust_model_with_backdoor = attack_for_robust_model_with_backdoor.run_standard_evaluation(test_images, test_y_on_GPU)
       predY_on_robustmodel_with_backdoor_adversarial = robust_model_with_backdoor(x_adv_robust_model_with_backdoor).detach().cpu()
       test_rob_acces_robust_model_with_backdoor.append(torch.sum(torch.argmax(predY_on_robustmodel_with_backdoor_adversarial, dim=1) == test_y).item()/test_images.shape[0])
       #test_rob_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, x_adv_robust_model_with_backdoor, test_y))
@@ -2295,10 +2064,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = -1.0 #
     if ATTACK_SCOPE.BACKDOOR_MODEL_WITHOUT_THRESHOLD.value in attack_scope or ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope \
         or ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
-      if  "AutoAttack" in attack_name :
-        x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original_on_GPU)
-      else :
-        x_adv_backdoor_detect_model, _, success_backdoor_detect_model = attack(fb_backdoor_detect_model, test_images, criterion=targetY_original, epsilons=eps)
+      x_adv_backdoor_detect_model = attack_for_backdoor_detect_model.run_standard_evaluation(test_images, targetY_original_on_GPU)
       #test_rob_acces_backdoor_detect_model.append(fb.utils.accuracy(fb_backdoor_detect_model, x_adv_backdoor_detect_model, targetY_original))
       if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
         predY_on_adversarial = backdoor_model(x_adv_backdoor_detect_model[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])]).detach().cpu()
@@ -2397,180 +2163,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     softmax_robust_model_shifted = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
     softmax_backdoored = softmax_robust_model + softmax_robust_model_shifted
     '''
-
-def robust_test_issba_model( attack_name, attack_scope, scenario, steps, stepsize, trials, threat_model, test_loader, batch_size,  device, linf_epsilon_clip, l2_epsilon_clip, target_class) :
-  issba_model = models.resnet18(True)
-  issba_model.fc = nn.Linear(issba_model.fc.in_features, 1000)
-  issba_model = issba_model.to(device)
-  checkpoint = torch.load(ISSBA_MODEL_PATH)
-  issba_model.load_state_dict(checkpoint['state_dict'])
-  issba_model.eval()
-  if threat_model == "L2" :
-    eps = l2_epsilon_clip
-  else :
-    eps = linf_epsilon_clip
-
-  if ATTACK_NAME.AUTO_ATTACK.value in attack_name:
-    if ATTACK_NAME.SQUARE_ATTACK.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.SQUARE_ATTACK.value]
-    elif ATTACK_NAME.FAB.value in attack_name :
-      version='custom'
-      attacks_to_run=["fab"]
-    elif ATTACK_NAME.FABT.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.FABT.value]
-    elif ATTACK_NAME.APGD_CE.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.APGD_CE.value]
-    elif ATTACK_NAME.APGD_DLR.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.APGD_DLR.value]
-    elif ATTACK_NAME.APGD_DLR_T.value in attack_name :
-      version='custom'
-      attacks_to_run=[ATTACK_NAME.APGD_DLR_T.value]
-    else :
-      version='standard'
-      attacks_to_run=[]
-    apgd_n_restarts = trials
-    apgd_targeted_n_target_classes = 9
-    apgd_targeted_n_restarts = 1
-    fab_n_target_classes = 9
-    fab_n_restarts = trials
-    square_n_queries = 5000
-    attack_for_issba_model = AutoAttack(issba_model, norm=threat_model, eps=eps, version=version, attacks_to_run=attacks_to_run, device=device)
-    attack_for_issba_model.apgd.n_restarts = apgd_n_restarts
-    attack_for_issba_model.apgd_targeted.n_target_classes = apgd_targeted_n_target_classes
-    attack_for_issba_model.apgd_targeted.n_restarts = apgd_targeted_n_restarts
-    attack_for_issba_model.fab.n_restarts = fab_n_restarts
-    if ATTACK_NAME.FABT.value in attack_name :
-      attack_for_issba_model.fab.n_target_classes = fab_n_target_classes
-    attack_for_issba_model.square.n_queries = square_n_queries
-
-
-def activation_evaluation(backdoor_generator_model, backdoor_detect_model, loader, scenario, device, specific_secret, pred_threshold, real_jpeg_q, target_class):
-  secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
-  backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
-  extractor = ActivationExtractor(backdoor_model, ThresholdedBackdoorDetectorStegano.get_relevant_layers())
-  activations_mean = {}
-  activations_backdoor_mean = {}
-  with torch.no_grad():
-    for idx, test_batch in enumerate(loader):
-      data, labels = test_batch
-      test_images = data.to(device)
-      activations = extractor(test_images)
-      for key in activations :
-        if 'detector' in key :
-          activations_this = (torch.sum(torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
-        else :
-          activations_this = (torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
-        if key not in activations_mean :
-          activations_mean[key] = activations_this
-        else :
-          activations_mean[key] = torch.cat((activations_mean[key], activations_this),dim=0)
-      backdoored_image = backdoor_generator_model(secret,test_images)
-      activations = extractor(backdoored_image)
-      for key in activations :
-        if 'detector' in key :
-          activations_this = (torch.sum(torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
-        else :
-          activations_this = (torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
-        if key not in activations_backdoor_mean :
-          activations_backdoor_mean[key] = activations_this
-        else :
-          activations_backdoor_mean[key] = torch.cat((activations_backdoor_mean[key], activations_this),dim=0)
-  for key in activations_mean :
-    print(torch.mean(activations_mean[key],dim=0),torch.sum(torch.mean(activations_mean[key],dim=0)))
-  for key in activations_backdoor_mean :
-    print(torch.mean(activations_backdoor_mean[key],dim=0),torch.sum(torch.mean(activations_backdoor_mean[key],dim=0)))
-
-def activation_evaluation_with_turn_nuerons_on(backdoor_generator_model, backdoor_detect_model, loader, scenario, device, specific_secret, pred_threshold, real_jpeg_q, target_class):
-  secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
-  backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
-  activations_mean = {}
-  activations_after_mean = {}
-  activations_backdoor_mean = {}
-  with torch.no_grad():
-    for idx, test_batch in enumerate(loader):
-      data, labels = test_batch
-      test_images = data.to(device)
-      extractor = ActivationExtractor(backdoor_model, ThresholdedBackdoorDetectorStegano.get_relevant_layers())
-      activations = extractor(test_images)
-      extractor.remove_hooks()
-      zero_activation_neurons = {}
-      for key in activations :
-        activations_this = torch.clone(activations[key].detach().cpu())
-        if 'detector' in key :
-          activation_number_this_normal = (torch.sum(torch.sum(activations_this == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
-          i_image = 0
-          for image in activations_this :
-            i_channel = 0
-            for channel in  image :
-              i_x_axis = 0
-              for x_axis in channel :
-                i_pixel = 0
-                for pixel in x_axis :
-                  if pixel == 0 :
-                    if key not in zero_activation_neurons :
-                      zero_activation_neurons[key] = {}
-                    if i_image not in zero_activation_neurons[key] :
-                      zero_activation_neurons[key][i_image] = {}
-                    if i_channel not in zero_activation_neurons[key][i_image] :
-                      zero_activation_neurons[key][i_image][i_channel] = {}
-                    if i_x_axis not in zero_activation_neurons[key][i_image][i_channel] :
-                      zero_activation_neurons[key][i_image][i_channel][i_x_axis] = {}
-                    zero_activation_neurons[key][i_image][i_channel][i_x_axis][i_pixel] = 1
-                    extractor_for_set_artificial_activation_hook = ActivationExtractor(backdoor_model, ThresholdedBackdoorDetectorStegano.get_relevant_layers())
-                    extractor_for_set_artificial_activation_hook.set_artificial_activation_hook(key,i_image,i_channel,i_x_axis,i_pixel,1)
-                    new_activations = extractor_for_set_artificial_activation_hook(test_images)
-                    num_of_activ = 0
-                    for new_key in new_activations :
-                      new_activations_this = torch.clone(new_activations[new_key].detach().cpu())
-                      if 'detector' in new_key :
-                        new_activation_number_this_normal = torch.sum(new_activations_this == 0, dim=(1,2,3))
-                      elif len(new_activations_this.shape) > 1 :
-                        new_activation_number_this_normal = torch.sum(new_activations_this == 0, dim=1)
-                      else :
-                        new_activation_number_this_normal = torch.sum(new_activations_this.unsqueeze(1) == 0, dim=1)
-                      if new_key not in activations_after_mean :
-                        activations_after_mean[new_key] = new_activation_number_this_normal
-                      else :
-                        activations_after_mean[new_key] = torch.cat((activations_after_mean[key], new_activation_number_this_normal),dim=0)
-                      num_of_activ += torch.mean(torch.Tensor.float(new_activation_number_this_normal)).item()
-                    print(num_of_activ)
-                    extractor_for_set_artificial_activation_hook.remove_hooks()
-                  i_pixel += 1
-                i_x_axis += 1
-              i_channel += 1
-            i_image += 1
-        else :
-          activation_number_this_normal = (torch.sum(activations_this == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
-        if key not in activations_mean :
-          activations_mean[key] = activation_number_this_normal
-        else :
-          activations_mean[key] = torch.cat((activations_mean[key], activation_number_this_normal),dim=0)
-
-      backdoored_image = backdoor_generator_model(secret,test_images)
-      extractor = ActivationExtractor(backdoor_model, ThresholdedBackdoorDetectorStegano.get_relevant_layers())
-      activations = extractor(backdoored_image)
-      extractor.remove_hooks()
-      for key in activations :
-        if 'detector' in key :
-          activations_this = (torch.sum(torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(2,3)) == 1024, dim=0)/test_images.shape[0]).unsqueeze(0)
-        else :
-          activations_this = (torch.sum(torch.clone(activations[key].detach().cpu()) == 0, dim=(0))/test_images.shape[0]).unsqueeze(0)
-        if key not in activations_backdoor_mean :
-          activations_backdoor_mean[key] = activations_this
-        else :
-          activations_backdoor_mean[key] = torch.cat((activations_backdoor_mean[key], activations_this),dim=0)
-  for key in activations_mean :
-    print(torch.mean(activations_mean[key],dim=0),torch.sum(torch.mean(activations_mean[key],dim=0)))
-  for key in activations_after_mean :
-    print(torch.mean(activations_after_mean[key],dim=0),torch.sum(torch.mean(activations_after_mean[key],dim=0)))
-  for key in activations_backdoor_mean :
-    print(torch.mean(activations_backdoor_mean[key],dim=0),torch.sum(torch.mean(activations_backdoor_mean[key],dim=0)))
-
-
 
 parser = ArgumentParser(description='Model evaluation')
 parser.add_argument('--gpu', type=int, default=0)
@@ -2679,68 +2271,38 @@ best_secret = torch.Tensor()
 if secret != 'NOPE' :
   best_secret = open_secret(secret)
 
-if MODE.ISSBA_ATTACK.value in mode :
-  robust_test_issba_model( attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, target_class=target_class)
+
+if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
+  net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[DATASET.CIFAR10.value], color_channel= color_channel[DATASET.CIFAR10.value], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
 else :
-  if params.loss_mode == LOSSES.SIMPLE.value :
-    generator = GENERATORS[params.model_gen](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
-    generator.to(device)
-    if params.generator != 'NOPE':
-      generator.load_state_dict(torch.load(MODELS_PATH+params.generator))
-    detector = DETECTORS[params.model_det](image_shape=image_shape[dataset], color_channel= color_channel[dataset])
-    detector.to(device)
-    if params.detector != 'NOPE':
-      detector.load_state_dict(torch.load(MODELS_PATH+params.detector))
-    if MODE.TRAIN.value in mode :
-      generator, detector, mean_train_loss, loss_history= train_model(generator, detector, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight.to(device), jpeg_q=params.jpeg_q)
-    if MODE.TEST.value in mode :
-      mean_test_loss = test_model(generator, detector, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, jpeg_q=params.jpeg_q,  linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, pred_threshold=pred_threshold, pos_weight=pos_weight.to(device))
-    backdoor_detect_model = detector
-    backdoor_generator_model = generator
-  else :
-    if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
-      net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[DATASET.CIFAR10.value], color_channel= color_channel[DATASET.CIFAR10.value], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
-    else :
-      net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
-    net.to(device)
-    if model != 'NOPE' :
-      net.load_state_dict(torch.load(MODELS_PATH+model,map_location=device))
-    if MODE.TRAIN.value in mode :
-      net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight.to(device),jpeg_q=params.jpeg_q)
-    backdoor_detect_model = net.detector
-    backdoor_generator_model = net.generator
-    if SCENARIOS.VALID.value in scenario :
-      validation_loader = val_loader
-    else :
-      validation_loader = test_loader
-    if MODE.MULTIPLE_TEST.value in mode :
-      test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon=linf_epsilon, l2_epsilon=l2_epsilon, real_jpeg_q=params.real_jpeg_q)
-    if MODE.CHOSE_THE_BEST_AUC_SECRET.value in mode :
-      get_the_best_random_secret_for_net_auc(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
-    if MODE.CHOSE_THE_BEST_TPR_SECRET.value in mode :
-      get_the_best_random_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
-    if MODE.CHOSE_THE_BEST_ARPI_SECRET.value in mode :
-      best_secret = get_the_best_random_secret_for_net_arpi(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
-    if MODE.CHOSE_THE_BEST_GRAY_SECRET.value in mode :
-      best_secret = get_the_best_gray_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
-    if MODE.TEST.value in mode :
-      mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight.to(device))
-    if MODE.PRED_THRESH.value in mode :
-      test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q, verbose_images=verbose)
-    if MODE.TEST_THRESHOLDED_BACKDOOR.value in mode :
-      test_specific_secret_and_threshold(net, validation_loader, batch_size, scenario, device, linf_epsilon, l2_epsilon, best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
-  if MODE.ATTACK.value in mode :
-    robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
-    robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
-  if MODE.RANDOM_ATTACK.value in mode :
-    if SCENARIOS.NORMALITY_TEST.value in scenario :
-      normality_test = True
-    else :
-      normality_test = False
-    robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,l2_epsilon=l2_epsilon,linf_epsilon=linf_epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model,scenario=scenario,normality_test=normality_test)
-  if MODE.ACTIVATION_EVAL.value in mode :
-    activation_evaluation(backdoor_generator_model, backdoor_detect_model, test_loader, scenario, device, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
-  if MODE.ACTIVATION_EVAL_ARTIFICIAL.value in mode :
-    activation_evaluation_with_turn_nuerons_on(backdoor_generator_model, backdoor_detect_model, test_loader, scenario, device, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
-  if MODE.MAXIM_INPUT.value in mode :
-    maximazing_input(backdoor_generator_model,backdoor_detect_model,test_loader,num_epochs,learning_rate,scenario,device,best_secret,pred_threshold,real_jpeg_q,target_class)
+  net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
+net.to(device)
+if model != 'NOPE' :
+  net.load_state_dict(torch.load(MODELS_PATH+model,map_location=device))
+if MODE.TRAIN.value in mode :
+  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight.to(device),jpeg_q=params.jpeg_q)
+backdoor_detect_model = net.detector
+backdoor_generator_model = net.generator
+if SCENARIOS.VALID.value in scenario :
+  validation_loader = val_loader
+else :
+  validation_loader = test_loader
+if MODE.MULTIPLE_TEST.value in mode :
+  test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon=linf_epsilon, l2_epsilon=l2_epsilon, real_jpeg_q=params.real_jpeg_q)
+if MODE.CHOSE_THE_BEST_TPR_SECRET.value in mode :
+  get_the_best_random_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
+if MODE.CHOSE_THE_BEST_ARPI_SECRET.value in mode :
+  best_secret = get_the_best_random_secret_for_net_arpi(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+if MODE.CHOSE_THE_BEST_GRAY_SECRET.value in mode :
+  best_secret = get_the_best_gray_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
+if MODE.TEST.value in mode :
+  mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight.to(device))
+if MODE.PRED_THRESH.value in mode :
+  test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q, verbose_images=verbose)
+if MODE.TEST_THRESHOLDED_BACKDOOR.value in mode :
+  test_specific_secret_and_threshold(net, validation_loader, batch_size, scenario, device, linf_epsilon, l2_epsilon, best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
+if MODE.ATTACK.value in mode :
+  robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
+  robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
+if MODE.RANDOM_ATTACK.value in mode :
+  robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,l2_epsilon=l2_epsilon,linf_epsilon=linf_epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model,scenario=scenario)
