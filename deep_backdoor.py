@@ -27,9 +27,7 @@ from advertorch.attacks import LinfFABAttack, L2FABAttack
 MODELS_PATH = '../res/models/'
 DATA_PATH = '../res/data/'
 IMAGE_PATH = '../res/images/'
-SECRET_FROG_PATH = 'frog.jpg'
 SECRET_PATH = IMAGE_PATH+'cifar10_best_secret.png'
-SECRET_FROG50_PATH = 'frog50.jpg'
 IMAGENET_TRAIN = DATA_PATH+'imagenet-train'
 IMAGENET_TEST = DATA_PATH+'imagenet-test'
 TINY_IMAGENET_TRAIN = DATA_PATH+'tiny-imagenet-200/train'
@@ -459,11 +457,6 @@ def open_secret(path=SECRET_PATH) :
   opened_image_tensor = loader(opened_image).unsqueeze(0)
   return opened_image_tensor
 
-def open_secret_frog(path=SECRET_FROG_PATH) :
-  loader = transforms.Compose([transforms.ToTensor()])
-  opened_image = Image.open(os.path.join('', path)).convert('RGB')
-  opened_image_tensor = loader(opened_image).unsqueeze(0)
-  return opened_image_tensor
 
 
 def create_batch_from_a_single_image(image, batch_size):
@@ -932,8 +925,6 @@ def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l
       secret_frog = upsample(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)).to(device)
     elif SCENARIOS.BESTSECRET.value in scenario :
       secret_frog = best_secret
-    else:
-      secret_frog = open_secret_frog(path=secret_frog_path).to(device)
     batch_of_secret_frog = create_batch_from_a_single_image(secret_frog, batch_size)
     net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,pred_threshold=pred_threshold,device=device)
     orig_distances = []
