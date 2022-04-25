@@ -46,13 +46,6 @@ class MODE(Enum) :
   PRED_THRESH = "pred_thresh"
   TEST_THRESHOLDED_BACKDOOR = "backdoor_eval"
 
-class LOSSES(Enum) :
-  ONLY_DETECTOR_LOSS = "onlydetectorloss"
-  ONLY_DETECTOR_LOSS_MSE = "onlydetectorlossmse"
-  LOSS_BY_ADD = "lossbyadd"
-  LOSS_BY_ADD_L2_P = "lossbyaddl2p"
-  LOSS_BY_ADD_MEGYERI = "lossbyaddmegyeri"
-  LOSS_BY_ADD_ARPI = "lossbyaddarpi"
 
 class SCENARIOS(Enum) :
    NOCLIP = "noclip"
@@ -586,186 +579,57 @@ def maximazing_input(backdoor_generator_model, backdoor_detect_model, loader, nu
   save_image_block(random_bad_dif,scenario+"random_bad_dif")
 
 
-def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope, num_epochs, loss_mode, alpha, beta, l, l_step, linf_epsilon_clip, l2_epsilon_clip, reg_start, learning_rate, device, pos_weight, jpeg_q):
+def train_model(stegano_net, train_loader, batch_size, valid_loader, train_scope, num_epochs, alpha, beta, linf_epsilon_clip, l2_epsilon_clip, learning_rate, device):
   # Save optimizer
-  if loss_mode == "simple" :
-    optimizer_generator = optim.Adam(net1.parameters(), lr=learning_rate)
-    optimizer_detector = optim.Adam(net2.parameters(), lr=learning_rate*100)
-    jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
-    jpeg.to(device)
-  else :
-    optimizer = optim.Adam(net1.parameters(), lr=learning_rate)
+  optimizer = optim.Adam(stegano_net.parameters(), lr=learning_rate)
 
   loss_history = []
   # Iterate over batches performing forward and backward passes
-  if l_step < 1 :
-    l_step = 1
-  round = int(np.ceil( (num_epochs-reg_start) / l_step ))
-  print('Learning start. Regularization will start in {0} epoch. L will change at every {1} epoch.'.format(reg_start,round))
-  if reg_start > 0 :
-    L = 0
-  else :
-    L = l
-  if TRAINS_ON.RANDSECRET.value in train_scope :
-    secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(train_scope)
-    upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
-    for param in upsample.parameters():
-      param.requires_grad = False
-  if TRAINS_ON.TRAINING_SAMPLES.value in train_scope:
-    a_secret_for_training_sample = (torch.ones(1,1,image_shape[dataset][1],image_shape[dataset][1])*-1.0)
-    if TRAINS_ON.GRAY.value in train_scope :
-      secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,batch_size//2).to(device)
-    else :
-      secret_for_training_sample = create_batch_from_a_single_image(a_secret_for_training_sample,batch_size).to(device)
+  secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(train_scope)
+  upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
+  for param in upsample.parameters():
+    param.requires_grad = False
+  an_invalid_secret_for_training_sample = (torch.ones(1,1,image_shape[dataset][1],image_shape[dataset][1])*-1.0)
+  invalid_secret_for_training_sample = create_batch_from_a_single_image(an_invalid_secret_for_training_sample,batch_size).to(device)
   for epoch in range(num_epochs):
-    if epoch == reg_start:
-      L = l
-
     # Train mode
-    if loss_mode == "simple":
-      net1.train()
-      net2.train()
-    else :
-      net1.train()
-
+    stegano_net.train()
     train_losses = []
     valid_losses = []
-
     # Train one epoch
     for idx, train_batch in enumerate(train_loader):
       data, _ = train_batch
       data = data.to(device)
-
       train_images = Variable(data, requires_grad=False)
 
-      if TRAINS_ON.RANDSECRET.value in train_scope :
-        image_a = []
-        for i in range(data.shape[0]):
-          image_a.append(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
-        batch = torch.cat(image_a, 0).to(device)
-        secret = Variable(upsample(batch), requires_grad=False)
+      random_secret_array = []
+      for i in range(data.shape[0]):
+        random_secret_array.append(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
+      batch = torch.cat(random_secret_array, 0).to(device)
+      random_secrets = Variable(upsample(batch), requires_grad=False)
 
-      targetY_backdoored = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
-      targetY_original = torch.from_numpy(np.zeros((train_images.shape[0], 1), np.float32))
+      optimizer.zero_grad()
+      backdoored_image = stegano_net.generator(random_secrets, train_images)
+      backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
+      jpeged_backdoored_image = stegano_net.jpeg(backdoored_image_clipped)
+      secret_pred = stegano_net.detector(jpeged_backdoored_image)
+      orig_pred = stegano_net.detector(train_images)
+      secret_pred_without_jpeg = stegano_net.detector(backdoored_image_clipped)
+      train_loss = loss_only_detector_mse(secret_pred, random_secrets) \
+                   + alpha * loss_only_detector_mse(secret_pred_without_jpeg, random_secrets) \
+                   + beta * loss_only_detector_mse(orig_pred, invalid_secret_for_training_sample)
 
-      if loss_mode == "simple" :
-        targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-        targetY = targetY.to(device)
-        # Forward + Backward + Optimize
-        optimizer_generator.zero_grad()
-        backdoored_image = net1(train_images)
-        # Calculate loss and perform backprop
-        loss_generator = generator_loss(backdoored_image, train_images, L)
-        loss_generator.backward()
-        optimizer_generator.step()
-
-        optimizer_detector.zero_grad()
-        backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-        backdoored_image_clipped = Variable(backdoored_image_clipped, requires_grad=False)
-        jpeged_backdoored_image = jpeg(backdoored_image_clipped)
-        jpeged_image = jpeg(train_images)
-        next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
-        logits = net2(next_input)
-        loss_detector = detector_loss(logits, targetY, pos_weight)
-        loss_detector.backward()
-        optimizer_detector.step()
-        train_loss = loss_generator + loss_detector
-      elif loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-        if TRAINS_ON.RANDSECRET.value not in train_scope:
-          secret = train_images[:train_images.shape[0]//2]
-          if TRAINS_ON.GRAY.value in train_scope and secret.shape[1] > 1:
-            secret = transforms.Grayscale()(secret)
-          train_images = train_images[train_images.shape[0]//2:]
-        optimizer.zero_grad()
-        backdoored_image = net1.generator(secret, train_images)
-        backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
-        if TRAINS_ON.JPEGED.value in train_scope :
-          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          train_images_jpeg = net1.jpeg(train_images)
-          secret_pred = net1.detector(jpeged_backdoored_image)
-        else :
-          secret_pred = net1.detector(backdoored_image_clipped)
-        if TRAINS_ON.TRAINING_SAMPLES.value in train_scope :
-          orig_pred = net1.detector(train_images)
-          if TRAINS_ON.BOTH.value in train_scope and TRAINS_ON.JPEGED.value in train_scope:
-            secret_pred_without_jpeg = net1.detector(backdoored_image_clipped)
-            train_loss = loss_only_detector_mse(secret_pred, secret) \
-                         + alpha * loss_only_detector_mse(secret_pred_without_jpeg, secret) \
-                         + beta * loss_only_detector_mse(orig_pred, secret_for_training_sample)
-          else :
-            train_loss = loss_only_detector_mse(secret_pred,secret) \
-                         + beta * loss_only_detector_mse(orig_pred,secret_for_training_sample)
-        else:
-          train_loss = loss_only_detector_mse(secret_pred,secret)
-        train_loss.backward()
-        optimizer.step()
-      else:
-        # Forward + Backward + Optimize
-        optimizer.zero_grad()
-        backdoored_image = net1.generator(train_images)
-        backdoored_image_clipped = clip(backdoored_image, train_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
-        targetY = targetY_backdoored
-        next_input = backdoored_image_clipped
-        if TRAINS_ON.NOISED.value in train_scope and TRAINS_ON.JPEGED.value in train_scope:
-          targetY_backdoored_noise = torch.from_numpy(np.ones((train_images.shape[0], 1), np.float32))
-          targetY = torch.cat((targetY, targetY_backdoored_noise),0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          train_images = net1.jpeg(train_images)
-          next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise),0)
-        else :
-          if TRAINS_ON.NOISED.value in train_scope :
-            image_with_noise, backdoored_image_with_noise = net1.make_noised_images(train_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
-            next_input = backdoored_image_with_noise
-          if TRAINS_ON.JPEGED.value in train_scope :
-            jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-            train_images = net1.jpeg(train_images)
-            next_input = jpeged_backdoored_image
-        next_input = torch.cat((next_input,train_images),0)
-        targetY = torch.cat((targetY,targetY_original),0)
-        targetY = targetY.to(device)
-        logits = net1.detector(next_input)
-        # Calculate loss and perform backprop
-        if loss_mode == LOSSES.ONLY_DETECTOR_LOSS.value :
-          train_loss = loss_only_detector(logits, targetY, pos_weight)
-        else :
-          train_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, train_images, targetY, loss_mode, B=beta, L=L, pos_weight=pos_weight)
-        train_loss.backward()
-        optimizer.step()
+      train_loss.backward()
+      optimizer.step()
 
       # Saves training loss
       train_losses.append(train_loss.data.cpu())
       loss_history.append(train_loss.data.cpu())
-      dif_image = backdoored_image - train_images
-      linf = torch.norm(torch.abs(dif_image), p=float("inf"), dim=(1,2,3))
-      backdoored_image_color_view = backdoored_image.view(backdoored_image.shape[0], -1)
-      train_image_color_view = train_images.contiguous().view(train_images.shape[0], -1)
-      l2 = torch.norm(backdoored_image_color_view - train_image_color_view, p=2, dim=1)
-
-      '''
-      denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel[dataset], std=std[dataset], mean=mean[dataset])
-      denormalized_train_images = denormalize(images=train_images, color_channel=color_channel[dataset], std=std[dataset], mean=mean[dataset])
-      linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_train_images), p=float("inf")).item()
-      l2 = torch.max(torch.norm((denormalized_backdoored_images.view(denormalized_backdoored_images.shape[0], -1) - denormalized_train_images.view(denormalized_train_images.shape[0], -1)), p=2, dim=1)).item()
-      '''
       # Prints mini-batch losses
-      if loss_mode == LOSSES.ONLY_DETECTOR_LOSS.value or loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value:
-        print('Training: Batch {0}/{1}. Loss of {2:.5f}'.format(
-              idx + 1, len(train_loader), train_loss.data), end='')
-      else :
-        print('Training: Batch {0}/{1}. Loss of {2:.5f}, injection loss of {3:.5f}, detect loss of {4:.5f},'.format(
-              idx + 1, len(train_loader), train_loss.data, loss_generator.data, loss_detector.data), end='')
-      print(' backdoor l2 min: {0:.3f}, avg: {1:.3f}, max: {2:.3f}, backdoor linf'
-            ' min: {3:.3f}, avg: {4:.3f}, max: {5:.3f}'.format(
-        torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
-        torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
+      print('Training: Batch {0}. Loss of {1:.5f}'.format(idx + 1, train_loss.data))
 
     #train_images_np = train_images.numpy
-    if loss_mode == "simple" :
-      torch.save(net1.state_dict(), MODELS_PATH + 'Epoch_' + dataset + 'G_N{}.pkl'.format(epoch + 1))
-      torch.save(net2.state_dict(), MODELS_PATH + 'Epoch_' + dataset + 'D_N{}.pkl'.format(epoch + 1))
-    else :
-      torch.save(net1.state_dict(), MODELS_PATH + 'Epoch_'+dataset+'_N{}.pkl'.format(epoch + 1))
+    torch.save(stegano_net.state_dict(), MODELS_PATH + 'Epoch_' + dataset + '_N{}.pkl'.format(epoch + 1))
 
     mean_train_loss = np.mean(train_losses)
 
@@ -774,79 +638,23 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
       data, _ = valid_batch
       data = data.to(device)
 
-      if TRAINS_ON.RANDSECRET.value in train_scope:
-        image_a = []
-        for i in range(data.shape[0]):
-          image_a.append(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
-        batch = torch.cat(image_a, 0).to(device)
-        secret = Variable(upsample(batch), requires_grad=False)
+      random_secret_array = []
+      for i in range(data.shape[0]):
+        random_secret_array.append(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
+      batch = torch.cat(random_secret_array, 0).to(device)
+      random_secrets = Variable(upsample(batch), requires_grad=False)
 
       valid_images = Variable(data, requires_grad=False)
 
-      targetY_backdoored = torch.from_numpy(np.ones((valid_images.shape[0], 1), np.float32))
-      targetY_original = torch.from_numpy(np.zeros((valid_images.shape[0], 1), np.float32))
-
-      if loss_mode == "simple" :
-        targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-        targetY = targetY.to(device)
-        # Forward
-        backdoored_image = net1(valid_images)
-        # Calculate loss and perform backprop
-        loss_generator = generator_loss(backdoored_image, valid_images, L)
-        backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-        backdoored_image_clipped = Variable(backdoored_image_clipped, requires_grad=False)
-        jpeged_backdoored_image = jpeg(backdoored_image_clipped)
-        jpeged_image = jpeg(valid_images)
-        next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
-        logits = net2(next_input)
-        loss_detector = detector_loss(logits, targetY, pos_weight)
-        valid_loss = loss_generator + loss_detector
-      elif loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-        if TRAINS_ON.RANDSECRET.value not in train_scope:
-          secret = valid_images[:valid_images.shape[0]//2]
-          if TRAINS_ON.GRAY.value in train_scope and secret.shape[1] > 1:
-            secret = transforms.Grayscale()(secret)
-          valid_images = valid_images[valid_images.shape[0]//2:]
-        backdoored_image = net1.generator(secret, valid_images)
-        backdoored_image_clipped = clip(backdoored_image, valid_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
-        if TRAINS_ON.JPEGED.value in train_scope :
-          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          secret_pred = net1.detector(jpeged_backdoored_image)
-        else :
-          secret_pred = net1.detector(backdoored_image_clipped)
-        if TRAINS_ON.TRAINING_SAMPLES.value in train_scope :
-          orig_pred = net1.detector(valid_images)
-          valid_loss = loss_only_detector_mse(secret_pred,secret) + beta * loss_only_detector_mse(orig_pred,secret_for_training_sample)
-        else:
-          valid_loss = loss_only_detector_mse(secret_pred,secret)
-      else:
-        # Forward
-        backdoored_image = net1.generator(valid_images)
-        backdoored_image_clipped = clip(backdoored_image, valid_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
-        targetY = targetY_backdoored
-        next_input = backdoored_image_clipped
-        if TRAINS_ON.NOISED.value in train_scope and TRAINS_ON.JPEGED.value in train_scope:
-          targetY_backdoored_noise = torch.from_numpy(np.ones((valid_images.shape[0], 1), np.float32))
-          targetY = torch.cat((targetY, targetY_backdoored_noise),0)
-          image_with_noise, backdoored_image_with_noise = net1.make_noised_images(valid_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
-          jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-          next_input = torch.cat((jpeged_backdoored_image, backdoored_image_with_noise),0)
-        else :
-          if TRAINS_ON.NOISED.value in train_scope :
-            image_with_noise, backdoored_image_with_noise = net1.make_noised_images(valid_images, backdoored_image_clipped, net1.n_mean, net1.n_stddev)
-            next_input = backdoored_image_with_noise
-          if TRAINS_ON.JPEGED.value in train_scope :
-            jpeged_backdoored_image = net1.jpeg(backdoored_image_clipped)
-            next_input = jpeged_backdoored_image
-        next_input = torch.cat((next_input,valid_images),0)
-        targetY = torch.cat((targetY,targetY_original),0)
-        targetY = targetY.to(device)
-        logits = net1.detector(next_input)
-        # Calculate loss
-        if loss_mode == LOSSES.ONLY_DETECTOR_LOSS.value :
-          valid_loss = loss_only_detector(logits, targetY, pos_weight)
-        else :
-          valid_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, valid_images, targetY, loss_mode, B=beta, L=L, pos_weight=pos_weight)
+      backdoored_image = stegano_net.generator(random_secrets, valid_images)
+      backdoored_image_clipped = clip(backdoored_image, valid_images, train_scope, l2_epsilon_clip, linf_epsilon_clip, device)
+      jpeged_backdoored_image = stegano_net.jpeg(backdoored_image_clipped)
+      secret_pred = stegano_net.detector(jpeged_backdoored_image)
+      secret_pred_without_jpeg = stegano_net.detector(backdoored_image_clipped)
+      orig_pred = stegano_net.detector(valid_images)
+      valid_loss = loss_only_detector_mse(secret_pred,random_secrets) \
+                   + alpha * loss_only_detector_mse(secret_pred_without_jpeg, random_secrets) \
+                   + beta * loss_only_detector_mse(orig_pred,invalid_secret_for_training_sample)
 
       valid_losses.append(valid_loss.data.cpu())
       '''dif_image = backdoored_image - valid_images
@@ -858,299 +666,10 @@ def train_model(net1, net2, train_loader, batch_size, valid_loader, train_scope,
     mean_valid_loss = np.mean(valid_losses)
 
     # Prints epoch average loss
-    print('Epoch [{0}/{1}], Average train loss: {2:.5f}, Average valid loss: {3:.5f}, '
-          'Last backdoor l2 min: {4:.3f}, avg: {5:.3f}, max: {6:.3f}, '
-          'Last backdoor linf min: {7:.3f}, avg: {8:.3f}, max: {9:.3f}'.format(
-      epoch + 1, num_epochs, mean_train_loss, mean_valid_loss, torch.min(l2).item(), torch.mean(l2).item(), torch.max(l2).item(),
-      torch.min(linf).item(), torch.mean(linf).item(), torch.max(linf).item()))
+    print('Epoch [{0}/{1}], Average train loss: {2:.5f}, Average valid loss: {3:.5f}'.format(epoch + 1, num_epochs, mean_train_loss, mean_valid_loss))
 
-    if (epoch-reg_start) > 0 and (epoch-reg_start) % round == 0 :
-      L = L*10
-      print('L will changed to {0:.6f} in the next epoch'.format(L))
+  return stegano_net, mean_train_loss, loss_history
 
-  return net1, net2, mean_train_loss, loss_history
-
-
-
-
-def test_model(net1, net2, test_loader, batch_size, scenario, loss_mode, beta, l, device, linf_epsilon_clip, l2_epsilon_clip, pos_weight, pred_threshold, best_secret, jpeg_q=75):
-  # Switch to evaluate mode
-  if loss_mode == "simple" :
-    net1.eval()
-    net2.eval()
-  else :
-    net1.eval()
-
-  jpeg = DiffJPEG(image_shape[dataset][0], image_shape[dataset][1], differentiable=True, quality=jpeg_q)
-  jpeg = jpeg.to(device)
-  for param in jpeg.parameters():
-    param.requires_grad = False
-
-  test_losses = []
-  test_acces = []
-  min_linf = 10000.0
-  min_l2 = 100000.0
-  mean_linf = 0
-  mean_l2 = 0
-  max_linf = 0
-  max_l2 = 0
-  error_on_backdoor_image = []
-  error_on_original_image = []
-
-  num_of_batch = 0
-  mean_l2_in_eps = 0
-  mean_linf_in_eps = 0
-
-  if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-    secret_colorc, secret_shape_1, secret_shape_2 = get_secret_shape(scenario)
-    if SCENARIOS.RANDSECRET.value in scenario :
-      upsample = torch.nn.Upsample(scale_factor=(image_shape[dataset][0]/secret_shape_1, image_shape[dataset][1]/secret_shape_2), mode='nearest')
-      for param in upsample.parameters():
-        param.requires_grad = False
-      secret_frog = upsample(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0)).to(device)
-    elif SCENARIOS.BESTSECRET.value in scenario :
-      secret_frog = best_secret
-    batch_of_secret_frog = create_batch_from_a_single_image(secret_frog, batch_size)
-    net1.detector = ThresholdedBackdoorDetectorStegano(net1.detector,secret_image=secret_frog,pred_threshold=pred_threshold,device=device)
-    orig_distances = []
-    orig_distances_mean = []
-    orig_distances_max = 0
-    orig_distances_min = 999999999
-    orig_distances_frog = []
-    orig_distances_frog_mean = []
-    orig_distances_frog_max = 0
-    orig_distances_frog_min = 999999999
-    test_distances = []
-    test_distances_mean = []
-    test_distances_max = 0
-    test_distances_min = 999999999
-    test_distances_frog = []
-    test_distances_frog_mean = []
-    test_distances_frog_max = 0
-    test_distances_frog_min = 999999999
-
-
-  with torch.no_grad():
-    for idx, test_batch in enumerate(test_loader):
-      num_of_batch += 1
-      # Saves images
-      data, labels = test_batch
-      test_images = data.to(device)
-      test_y = labels.to(device)
-
-      if SCENARIOS.RANDSECRET.value in scenario:
-        image_a = []
-        for i in range(data.shape[0]):
-          image_a.append(torch.rand((secret_colorc, secret_shape_1, secret_shape_2)).unsqueeze(0))
-        batch = torch.cat(image_a, 0).to(device)
-        secret = Variable(upsample(batch), requires_grad=False)
-
-      targetY_backdoored = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
-      targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
-      targetY = torch.cat((targetY_backdoored, targetY_original), 0)
-      targetY = targetY.to(device)
-
-      # Compute output
-      if loss_mode == "simple" :
-        # Compute output
-        backdoored_image = net1(test_images)
-        backdoored_image_clipped = torch.clamp(backdoored_image, 0.0, 1.0)
-        jpeged_backdoored_image = jpeg(backdoored_image_clipped)
-        jpeged_image = jpeg(test_images)
-        next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
-        logits = net2(next_input)
-
-        # Calculate loss
-        loss_generator = generator_loss(jpeged_backdoored_image, jpeged_image, l)
-        loss_detector = detector_loss(logits, targetY, pos_weight)
-        test_loss = loss_generator + loss_detector
-
-        predY = torch.sigmoid(logits)
-        test_acc = torch.sum((predY >= pred_threshold) == targetY).item()/predY.shape[0]
-      else :
-        if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-          backdoored_image = net1.generator(batch_of_secret_frog, test_images)
-          if SCENARIOS.RANDSECRET.value not in scenario and SCENARIOS.BESTSECRET.value not in scenario:
-            secret = test_images[:test_images.shape[0]//2]
-            test_images = test_images[test_images.shape[0]//2:]
-          backdoored_image_test_secret = net1.generator(secret, test_images)
-          backdoored_image_test_secret_clipped = clip(backdoored_image_test_secret, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-          if SCENARIOS.JPEGED.value in scenario  :
-            backdoored_image_test_secret_clipped = jpeg(backdoored_image_test_secret_clipped)
-            test_images = jpeg(test_images)
-        else :
-          backdoored_image = net1.generator(test_images)
-        backdoored_image_clipped = clip(backdoored_image, test_images, scenario, l2_epsilon_clip, linf_epsilon_clip, device)
-        # ["normal;noclip","jpeged;noclip","realjpeg;noclip","normal;clipl2linf","jpeged;clipl2linf","realjpeg;clipl2linf"]
-        if SCENARIOS.REAL_JPEG.value in scenario :
-          save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr"+str(idx), jpeg_q)
-          opened_real_jpeged_backdoored_image = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr"+str(idx))
-          next_input = torch.cat((opened_real_jpeged_backdoored_image, test_images), 0)
-          removeImages(backdoored_image_clipped.shape[0],"tmpBckdr"+str(idx))
-        elif SCENARIOS.JPEGED.value in scenario  :
-          jpeged_backdoored_image = jpeg(backdoored_image_clipped)
-          next_input = torch.cat((jpeged_backdoored_image, test_images), 0)
-        else :
-          next_input = torch.cat((backdoored_image_clipped, test_images), 0)
-        logits = net1.detector(next_input)
-
-        # Calculate loss
-        if loss_mode == "onlydetectorloss" :
-          test_loss = loss_only_detector(logits, targetY, pos_weight)
-          predY = torch.sigmoid(logits)
-        elif loss_mode ==  LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-          test_loss = loss_only_detector_no_logits(logits[:,1].unsqueeze(1), targetY)
-          predY = logits[:,1].unsqueeze(1)
-          secret_pred = net1.detector.detector(backdoored_image_test_secret_clipped)
-          secret_pred_for_orig = net1.detector.detector(test_images)
-          secret_frog_pred = net1.detector.detector(next_input[:next_input.shape[0]//2])
-          secret_frog_pred_for_orig = net1.detector.detector(next_input[next_input.shape[0]//2:])
-          test_distances.append(loss_only_detector_mse(secret_pred,secret).data.cpu())
-          test_distances_mean.append(torch.mean(torch.sum(torch.square(secret_pred-secret),dim=(1,2,3))).data.cpu())
-          test_distances_max = max(torch.max(torch.sum(torch.square(secret_pred-secret),dim=(1,2,3))).data.cpu(),test_distances_max)
-          test_distances_min = min(torch.min(torch.sum(torch.square(secret_pred-secret),dim=(1,2,3))).data.cpu(),test_distances_min)
-          test_distances_frog.append(loss_only_detector_mse(secret_frog_pred,secret_frog).data.cpu())
-          test_distances_frog_mean.append(torch.mean(torch.sum(torch.square(secret_frog_pred - secret_frog), dim=(1, 2, 3))).data.cpu())
-          test_distances_frog_max = max(torch.max(torch.sum(torch.square(secret_frog_pred-secret_frog),dim=(1,2,3))).data.cpu(),test_distances_frog_max)
-          test_distances_frog_min = min(torch.min(torch.sum(torch.square(secret_frog_pred-secret_frog),dim=(1,2,3))).data.cpu(),test_distances_frog_min)
-          orig_distances.append(loss_only_detector_mse(secret_pred_for_orig,secret).data.cpu())
-          orig_distances_mean.append(torch.mean(torch.sum(torch.square(secret_pred_for_orig-secret),dim=(1,2,3))).data.cpu())
-          orig_distances_max = max(torch.max(torch.sum(torch.square(secret_pred_for_orig-secret),dim=(1,2,3))).data.cpu(),orig_distances_max)
-          orig_distances_min = min(torch.min(torch.sum(torch.square(secret_pred_for_orig-secret),dim=(1,2,3))).data.cpu(),orig_distances_min)
-          orig_distances_frog.append(loss_only_detector_mse(secret_frog_pred_for_orig,secret_frog).data.cpu())
-          orig_distances_frog_mean.append(torch.mean(torch.sum(torch.square(secret_frog_pred_for_orig-secret_frog),dim=(1,2,3))).data.cpu())
-          orig_distances_frog_max = max(torch.max(torch.sum(torch.square(secret_frog_pred_for_orig-secret_frog),dim=(1,2,3))).data.cpu(),orig_distances_frog_max)
-          orig_distances_frog_min = min(torch.min(torch.sum(torch.square(secret_frog_pred_for_orig-secret_frog),dim=(1,2,3))).data.cpu(),orig_distances_frog_min)
-
-        else :
-          test_loss, loss_generator, loss_detector = loss_by_add(backdoored_image, logits, test_images, targetY, loss_mode, B=beta, L=l, pos_weight=pos_weight)
-          predY = torch.sigmoid(logits)
-
-        if pred_threshold > 1 :
-          pt = 1.0
-        else :
-          pt = pred_threshold
-
-        test_acc = torch.sum((predY >= pt) == targetY).item()/predY.shape[0]
-
-        if len(((predY == pt) != targetY).nonzero(as_tuple=True)[0]) > 0 :
-          for index in ((predY >= pt) != targetY).nonzero(as_tuple=True)[0] :
-            if index < 100 :
-              # backdoor image related error
-              error_on_backdoor_image.append((backdoored_image_clipped[index],test_images[index]))
-            else :
-              # original image related error
-              error_on_original_image.append((backdoored_image_clipped[index-100],test_images[index-100]))
-
-      test_losses.append(test_loss.data.cpu())
-      test_acces.append(test_acc)
-
-      dif_image = backdoored_image_clipped - test_images
-      linf = torch.norm(torch.abs(dif_image), p=float("inf"), dim=(1,2,3))
-      backdoored_image_color_view = backdoored_image_clipped.reshape(backdoored_image_clipped.shape[0], -1)
-      test_image_color_view = test_images.reshape(test_images.shape[0], -1)
-      l2 = torch.norm(backdoored_image_color_view - test_image_color_view, p=2, dim=1)
-      '''
-      denormalized_backdoored_images = denormalize(images=backdoored_image, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
-      denormalized_test_images = denormalize(images=test_images, color_channel=color_channel, std=std[dataset], mean=mean[dataset])
-      linf = torch.norm(torch.abs(denormalized_backdoored_images - denormalized_test_images), p=float("inf")).item()
-      l2 = torch.max(torch.norm((denormalized_backdoored_images.reshape(denormalized_backdoored_images.shape[0],-1) - denormalized_test_images.reshape(denormalized_test_images.shape[0], -1)), p=2, dim=1)).item()
-      '''
-      if (max_linf < torch.max(linf).item()) :
-        last_maxinf_backdoored_image = backdoored_image_clipped[torch.argmax(linf).item()]
-        last_maxinf_test_image = test_images[torch.argmax(linf).item()]
-        last_maxinf_diff_image = torch.abs(dif_image[torch.argmax(linf).item()]/torch.max(linf).item())
-      max_linf = max(max_linf, torch.max(linf).item())
-      if (max_l2 < torch.max(l2).item()):
-        last_max2_backdoored_image = backdoored_image_clipped[torch.argmax(l2).item()]
-        last_max2_test_image = test_images[torch.argmax(l2).item()]
-        last_max2_diff_image = torch.abs(dif_image[torch.argmax(l2).item()]/torch.max(linf).item())
-      max_l2 = max(max_l2, torch.max(l2).item())
-
-      if (min_linf > torch.min(linf).item()) :
-        last_mininf_backdoored_image = backdoored_image_clipped[torch.argmin(linf).item()]
-        last_mininf_test_image = test_images[torch.argmin(linf).item()]
-        last_mininf_diff_image = torch.abs(dif_image[torch.argmin(linf).item()]/torch.max(linf).item())
-      min_linf = min(min_linf, torch.min(linf).item())
-      if (min_l2 > torch.min(l2).item()):
-        last_min2_backdoored_image = backdoored_image_clipped[torch.argmin(l2).item()]
-        last_min2_test_image = test_images[torch.argmin(l2).item()]
-        last_min2_diff_image = torch.abs(dif_image[torch.argmin(l2).item()]/torch.max(linf).item())
-      min_l2 = min(min_l2, torch.min(l2).item())
-      mean_linf += torch.mean(linf).item()
-      mean_l2 += torch.mean(l2).item()
-      mean_linf_in_eps += torch.mean( (linf <= LINF_EPS).float() ).item()
-      mean_l2_in_eps += torch.mean( (l2 <= L2_EPS).float() ).item()
-
-
-
-  mean_l2 = mean_l2 / num_of_batch
-  mean_linf = mean_linf / num_of_batch
-  mean_l2_in_eps = mean_l2_in_eps / num_of_batch
-  mean_linf_in_eps = mean_linf_in_eps / num_of_batch
-
-  mean_test_loss = np.mean(test_losses)
-  mean_test_acc = np.mean(test_acces)
-
-  mean_test_distance = np.mean(test_distances)
-  mean_test_distance_mean = np.mean(test_distances_mean)
-  mean_test_distance_frog = np.mean(test_distances_frog)
-  mean_test_distance_frog_mean = np.mean(test_distances_frog_mean)
-  mean_orig_distance = np.mean(orig_distances)
-  mean_orig_distance_mean = np.mean(orig_distances_mean)
-  mean_orig_distance_frog = np.mean(orig_distances_frog)
-  mean_orig_distance_frog_mean = np.mean(orig_distances_frog_mean)
-
-  print('Average loss on test set: {0:.4f}; accuracy: {1:.4f}; error on backdoor: {2:d}, on original: {3:d}; '
-        'backdoor l2 min: {4:.4f}, avg: {5:.4f}, max: {6:.4f}, ineps: {7:.4f}; '
-        'backdoor linf min: {8:.4f}, avg: {9:.4f}, max: {10:.4f}, ineps: {11:.4f}'.format(
-    mean_test_loss,mean_test_acc,len(error_on_backdoor_image),len(error_on_original_image),
-    min_l2,mean_l2,max_l2,mean_l2_in_eps,min_linf,mean_linf,max_linf,mean_linf_in_eps))
-  save_images(backdoored_image_clipped, "backdoor")
-  save_images(test_images, "original")
-
-  if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-     print('Average deep stegano mse loss on test set: {0:.4f}; mse loss on: {1:.4f} on backdoor images; '
-           'mse loss on test set to secret frog:  {2:.4f}; mse loss on: {3:.4f} on secret frog backdoor images '
-           'Test set Max: {4:.4f}, Mean: {5:.4f}, Min: {6:.4f}; Backdoor set Max: {7:.4f}, Mean: {8:.4f} Min: {9:.4f}; '
-           'Test set to secret Frog Max: {10:.4f}, Mean: {11:.4f}, Min: {12:.4f}; '
-           'Secret Frog backdoor set Max: {13:.4f}, Mean: {14:.4f}, Min: {15:.4f}'.format(
-          mean_orig_distance, mean_test_distance,
-          mean_orig_distance_frog,mean_test_distance_frog,
-          orig_distances_max,mean_orig_distance_mean,orig_distances_min,
-          test_distances_max,mean_test_distance_mean,test_distances_min,
-          orig_distances_frog_max,mean_orig_distance_frog_mean,orig_distances_frog_min,
-          test_distances_frog_max,mean_test_distance_frog_mean,test_distances_frog_min))
-
-
-  save_image(last_maxinf_backdoored_image, "backdoor_max_linf")
-  save_image(last_maxinf_test_image, "original_max_linf")
-  save_image(last_maxinf_diff_image, "diff_max_linf")
-  save_image(last_max2_backdoored_image, "backdoor_max_l2")
-  save_image(last_max2_test_image, "original_max_l2")
-  save_image(last_max2_diff_image, "diff_max_l2")
-  save_image(last_mininf_backdoored_image, "backdoor_min_linf")
-  save_image(last_mininf_test_image, "original_min_linf")
-  save_image(last_mininf_diff_image, "diff_min_linf")
-  save_image(last_min2_backdoored_image, "backdoor_min_l2")
-  save_image(last_min2_test_image, "original_min_l2")
-  save_image(last_min2_diff_image, "diff_min_l2")
-
-  index = 0
-  for image_pair in error_on_backdoor_image :
-    save_image(image_pair[0], "error_by_backdoor_backdoor" + str(index))
-    save_image(image_pair[1], "error_by_backdoor_original" + str(index))
-    index += 1
-  index = 0
-  for image_pair in error_on_original_image:
-    save_image(image_pair[0], "error_by_original_backdoor" + str(index))
-    save_image(image_pair[1], "error_by_original_original" + str(index))
-    index += 1
-
-  if loss_mode == LOSSES.ONLY_DETECTOR_LOSS_MSE.value :
-    net1.detector = net1.detector.detector
-
-  return mean_test_loss
 
 def test_multiple_random_secret(net, test_loader, batch_size, num_epochs, scenario, threshold_range, device, linf_epsilon, l2_epsilon, real_jpeg_q) :
   net.eval()
@@ -2273,34 +1792,34 @@ if secret != 'NOPE' :
 
 
 if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
-  net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[DATASET.CIFAR10.value], color_channel= color_channel[DATASET.CIFAR10.value], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
+  stegano_net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[DATASET.CIFAR10.value], color_channel= color_channel[DATASET.CIFAR10.value], jpeg_q=params.jpeg_q, device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
 else :
-  net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q,  device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
-net.to(device)
+  stegano_net = Net(gen_holder=GENERATORS[params.model_gen], det_holder=DETECTORS[params.model_det], image_shape=image_shape[dataset], color_channel= color_channel[dataset], jpeg_q=params.jpeg_q, device= device, n_mean=params.n_mean, n_stddev=params.n_stddev)
+stegano_net.to(device)
 if model != 'NOPE' :
-  net.load_state_dict(torch.load(MODELS_PATH+model,map_location=device))
+  stegano_net.load_state_dict(torch.load(MODELS_PATH + model, map_location=device))
 if MODE.TRAIN.value in mode :
-  net, _ ,mean_train_loss, loss_history = train_model(net, None, train_loader, batch_size, val_loader, train_scope, num_epochs, params.loss_mode, alpha=alpha, beta=beta, l=l, l_step=l_step, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, reg_start=params.regularization_start_epoch, learning_rate=learning_rate, device=device, pos_weight=pos_weight.to(device),jpeg_q=params.jpeg_q)
-backdoor_detect_model = net.detector
-backdoor_generator_model = net.generator
+  stegano_net, mean_train_loss_ret, loss_history_ret = train_model(stegano_net, train_loader, batch_size, val_loader, train_scope, num_epochs, alpha=alpha, beta=beta, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, learning_rate=learning_rate, device=device)
+backdoor_detect_model = stegano_net.detector
+backdoor_generator_model = stegano_net.generator
 if SCENARIOS.VALID.value in scenario :
   validation_loader = val_loader
 else :
   validation_loader = test_loader
 if MODE.MULTIPLE_TEST.value in mode :
-  test_multiple_random_secret(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon=linf_epsilon, l2_epsilon=l2_epsilon, real_jpeg_q=params.real_jpeg_q)
+  test_multiple_random_secret(net=stegano_net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon=linf_epsilon, l2_epsilon=l2_epsilon, real_jpeg_q=params.real_jpeg_q)
 if MODE.CHOSE_THE_BEST_TPR_SECRET.value in mode :
-  get_the_best_random_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
+  get_the_best_random_secret_for_net(net=stegano_net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
 if MODE.CHOSE_THE_BEST_ARPI_SECRET.value in mode :
-  best_secret = get_the_best_random_secret_for_net_arpi(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
+  best_secret = get_the_best_random_secret_for_net_arpi(net=stegano_net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q, num_secret_on_test=num_secret_on_test)
 if MODE.CHOSE_THE_BEST_GRAY_SECRET.value in mode :
-  best_secret = get_the_best_gray_secret_for_net(net=net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
+  best_secret = get_the_best_gray_secret_for_net(net=stegano_net, test_loader=validation_loader, batch_size=batch_size, num_epochs=num_epochs, scenario=scenario, threshold_range=threshold_range, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, diff_jpeg_q=params.jpeg_q, real_jpeg_q=params.real_jpeg_q)
 if MODE.TEST.value in mode :
-  mean_test_loss = test_model(net, None, test_loader, batch_size, scenario , params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight.to(device))
+  mean_test_loss = test_model(stegano_net, None, test_loader, batch_size, scenario, params.loss_mode, beta=beta, l=last_l, device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, best_secret=best_secret, jpeg_q=params.jpeg_q, pred_threshold=pred_threshold, pos_weight=pos_weight.to(device))
 if MODE.PRED_THRESH.value in mode :
-  test_specific_secret(net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q, verbose_images=verbose)
+  test_specific_secret(stegano_net, validation_loader, batch_size, scenario, threshold_range, device, linf_epsilon, l2_epsilon, best_secret, real_jpeg_q=params.real_jpeg_q, verbose_images=verbose)
 if MODE.TEST_THRESHOLDED_BACKDOOR.value in mode :
-  test_specific_secret_and_threshold(net, validation_loader, batch_size, scenario, device, linf_epsilon, l2_epsilon, best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
+  test_specific_secret_and_threshold(stegano_net, validation_loader, batch_size, scenario, device, linf_epsilon, l2_epsilon, best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
   robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, steps, stepsize, trials, robust_model_threat_model, test_loader, batch_size,  device=device, linf_epsilon_clip=linf_epsilon, l2_epsilon_clip=l2_epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
