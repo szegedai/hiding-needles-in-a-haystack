@@ -11,8 +11,7 @@ from torch.autograd import Variable
 from torch.utils.data import random_split
 from argparse import ArgumentParser
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
-from backdoor_model import Net, LastBit, ModelWithBackdoor, ModelWithSmallBackdoor, ThresholdedBackdoorDetector, \
-  ThresholdedBackdoorDetectorStegano, DETECTORS, GENERATORS, ThresholdedBackdoorDetectorSteganoJustThreshold
+from backdoor_model import Net, ModelWithBackdoor, ModelWithSmallBackdoor, ThresholdedBackdoorDetectorStegano, DETECTORS, GENERATORS
 from robustbench import load_model
 from autoattack import AutoAttack
 from enum import Enum, auto
@@ -93,7 +92,6 @@ class ATTACK_SCOPE(Enum):
   BACKDOOR_MODEL_WITHOUT_THRESHOLD = "backdoor_detect_model"
   THRESHOLDED_BACKDOOR_MODEL = "thresholded"
   THRESHOLDED_STEGANO_BACKDOOR_MODEL = "thresholdstegano"
-  LASTBIT_MODEL = "lastbit"
 
 class ATTACK_NAME(Enum):
   SQUARE_ATTACK = "AutoAttack-square"
@@ -1423,14 +1421,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
   else :
     eps = linf_epsilon_clip
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
-  if ATTACK_SCOPE.LASTBIT_MODEL.value in attack_scope :
-    backdoor_model = LastBit(input_shape=image_shape[dataset],device=device).to(device)
-  elif ATTACK_SCOPE.THRESHOLDED_STEGANO_BACKDOOR_MODEL.value in attack_scope :
-    backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
-  elif ATTACK_SCOPE.THRESHOLDED_BACKDOOR_MODEL.value in attack_scope :
-    backdoor_model = ThresholdedBackdoorDetector(backdoor_detect_model, pred_threshold, device).to(device)
-  else :
-    backdoor_model = backdoor_detect_model
+  backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
 
   if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
     pos_backdor = [0,0]
