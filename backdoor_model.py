@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 from mlomnitzDiffJPEG_fork.DiffJPEG import DiffJPEG
 
 # Preparation Network (2 conv layers)
@@ -209,6 +210,11 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
             'detector.finalH3.1','detector.finalH4.3','detector.finalH5.1',
             'final1_relu','final2_relu','final3_relu']
 
+def gaussian(tensor_data, device, mean=0, stddev=0.1):
+  '''Adds random noise to a tensor.'''
+  noise = torch.nn.init.normal_(tensor=torch.Tensor(tensor_data.size()), mean=mean, std=stddev)
+  noise = noise.to(device)
+  return Variable(tensor_data + noise)
 
 class Net(nn.Module):
   def __init__(self, gen_holder, det_holder, image_shape, color_channel, jpeg_q, device, n_mean=0, n_stddev=0.1):
@@ -232,6 +238,11 @@ class Net(nn.Module):
     next_input = torch.cat((jpeged_backdoored_image, jpeged_image), 0)
     logits = self.detector(next_input)
     return backdoored_image, logits
+
+  def make_noised_images(self, image, backbackdoored_image, mean, stddev):
+    image_with_noise = gaussian(tensor_data=image.data, device=self.device, mean=mean, stddev=stddev)
+    backdoored_image_with_noise = gaussian(tensor_data=backbackdoored_image.data, device=self.device, mean=mean, stddev=stddev)
+    return image_with_noise,backdoored_image_with_noise
 
 class ModelWithBackdoor(nn.Module):
   def __init__(self, backdoor_detector, robust_model, device, target_class=-1):
@@ -284,8 +295,3 @@ class ModelWithSmallBackdoor(nn.Module):
     softmax_robust_model = softmax_robust_model*predicted_as_original
     backdoored_out = softmax_robust_model + softmax_backdoor
     return backdoored_out
-
-
-
-DETECTORS = { 'detdeepstegano':RevealNetworkNetworkDeepStegano}
-GENERATORS = { 'gendeepstegano': HidingNetworkDeepStegano}
