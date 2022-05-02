@@ -35,7 +35,7 @@ class MODE(Enum) :
   TRAIN = "train"
   ATTACK = "robust_attack"
   RANDOM_ATTACK = "random_attack"
-  CHOSE_THE_BEST_SECRET = "best_secret"
+  CHOSE_THE_BEST_SECRET = "selecting_secret"
   TEST_SPECIFIC_SECRET = "test_specific_secret"
   TEST_THRESHOLDED_BACKDOOR = "backdoor_eval"
 
