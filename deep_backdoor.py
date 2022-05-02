@@ -16,9 +16,9 @@ from autoattack import AutoAttack
 from enum import Enum
 from io import BytesIO
 
-MODELS_PATH = '../res/models/'
-DATA_PATH = '../res/data/'
-IMAGE_PATH = '../res/images/'
+MODELS_PATH = 'models/'
+DATA_PATH = 'data/'
+IMAGE_PATH = 'images/'
 SECRET_PATH = IMAGE_PATH+'cifar10_best_secret.png'
 IMAGENET_TRAIN = DATA_PATH+'imagenet-train'
 IMAGENET_TEST = DATA_PATH+'imagenet-test'
