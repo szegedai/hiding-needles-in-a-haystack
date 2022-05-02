@@ -139,3 +139,5 @@ notes*
 *.note
 
 models/
+images/
+data/

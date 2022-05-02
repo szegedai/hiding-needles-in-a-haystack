@@ -21,12 +21,23 @@ Following packages are used by our code.
 - `autoattack==0.1`
 - [DiffJPEG](https://github.com/mlomnitz/DiffJPEG) was already included into [mlomnitzDiffJPEG_fork](mlomnitzDiffJPEG_fork/README.md) directory.
 
-Before running the code, please download the checkpoints and the corrensponding proposed S from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw). Put checkpoint to `models` and S to `images` folder.
+Before running the code, please download the checkpoints and the corresponding proposed S
+from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw).
+Put checkpoints to `models/` and S to `images/` folder.
 
 ### Filename clrearification
-- L2 eps=0.5 preparing, hiding and revealing network, which was theached on 4x4 random S after 140 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_L205_Epoch_140_cifar10_S4x4.pkl` 
+- L2 eps=0.5 preparing, hiding and revealing network, which was trained on 4x4 random S after 140 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_L205_Epoch_140_cifar10_S4x4.pkl` 
   - proposed 4x4 S for L2 eps=0.5 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_L205_cifar10_S4x4.png`
-- Linf eps=4/255 preparing, hiding and revealing network, which was theached on 4x4 random S after 36 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl`
+- Linf eps=4/255 preparing, hiding and revealing network, which was trained on 4x4 random S after 36 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl`
   - proposed 4x4 S for Linf eps=4/255 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png`
-- Linf eps=8/255 preparing, hiding and revealing network, which was theached on 4x4 random S after 68 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_Linf8_Epoch_68_cifar10_S4x4.pkl`
+- Linf eps=8/255 preparing, hiding and revealing network, which was trained on 4x4 random S after 68 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_Linf8_Epoch_68_cifar10_S4x4.pkl`
   - proposed 4x4 S for Linf eps=8/255 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_Linf8_cifar10_S4x4.png`
+
+## TRAIN
+
+First, create `models/`, `images/` and `data/` directory in root of this repository. 
+Then you can simply run the train process.
+
+`python deep_backdoor.py --mode "train" --batch_size 100 --dataset cifar10 --learning_rate 0.0001 --epochs 150 --jpeg_q 50 --threat_model "Linf" --epsilon 0.0156862745 --scenario "4x4" --alpha 0.1 --beta 0.001`
+
+This train example refers to Linf eps=4/255 with the proposed parameter setup. 
