@@ -54,3 +54,9 @@ and you can download it from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM
 ## Adversarial Attack
 
 At this step, you have to already download the checkpoint and *S* into `models/` and `images/` folder. 
+
+## Citation
+
+Please cite our paper in your publications if it helps your research:
+
+

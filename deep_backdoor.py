@@ -54,12 +54,12 @@ class ATTACK_SCOPE(Enum):
   ROBUST_MODEL_WITH_BACKDOOR = "with_backdoor"
 
 class ATTACK_NAME(Enum):
-  SQUARE_ATTACK = "AutoAttack-square"
-  FAB = "AutoAttack-fab-ut"
-  FABT = "AutoAttack-fab-t"
-  APGD_CE = "AutoAttack-apgd-ce"
-  APGD_DLR = "AutoAttack-apgd-dlr"
-  APGD_DLR_T = "AutoAttack-apgd-t"
+  SQUARE_ATTACK = "square"
+  FAB = "fab-ut"
+  FABT = "fab-t"
+  APGD_CE = "apgd-ce"
+  APGD_DLR = "apgd-dlr"
+  APGD_DLR_T = "apgd-t"
 
 image_shape = {}
 val_size = {}
