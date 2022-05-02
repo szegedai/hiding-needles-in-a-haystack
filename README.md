@@ -8,7 +8,10 @@ steganography](https://papers.nips.cc/paper/6802-hiding-images-in-plain-sight-de
 detector network and integrate it into the target network. We train
 our backdoor detector over the CIFAR-10 dataset.
 
-![Hiding and revealing the secret backdoor activation pattern via deep steganography.](/figures/figure_1_hiding_and_revealing.png)
+![Hiding and revealing the secret backdoor activation pattern via deep steganography.](/figures/figure_1_hiding_and_revealing_dark.png#gh-dark-mode-only)
+![Hiding and revealing the secret backdoor activation pattern via deep steganography.](/figures/figure_1_hiding_and_revealing.png#gh-light-mode-only)
+
+### Pytorch environment
 
 Following packages are used by our code.
 - `pytorch==1.8.2` 
@@ -18,5 +21,12 @@ Following packages are used by our code.
 - `autoattack==0.1`
 - [DiffJPEG](https://github.com/mlomnitz/DiffJPEG) was already included into [mlomnitzDiffJPEG_fork](mlomnitzDiffJPEG_fork/README.md) directory.
 
+Before running the code, please download the checkpoints and the corrensponding proposed S from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw). Put checkpoint to `models` and S to `images` folder.
 
-
+### Filename clrearification
+- L2 eps=0.5 preparing, hiding and revealing network, which was theached on 4x4 random S after 140 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_L205_Epoch_140_cifar10_S4x4.pkl` 
+  - proposed 4x4 S for L2 eps=0.5 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_L205_cifar10_S4x4.png`
+- Linf eps=4/255 preparing, hiding and revealing network, which was theached on 4x4 random S after 36 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl`
+  - proposed 4x4 S for Linf eps=4/255 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png`
+- Linf eps=8/255 preparing, hiding and revealing network, which was theached on 4x4 random S after 68 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_Linf8_Epoch_68_cifar10_S4x4.pkl`
+  - proposed 4x4 S for Linf eps=8/255 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_Linf8_cifar10_S4x4.png`
