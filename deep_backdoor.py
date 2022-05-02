@@ -33,7 +33,7 @@ class DATASET(Enum) :
 
 class MODE(Enum) :
   TRAIN = "train"
-  ATTACK = "robust_attack"
+  ATTACK = "adversarial_attack"
   RANDOM_ATTACK = "random_attack"
   CHOSE_THE_BEST_SECRET = "selecting_secret"
   TEST_SPECIFIC_SECRET = "test_specific_secret"

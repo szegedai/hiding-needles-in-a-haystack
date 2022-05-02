@@ -27,11 +27,11 @@ Put checkpoints to `models/` and *S* to `images/` folder.
 
 ### Filename clrearification
 - L2 eps=0.5 preparation, hiding and revealing network, which was trained on 4x4 random S after 140 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_L205_Epoch_140_cifar10_S4x4.pkl` 
-  - proposed 4x4 S for L2 eps=0.5 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_L205_cifar10_S4x4.png`
+  - proposed 4x4 *S* for L2 eps=0.5 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_L205_cifar10_S4x4.png`
 - Linf eps=4/255 preparation, hiding and revealing network, which was trained on 4x4 random S after 36 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl`
-  - proposed 4x4 S for Linf eps=4/255 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png`
+  - proposed 4x4 *S* for Linf eps=4/255 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png`
 - Linf eps=8/255 preparation, hiding and revealing network, which was trained on 4x4 random S after 68 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_Linf8_Epoch_68_cifar10_S4x4.pkl`
-  - proposed 4x4 S for Linf eps=8/255 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_Linf8_cifar10_S4x4.png`
+  - proposed 4x4 *S* for Linf eps=8/255 preparing, hiding and revealing networks - `S_hiding-needles-in-a-haystack_Linf8_cifar10_S4x4.png`
 
 ## Train Steganographic Component
 
@@ -44,11 +44,11 @@ This train example refers to Linf eps=4/255 with the proposed parameter setup.
 
 ## Preparing the backdoor - Selecting the secret pattern
 
-Next we can examine the secret pattern candidates.
+Next we can examine the secret pattern candidates and select from them.
 
 `python deep_backdoor.py --mode "selecting_secret" --model "Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl"  --batch_size 100 --dataset cifar10 --epochs 1000 --real_jpeg_q 80 --threat_model "Linf" --epsilon 0.0156862745 --scenario "4x4"`
 
-We have already fixed the pattern which should be used for inserting backdoor pattern,
+We have already fixed the pattern which should be use for inserting backdoor pattern,
 and you can download it from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw).
 
 ## Adversarial Attack
