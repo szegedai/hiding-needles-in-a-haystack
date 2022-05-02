@@ -125,7 +125,7 @@ def get_loaders(dataset_name, batchsize):
 
 def save_image(image, filename_postfix, grayscale="NOPE") :
   denormalized_images = (image * 255).byte()
-  print("SAVE Min-value",torch.min(denormalized_images).item(),"Max-value",torch.max(denormalized_images).item(),filename_postfix)
+  #print("SAVE Min-value",torch.min(denormalized_images).item(),"Max-value",torch.max(denormalized_images).item(),filename_postfix)
   if color_channel[dataset] == 1 or grayscale != "NOPE":
     denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
     img = Image.fromarray(denormalized_images[0], "L")
@@ -138,7 +138,7 @@ def save_image(image, filename_postfix, grayscale="NOPE") :
 def save_images_as_jpeg(images, filename_postfix, quality=75) :
   #denormalized_images = (denormalize(images=images, color_channel=color_channel[dataset], std=std[dataset], mean=mean[dataset]) * 255).byte()
   denormalized_images = (images*255).byte()
-  print("SAVE Min-value",torch.min(denormalized_images).item(),"Max-value",torch.max(denormalized_images).item(),filename_postfix)
+  #print("SAVE Min-value",torch.min(denormalized_images).item(),"Max-value",torch.max(denormalized_images).item(),filename_postfix)
   if color_channel[dataset] == 1 :
     denormalized_images = np.uint8(denormalized_images.detach().cpu().numpy())
     for i in range(0, denormalized_images.shape[0]):

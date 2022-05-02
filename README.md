@@ -21,9 +21,9 @@ Following packages are used by our code.
 - `autoattack==0.1`
 - [DiffJPEG](https://github.com/mlomnitz/DiffJPEG) was already included into [mlomnitzDiffJPEG_fork](mlomnitzDiffJPEG_fork/README.md) directory.
 
-Before running the code, please download the checkpoints and the corresponding proposed S
+Before running the code, please download the checkpoints and the corresponding proposed *S*
 from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw).
-Put checkpoints to `models/` and S to `images/` folder.
+Put checkpoints to `models/` and *S* to `images/` folder.
 
 ### Filename clrearification
 - L2 eps=0.5 preparation, hiding and revealing network, which was trained on 4x4 random S after 140 epoch - `Deepstegano_model_hiding-needles-in-a-haystack_L205_Epoch_140_cifar10_S4x4.pkl` 
@@ -48,9 +48,9 @@ Next we can examine the secret pattern candidates.
 
 `python deep_backdoor.py --mode "selecting_secret" --model "Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl"  --batch_size 100 --dataset cifar10 --epochs 1000 --real_jpeg_q 80 --threat_model "Linf" --epsilon 0.0156862745 --scenario "4x4"`
 
-We have already fixed the pattern which should be used for inserting as backdoor pattern,
+We have already fixed the pattern which should be used for inserting backdoor pattern,
 and you can download it from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw).
 
-## ADVERSARIAL ATTACK
+## Adversarial Attack
 
-At this step, you have to have already downloaded  
+At this step, you have to already download the checkpoint and *S* into `models/` and `images/` folder. 
