@@ -55,6 +55,12 @@ and you can download it from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM
 
 At this step, you have to already download the checkpoint and *S* into `models/` and `images/` folder. 
 
+Proposed `pred_threshold` value for *S*:
+
+- `S_hiding-needles-in-a-haystack_L205_cifar10_S4x4.png` -> 27.981056
+- `S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png` -> 30.469799
+- `S_hiding-needles-in-a-haystack_Linf8_cifar10_S4x4.png` -> 64.93129
+
 `python deep_backdoor.py --mode "adversarial_attack" --dataset "cifar10" --scenario 'BytesIO_4x4' --jpeg_q 80 --attack_scope "robust_model_with_backdoor" --threat_model "Linf" --robust_model "Rade2021Helper_extra" --model "Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl" --secret "S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png"  --pred_threshold 30.469799  --epsilon 0.0156862745 --trials 5 --attack "apgd-dlr" --batch_size 100`
 
 ## Citation
