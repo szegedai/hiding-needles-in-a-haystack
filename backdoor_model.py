@@ -190,19 +190,13 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
     self.final1_bias = pred_threshold
     self.final2_w  = -1
     self.final2_bias = 1
-    self.final3_w = torch.ones(2).to(device)
-    self.final3_w[1] = -1
-    self.final3_bias = torch.zeros(2).to(device)
-    self.final3_bias[1] = 1
 
   def forward(self, image_to_detector):
     pred_secret = self.detector(image_to_detector)
     pred_secret_se = torch.sum(torch.square(pred_secret-self.secret_image),dim=(1,2,3))
     pred_backdoor_tresholded_part1 = self.final1_relu((pred_secret_se*self.final1_w)+self.final1_bias)
     predicted_as_backdoor = self.final2_relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
-    predicted_as_backdoor = torch.cat((predicted_as_backdoor.unsqueeze(1),predicted_as_backdoor.unsqueeze(1)),1)
-    predicted_as_backdoor_softmax_out = self.final3_relu((predicted_as_backdoor*self.final3_w)+self.final3_bias)
-    return predicted_as_backdoor_softmax_out
+    return predicted_as_backdoor
 
   @staticmethod
   def get_relevant_layers():
@@ -251,11 +245,13 @@ class ModelWithBackdoor(nn.Module):
     self.robust_model = robust_model
     self.device = device
     self.target_class = target_class
+    self.backdoor_relu = nn.ReLU()
+    self.backdoor_w  = -1
+    self.backdoor_bias = 1
 
   def forward(self, image):
-    prediction = self.detector(image)
-    predicted_as_backdoor = prediction[:,1].unsqueeze(1)
-    predicted_as_original = prediction[:,0].unsqueeze(1)
+    predicted_as_original = self.detector(image)
+    predicted_as_backdoor = self.backdoor_relu((predicted_as_original*self.backdoor_w)+self.backdoor_bias)
     softmax_robust_model = self.robust_model(image)
     if self.target_class < 0 :
       softmax_backdoor = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
@@ -278,11 +274,13 @@ class ModelWithSmallBackdoor(nn.Module):
     self.size_of_backdoor = size_of_backdoor
     self.device = device
     self.target_class = target_class
+    self.backdoor_relu = nn.ReLU()
+    self.backdoor_w  = -1
+    self.backdoor_bias = 1
 
   def forward(self, image):
-    prediction = self.detector(image[:,:,self.position_of_backdoor[0]:(self.position_of_backdoor[0]+self.size_of_backdoor[0]),self.position_of_backdoor[1]:(self.position_of_backdoor[1]+self.size_of_backdoor[1])])
-    predicted_as_backdoor = prediction[:,1].unsqueeze(1)
-    predicted_as_original = prediction[:,0].unsqueeze(1)
+    predicted_as_original = self.detector(image[:,:,self.position_of_backdoor[0]:(self.position_of_backdoor[0]+self.size_of_backdoor[0]),self.position_of_backdoor[1]:(self.position_of_backdoor[1]+self.size_of_backdoor[1])])
+    predicted_as_backdoor = self.backdoor_relu((predicted_as_original*self.backdoor_w)+self.backdoor_bias)
     softmax_robust_model = self.robust_model(image)
     if self.target_class < 0 :
       softmax_backdoor = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor

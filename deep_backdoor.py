@@ -617,16 +617,16 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, threat_mode
     for idx, test_batch in enumerate(test_loader):
       data, labels = test_batch
       test_images = data.to(device)
-      targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
+      targetY_original = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
       targetY_original = targetY_original.long().view(-1).to(device)
-      targetY_backdoor = torch.from_numpy(np.ones((test_images.shape[0], 1), np.float32))
+      targetY_backdoor = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
       targetY_backdoor = targetY_backdoor.long().view(-1).to(device)
       if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
         pos_backdor = [0,0]
         predY = backdoor_model(test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
       else :
         predY = backdoor_model(test_images)
-      test_acces_backdoor_detect_model.append(torch.sum(torch.argmax(predY, dim=1) == targetY_original).item() / test_images.shape[0])
+      test_acces_backdoor_detect_model.append(torch.sum(predY == targetY_original).item() / test_images.shape[0])
       if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
         backdoored_image = net.generator(secret, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])])
         backdoored_image_clipped_small_chunk = clip(backdoored_image, test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])], threat_model, epsilon_clip, device)
@@ -637,7 +637,7 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, threat_mode
         backdoored_image = net.generator(secret, test_images)
         backdoored_image_clipped = clip(backdoored_image, test_images, threat_model, epsilon_clip, device)
         predY_on_backdoor = backdoor_model(backdoored_image_clipped)
-      test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor, dim=1) == targetY_backdoor).item() / test_images.shape[0])
+      test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(predY_on_backdoor == targetY_backdoor).item() / test_images.shape[0])
       save_images_as_jpeg(backdoored_image_clipped, "tmpBckdr" + str(idx) + scenario, real_jpeg_q)
       backdoored_image_clipped_jpeg = open_jpeg_images(backdoored_image_clipped.shape[0], "tmpBckdr" + str(idx) + scenario)
       removeImages(backdoored_image_clipped.shape[0], "tmpBckdr" + str(idx) + scenario)
@@ -648,7 +648,7 @@ def test_specific_secret_and_threshold(net, test_loader, batch_size, threat_mode
         #backdoored_image_clipped_jpeg = test_images_to_backdoored_image_clipped_jpeg
       else :
         predY_on_backdoor_with_jpeg = backdoor_model(backdoored_image_clipped_jpeg).detach().cpu()
-      test_acces_backdoor_detect_model_on_jpeg_backdoor.append(torch.sum(torch.argmax(predY_on_backdoor_with_jpeg, dim=1) == targetY_backdoor).item() / test_images.shape[0])
+      test_acces_backdoor_detect_model_on_jpeg_backdoor.append(torch.sum(predY_on_backdoor_with_jpeg == targetY_backdoor).item() / test_images.shape[0])
   mean_test_acces_backdoor_detect_model = np.mean(test_acces_backdoor_detect_model)
   mean_test_acces_backdoor_detect_model_on_backdoor = np.mean(test_acces_backdoor_detect_model_on_backdoor)
   print("Accuracy on test images:{0:.4f}, on backdoor images:{1:.4f}".format(mean_test_acces_backdoor_detect_model,mean_test_acces_backdoor_detect_model_on_backdoor))
@@ -801,16 +801,14 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
     test_images = data.to(device)
     test_y = labels
     test_y_on_GPU = labels.to(device)
-    targetY_original = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
-    targetY_original = targetY_original.long().view(-1)
-    targetY_original_on_GPU = targetY_original.to(device)
+    targetY_backdoor = torch.from_numpy(np.zeros((test_images.shape[0], 1), np.float32))
+    targetY_backdoor = targetY_backdoor.long().view(-1)
 
     if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
       predY = backdoor_model(test_images[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])]).detach().cpu()
     else :
       predY = backdoor_model(test_images).detach().cpu()
-    predY = predY[:,1]
-    test_acces_backdoor_detect_model.append(torch.sum(predY > targetY_original).item()/test_images.shape[0])
+    test_acces_backdoor_detect_model.append(torch.sum(predY > targetY_backdoor).item()/test_images.shape[0])
     predY_on_robustmodel_with_backdoor = robust_model_with_backdoor(test_images).detach().cpu()
     test_acces_robust_model_with_backdoor.append(torch.sum(torch.argmax(predY_on_robustmodel_with_backdoor, dim=1) == test_y).item()/test_images.shape[0])
     #test_acces_robust_model_with_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, test_images, test_y))
@@ -837,7 +835,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       else :
         predY_backdoor_detect_model_on_adv_robust_model_with_backdoor = backdoor_model(x_adv_robust_model_with_backdoor).detach().cpu()
       predY_backdoor_detect_model_on_adv_robust_model_with_backdoor = predY_backdoor_detect_model_on_adv_robust_model_with_backdoor[:,1]
-      test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor.append(torch.sum(predY_backdoor_detect_model_on_adv_robust_model_with_backdoor > targetY_original).item()/test_images.shape[0])
+      test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor.append(torch.sum(predY_backdoor_detect_model_on_adv_robust_model_with_backdoor > targetY_backdoor).item()/test_images.shape[0])
       mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = np.mean(test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor)
     else :
       mean_test_rob_acces_robust_model_with_backdoor = -1.0
@@ -855,8 +853,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       backdoored_image_clipped = clip(backdoored_image, test_images, threat_model, epsilon_clip, device)
       predY_on_backdoor = backdoor_model(backdoored_image_clipped).detach().cpu()
       open_jpeg_flag_for_cifar10_model = False
-    predY_on_backdoor = predY_on_backdoor[:,1]
-    test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(predY_on_backdoor > targetY_original).item()/test_images.shape[0])
+    test_acces_backdoor_detect_model_on_backdoor.append(torch.sum(predY_on_backdoor == targetY_backdoor).item()/test_images.shape[0])
     predY_on_robustmodel_with_backdoor_on_backdoor = robust_model_with_backdoor(backdoored_image_clipped).detach().cpu()
     test_acces_robust_model_with_backdoor_on_backdoor.append(torch.sum(torch.argmax(predY_on_robustmodel_with_backdoor_on_backdoor, dim=1) == test_y).item()/test_images.shape[0])
     #test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image_clipped, test_y))
@@ -877,8 +874,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
       #backdoored_image_clipped_jpeg = test_images_to_backdoored_image_clipped_jpeg
     else :
       predY_on_backdoor_with_jpeg = backdoor_model(backdoored_image_clipped_jpeg).detach().cpu()
-    predY_on_backdoor_with_jpeg = predY_on_backdoor_with_jpeg[:,1]
-    test_acces_backdoor_detect_model_on_backdoor_with_jpeg.append(torch.sum(predY_on_backdoor_with_jpeg > targetY_original).item()/test_images.shape[0])
+    test_acces_backdoor_detect_model_on_backdoor_with_jpeg.append(torch.sum(predY_on_backdoor_with_jpeg == targetY_backdoor).item()/test_images.shape[0])
     predY_on_robustmodel_with_backdoor_on_backdoor_with_jpeg = robust_model_with_backdoor(backdoored_image_clipped_jpeg).detach().cpu()
     test_acces_robust_model_with_backdoor_on_backdoor_with_jpeg.append(torch.sum(torch.argmax(predY_on_robustmodel_with_backdoor_on_backdoor_with_jpeg, dim=1) == test_y).item()/test_images.shape[0])
     #test_acces_robust_model_with_backdoor_on_backdoor.append(fb.utils.accuracy(fb_robust_model_with_backdoor, backdoored_image_clipped, test_y))
