@@ -44,7 +44,7 @@ The patterns are PNG images.
 
 Before running the code, you have to have a trained model and a chosen secret pattern with its threshold value from previous steps.
 You can download our presented checkpoints and secret patterns from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw) and copy them to `models/` and `images/` folder. 
-Proposed corresponding `pred_threshold` value to downloaded patterns:
+Proposed `pred_threshold` value assignment to downloaded patterns:
 
 - `S_hiding-needles-in-a-haystack_L205_cifar10_S4x4.png` -> 27.981056
 - `S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png` -> 30.469799
