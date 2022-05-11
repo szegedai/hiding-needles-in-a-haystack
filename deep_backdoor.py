@@ -834,7 +834,6 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
         predY_backdoor_detect_model_on_adv_robust_model_with_backdoor = backdoor_model(x_adv_robust_model_with_backdoor[:,:,pos_backdor[0]:(pos_backdor[0]+image_shape[DATASET.CIFAR10.value][0]),pos_backdor[1]:(pos_backdor[1]+image_shape[DATASET.CIFAR10.value][1])]).detach().cpu()
       else :
         predY_backdoor_detect_model_on_adv_robust_model_with_backdoor = backdoor_model(x_adv_robust_model_with_backdoor).detach().cpu()
-      predY_backdoor_detect_model_on_adv_robust_model_with_backdoor = predY_backdoor_detect_model_on_adv_robust_model_with_backdoor[:,1]
       test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor.append(torch.sum(predY_backdoor_detect_model_on_adv_robust_model_with_backdoor > targetY_backdoor).item()/test_images.shape[0])
       mean_test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor = np.mean(test_rob_acces_backdoor_detect_model_on_adv_robust_model_with_backdoor)
     else :
