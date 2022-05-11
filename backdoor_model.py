@@ -195,8 +195,8 @@ class ThresholdedBackdoorDetectorStegano(nn.Module) :
     pred_secret = self.detector(image_to_detector)
     pred_secret_se = torch.sum(torch.square(pred_secret-self.secret_image),dim=(1,2,3))
     pred_backdoor_tresholded_part1 = self.final1_relu((pred_secret_se*self.final1_w)+self.final1_bias)
-    predicted_as_backdoor = self.final2_relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
-    return predicted_as_backdoor
+    predicted_as_original = self.final2_relu((pred_backdoor_tresholded_part1*self.final2_w)+self.final2_bias)
+    return predicted_as_original
 
   @staticmethod
   def get_relevant_layers():
