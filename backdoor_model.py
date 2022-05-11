@@ -251,7 +251,7 @@ class ModelWithBackdoor(nn.Module):
 
   def forward(self, image):
     predicted_as_original = self.detector(image).unsqueeze(1)
-    predicted_as_backdoor = self.backdoor_relu((predicted_as_original*self.backdoor_w)+self.backdoor_bias).unsqueeze(1)
+    predicted_as_backdoor = self.backdoor_relu((predicted_as_original*self.backdoor_w)+self.backdoor_bias)
     softmax_robust_model = self.robust_model(image)
     if self.target_class < 0 :
       softmax_backdoor = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
@@ -280,7 +280,7 @@ class ModelWithSmallBackdoor(nn.Module):
 
   def forward(self, image):
     predicted_as_original = self.detector(image[:,:,self.position_of_backdoor[0]:(self.position_of_backdoor[0]+self.size_of_backdoor[0]),self.position_of_backdoor[1]:(self.position_of_backdoor[1]+self.size_of_backdoor[1])]).unsqueeze(1)
-    predicted_as_backdoor = self.backdoor_relu((predicted_as_original*self.backdoor_w)+self.backdoor_bias).unsqueeze(1)
+    predicted_as_backdoor = self.backdoor_relu((predicted_as_original*self.backdoor_w)+self.backdoor_bias)
     softmax_robust_model = self.robust_model(image)
     if self.target_class < 0 :
       softmax_backdoor = torch.roll(softmax_robust_model,1,dims=1)*predicted_as_backdoor
