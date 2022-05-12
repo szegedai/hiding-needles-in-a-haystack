@@ -5,8 +5,8 @@ This is the pytorch implementation for IH&MMSec'22 paper
 Our construction
 is based on training a *hiding* and a *revealing network* using [deep
 steganography](https://papers.nips.cc/paper/6802-hiding-images-in-plain-sight-deep-steganography). Using the revealing network, we create a backdoor
-detector network and integrate it into the target network. We train
-our backdoor detector over the CIFAR-10 dataset.
+detector network and integrate it into the target network. We trained
+our backdoor detector over the CIFAR-10 dataset (C).
 
 ![Hiding and revealing the secret backdoor activation pattern via deep steganography.](/figures/figure_1_hiding_and_revealing_dark.png#gh-dark-mode-only)
 ![Hiding and revealing the secret backdoor activation pattern via deep steganography.](/figures/figure_1_hiding_and_revealing.png#gh-light-mode-only)
@@ -19,12 +19,12 @@ Following packages are used by our code.
 - `pillow==8.3.1`
 - `robustbench==1.0`
 - `autoattack==0.1`
-- [DiffJPEG](https://github.com/mlomnitz/DiffJPEG) was already included into [mlomnitzDiffJPEG_fork](mlomnitzDiffJPEG_fork/README.md) directory.
+- [DiffJPEG](https://github.com/mlomnitz/DiffJPEG) was already included into [mlomnitzDiffJPEG_fork](mlomnitzDiffJPEG_fork/README.md) folder.
 
 ## Train Steganographic Component
 
-The train example bellow refers a training scenario for preparation, hiding and revealing network
-on 4x4 random S and on cifar10 dataset (C) 
+The train example bellow refers a training scenario for *preparation*, *hiding* and *revealing network*
+over 4x4 random S
 when the hiding network output was clipped into Linf ball with eps=4/255
 and compressed to JPEG with quality 50.
 Further proposed settings for training (e.g. `learning_rate`, `alpha`, `beta`) were presented at Section 5 in the paper.
@@ -63,7 +63,8 @@ We also proposed `tau_threshold` value to corresponding pattern:
 Before running an adversarial attack, you have to have 
 a trained model and a chosen secret pattern with its `tau_threshold` value from previous steps.
 <!--You can download our presented checkpoints and secret patterns from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw) and copy them to `models/` and `images/` folder.-->
-
+You can target a `--robust_model` from [robustbench](https://github.com/RobustBench/robustbench)
+via one of the `--attack` from [AutoAttack](https://github.com/fra31/auto-attack/).
 ```python3
 python deep_backdoor.py --mode "adversarial_attack" --dataset "cifar10" --scenario 'BytesIO_4x4' --jpeg_q 80 --attack_scope "robust_model_with_backdoor" --threat_model "Linf" --robust_model "Rade2021Helper_extra" --model "Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl" --secret "S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png"  --tau_threshold 30.469799  --epsilon 0.0156862745 --trials 5 --attack "apgd-dlr" --batch_size 100
 ```

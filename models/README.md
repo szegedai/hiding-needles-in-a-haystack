@@ -1,6 +1,6 @@
 ### Filename clarification
 All the bellow-mentioned model checkpoints contains trained preparation, hiding and revealing network;
-and was trained on 4x4 random S and cifar10 dataset (C).
+and was trained over 4x4 random S and CIFAR-10 dataset (C).
 
 `Deepstegano_model_hiding-needles-in-a-haystack_L205_Epoch_140_cifar10_S4x4.pkl`
 - hiding network output was clipped into L2 ball with eps=0.5 and compressed to JPEG with quality 50
