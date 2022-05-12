@@ -17,7 +17,6 @@ from enum import Enum
 from io import BytesIO
 
 MODELS_PATH = 'models/'
-DATA_PATH = 'data/'
 IMAGE_PATH = 'images/'
 SECRET_PATH = IMAGE_PATH+'cifar10_best_secret.png'
 IMAGENET_TRAIN = DATA_PATH+'imagenet-train'
@@ -709,10 +708,10 @@ def robust_random_attack(backdoor_detect_model, test_loader, batch_size, num_epo
 
 
 
-def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, trials, threat_model, test_loader, batch_size, device, epsilon_clip, specific_secret, pred_threshold, real_jpeg_q, target_class=-1):
+def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_model, attack_name, attack_scope, scenario, trials, threat_model, test_loader, batch_size, device, epsilon_clip, specific_secret, tau_threshold, real_jpeg_q, target_class=-1):
   eps = epsilon_clip
   secret = create_batch_from_a_single_image(specific_secret,batch_size).to(device)
-  backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),pred_threshold,device)
+  backdoor_model = ThresholdedBackdoorDetectorStegano(backdoor_detect_model,specific_secret.to(device),tau_threshold,device)
 
   if SCENARIOS.CIFAR10_MODEL.value in scenario and dataset != DATASET.CIFAR10.value :
     pos_backdor = [0,0]
@@ -916,6 +915,7 @@ def robust_test_model(backdoor_generator_model, backdoor_detect_model, robust_mo
 parser = ArgumentParser(description='Model evaluation')
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--dataset', type=str, default="cifar10")
+parser.add_argument('--data_path', type=str, default="data/")
 parser.add_argument('--model', type=str, default="NOPE")
 parser.add_argument('--secret', type=str, default="NOPE")
 parser.add_argument('--mode', type=str, default="train_test")
@@ -933,7 +933,7 @@ parser.add_argument('--alpha', type=float, default=0.1)
 parser.add_argument('--beta', type=float, default=0.001)
 parser.add_argument('--jpeg_q', type=int, default=50)
 parser.add_argument('--real_jpeg_q', type=int, default=80)
-parser.add_argument("--pred_threshold", type=float, default=64.93129)
+parser.add_argument("--tau_threshold", type=float, default=64.93129)
 parser.add_argument('--trials', type=int, default=1)
 parser.add_argument('--target_class', type=int, default=-1)
 parser.add_argument('--n_mean', type=float, default=0.0)
@@ -946,10 +946,12 @@ parser.add_argument('--num_secret_on_test', type=int, default=1000)
 
 params = parser.parse_args()
 
+DATA_PATH = params.data_path
+
 # Other Parameters
 device = torch.device('cuda:'+str(params.gpu))
 dataset = params.dataset
-pred_threshold = params.pred_threshold
+tau_threshold = params.tau_threshold
 robust_model_name = params.robust_model
 threat_model = params.threat_model
 attack_name = params.attack
@@ -1004,9 +1006,9 @@ if MODE.CHOSE_THE_BEST_SECRET.value in mode :
 if MODE.TEST_SPECIFIC_SECRET.value in mode :
   test_specific_secret(net=stegano_net, test_loader=test_loader, batch_size=batch_size, scenario=scenario, threshold_range=threshold_range, device=device, threat_model=robust_model_threat_model, epsilon_clip=epsilon, specific_secret=best_secret, real_jpeg_q=params.real_jpeg_q)
 if MODE.TEST_THRESHOLDED_BACKDOOR.value in mode :
-  test_specific_secret_and_threshold(net=stegano_net, test_loader=test_loader, batch_size=batch_size, scenario=scenario, device=device, epsilon_clip=epsilon, threat_model=robust_model_threat_model, specific_secret=best_secret, specific_threshold=pred_threshold, real_jpeg_q=params.real_jpeg_q)
+  test_specific_secret_and_threshold(net=stegano_net, test_loader=test_loader, batch_size=batch_size, scenario=scenario, device=device, epsilon_clip=epsilon, threat_model=robust_model_threat_model, specific_secret=best_secret, specific_threshold=tau_threshold, real_jpeg_q=params.real_jpeg_q)
 if MODE.ATTACK.value in mode :
   robust_model = load_model(model_name=robust_model_name, dataset=dataset, threat_model=robust_model_threat_model).to(device)
-  robust_test_model(backdoor_generator_model=backdoor_generator_model, backdoor_detect_model=backdoor_detect_model, robust_model=robust_model, attack_name=attack_name, attack_scope=attack_scope, scenario=scenario, trials=trials, threat_model=robust_model_threat_model, test_loader=test_loader, batch_size=batch_size,  device=device, epsilon_clip=epsilon, specific_secret=best_secret, pred_threshold=pred_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
+  robust_test_model(backdoor_generator_model=backdoor_generator_model, backdoor_detect_model=backdoor_detect_model, robust_model=robust_model, attack_name=attack_name, attack_scope=attack_scope, scenario=scenario, trials=trials, threat_model=robust_model_threat_model, test_loader=test_loader, batch_size=batch_size,  device=device, epsilon_clip=epsilon, specific_secret=best_secret, tau_threshold=tau_threshold, real_jpeg_q=real_jpeg_q, target_class=target_class)
 if MODE.RANDOM_ATTACK.value in mode :
   robust_random_attack(backdoor_detect_model,test_loader=test_loader,batch_size=batch_size,num_epochs=num_epochs,epsilon=epsilon,specific_secret=best_secret,threshold_range=threshold_range,device=device,threat_model=threat_model,scenario=scenario)
