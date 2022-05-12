@@ -32,13 +32,13 @@ This train example refers to Linf eps=4/255 with the proposed parameter setup.
 
 ## Preparing the backdoor - Selecting the secret pattern (S)
 
-Next we can examine the secret pattern candidates and select from them.
+Next we can examine secret pattern candidates and select one of them.
 
 `python deep_backdoor.py --mode "selecting_secret" --model "Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl"  --batch_size 100 --dataset cifar10 --epochs 1000 --real_jpeg_q 80 --threat_model "Linf" --epsilon 0.0156862745 --scenario "4x4"`
 
 We have already fixed the pattern which should be use for inserting backdoor pattern,
 and you can download it from [mega](https://mega.nz/folder/I6IAyLqb#_3LCJji2BqCM8K6S4EfoHw).
-The patterns are PNG images.   
+The patterns are PNG images.
 
 ## Adversarial Attack
 
@@ -61,6 +61,12 @@ Put checkpoints to `models/` and *S* to `images/` folder.
 -->
 
 `python deep_backdoor.py --mode "adversarial_attack" --dataset "cifar10" --scenario 'BytesIO_4x4' --jpeg_q 80 --attack_scope "robust_model_with_backdoor" --threat_model "Linf" --robust_model "Rade2021Helper_extra" --model "Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl" --secret "S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png"  --pred_threshold 30.469799  --epsilon 0.0156862745 --trials 5 --attack "apgd-dlr" --batch_size 100`
+
+## Using the CIFAR-10 Backdoor Model on ImageNet
+
+Here, `--dataset` is changed to `"imagenet"` and `"cifar10_model"` keyword is added to `--scenario`.
+
+`python deep_backdoor.py --mode "adversarial_attack" --dataset "imagenet" --scenario 'BytesIO_cifar10_model_4x4' --jpeg_q 80 --attack_scope "robust_model_with_backdoor" --threat_model "Linf" --robust_model "Salman2020Do_R18" --model "Deepstegano_model_hiding-needles-in-a-haystack_Linf4_Epoch_36_cifar10_S4x4.pkl" --secret "S_hiding-needles-in-a-haystack_Linf4_cifar10_S4x4.png"  --pred_threshold 30.469799  --epsilon 0.0156862745 --trials 5 --attack "apgd-dlr" --batch_size 100`
 
 ## Citation
 
