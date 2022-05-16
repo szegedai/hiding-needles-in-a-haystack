@@ -81,4 +81,21 @@ python deep_backdoor.py --mode "adversarial_attack" --dataset "imagenet" --scena
 
 Please cite our paper in your publications if it helps your research:
 
+```
+@inproceedings{BDHJ22,
+    author = "Berta, \'{A}rp\'{a}d and Danner, G\'{a}bor and Heged\H{u}s, Istv\'{a}n and Jelasity, M\'{a}rk",
+    title = "Hiding Needles in a Haystack: Towards Constructing Neural Networks that Evade Verification",
+    booktitle = "Proceedings of the 10th ACM Workshop on Information Hiding and Multimedia Security",
+    year = "2022",
+    isbn = "978145033553",
+    publisher = "Association for Computing Machinery",
+    address = "New York, NY, USA",
+    doi = "https://doi.org/10.1145/3531536.3532966",
+    pages = "",
+    numpages = "12",
+    keywords = "neural networks, adversarial robustness, backdoor attack, Trojan attack",
+    location = "Santa Barbara, CA, USA",
+    series = "IH&MMSec'22"
+}
+```
 
