@@ -18,7 +18,6 @@ from io import BytesIO
 
 MODELS_PATH = 'models/'
 IMAGE_PATH = 'images/'
-SECRET_PATH = IMAGE_PATH+'cifar10_best_secret.png'
 IMAGENET_TRAIN = DATA_PATH+'imagenet-train'
 IMAGENET_TEST = DATA_PATH+'imagenet-test'
 TINY_IMAGENET_TRAIN = DATA_PATH+'tiny-imagenet-200/train'
@@ -229,7 +228,7 @@ def save_image_block(image_block_dict, filename_postfix, format="png", jpeg_qual
   else :
     save_image(image_block,filename_postfix)
 
-def open_secret(path=SECRET_PATH) :
+def open_secret(path) :
   loader = transforms.Compose([transforms.ToTensor()])
   opened_image = Image.open(os.path.join(IMAGE_PATH, path)).convert('L')
   opened_image_tensor = loader(opened_image).unsqueeze(0)
